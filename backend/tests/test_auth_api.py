@@ -132,3 +132,16 @@ def test_logout_invalidates_refresh(auth_client):
     # 登出后 refresh 失效
     res2 = auth_client.post("/api/v1/auth/refresh", json={"refresh_token": refresh_token})
     assert res2.status_code == 401
+
+
+def test_send_code_reuses_existing_code():
+    """重复发送不覆盖旧码：邮件延迟期间旧码仍可用（核心修复，直接测 Redis 逻辑不发信）。"""
+    from app.services.email_service import _get_or_create_code, CODE_PREFIX
+    import redis as redis_lib
+
+    r = redis_lib.Redis(host=settings.REDIS_HOST, port=settings.REDIS_PORT, db=settings.REDIS_DB, decode_responses=True)
+    r.delete(f"{CODE_PREFIX}reuse@test.com")
+    code1 = _get_or_create_code(r, "reuse@test.com")
+    code2 = _get_or_create_code(r, "reuse@test.com")  # 第二次复用同一码
+    assert code1 == code2
+    assert r.get(f"{CODE_PREFIX}reuse@test.com") == code1

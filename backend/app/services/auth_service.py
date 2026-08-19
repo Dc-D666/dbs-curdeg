@@ -45,7 +45,7 @@ def send_code(email: str) -> None:
 def register(db: Session, payload: RegisterRequest) -> TokenOut:
     # 校验验证码（先校验再查重，避免验证码被消耗后报错）
     if not email_service.verify_email_code(payload.email, payload.code):
-        raise ParamError("验证码错误或已过期")
+        raise ParamError("验证码错误或已过期，请确认与邮件一致（邮件可能延迟，可点重发）")
     # 查重
     exists = db.execute(
         select(User).where(or_(User.username == payload.username, User.email == payload.email))

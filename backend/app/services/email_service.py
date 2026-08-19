@@ -29,15 +29,28 @@ def _redis() -> redis.Redis:
     return redis.Redis(host=settings.REDIS_HOST, port=settings.REDIS_PORT, db=settings.REDIS_DB, decode_responses=True)
 
 
+def _get_or_create_code(r: redis.Redis, email: str) -> str:
+    """取现有验证码或生成新码（复用逻辑，可独立测试）。"""
+    key = f"{CODE_PREFIX}{email}"
+    code = r.get(key)
+    if code is None:
+        code = f"{secrets.randbelow(1000000):06d}"
+        r.setex(key, CODE_TTL, code)
+    return code
+
+
 def send_email_code(email: str) -> str:
-    """生成验证码、落 Redis、发送邮件；返回验证码（便于测试/演示）。"""
+    """发送验证码。
+
+    关键：若该邮箱已有未过期验证码则**复用旧码并重发邮件**（不生成新码），
+    避免邮件延迟期间重复点击导致旧码失效（用户填的码与 Redis 不一致 → 400）。
+    """
     r = _redis()
     daily_key = f"{DAILY_KEY_PREFIX}{email}:{date.today().isoformat()}"
     used = int(r.get(daily_key) or 0)
     if used >= DAILY_LIMIT:
         raise RuntimeError("该邮箱今日发送次数已达上限")
-    code = f"{secrets.randbelow(1000000):06d}"
-    r.setex(f"{CODE_PREFIX}{email}", CODE_TTL, code)
+    code = _get_or_create_code(r, email)
     r.incr(daily_key)
     r.expire(daily_key, 86400)
     _send(email, code)
