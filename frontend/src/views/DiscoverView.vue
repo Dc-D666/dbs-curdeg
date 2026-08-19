@@ -66,6 +66,7 @@
 import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { communityApi, type Community } from '@/api/community'
+import { tokenStore } from '@/api/http'
 
 const router = useRouter()
 const communities = ref<Community[]>([])
@@ -86,6 +87,11 @@ onMounted(async () => {
 
 async function onCreate() {
   if (creating.value) return
+  // 未登录先跳登录页（登录后回跳继续创建）
+  if (!tokenStore.access) {
+    window.location.href = `/login?redirect=${encodeURIComponent('/discover')}`
+    return
+  }
   creating.value = true
   error.value = ''
   try {

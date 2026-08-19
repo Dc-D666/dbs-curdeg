@@ -78,16 +78,25 @@ http.interceptors.response.use(
   (res: AxiosResponse) => res,
   async (error) => {
     const { response, config } = error
-    if (response?.status === 401 && !config._retried && tokenStore.refresh) {
+    if (response?.status === 401) {
+      // 未登录（无 refresh token）或刷新失败：清登录态并跳登录页
+      if (!tokenStore.refresh || config._retried) {
+        tokenStore.clear()
+        if (window.location.pathname !== '/login') {
+          window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname)}`
+        }
+        return Promise.reject(error)
+      }
       config._retried = true
       const token = await refreshToken()
       if (token) {
         config.headers.Authorization = `Bearer ${token}`
         return http(config)
       }
-      // refresh 失败：清登录态并跳登录页
-      window.location.href = '/login'
-      return Promise.reject(error)
+      tokenStore.clear()
+      if (window.location.pathname !== '/login') {
+        window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname)}`
+      }
     }
     return Promise.reject(error)
   },
