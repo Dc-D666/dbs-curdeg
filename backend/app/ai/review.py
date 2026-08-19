@@ -204,19 +204,23 @@ def _parse_appeal(raw: str) -> tuple[str, str]:
 
 
 async def review_loop() -> None:
-    """后台审核消费循环（startup 启动）：BRPOP 阻塞取任务。"""
+    """后台审核消费循环（startup 启动）。
+
+    注意：redis-py 的 brpop 是同步阻塞调用，必须经 asyncio.to_thread 丢线程池，
+    否则会阻塞整个事件循环（曾导致线上健康检查超时、启动卡死）。
+    """
     from app.db import SessionLocal
 
     while True:
         try:
-            r = _redis()
-            item = r.brpop(QUEUE, timeout=5)
+            r = await asyncio.to_thread(_redis)
+            item = await asyncio.to_thread(r.brpop, QUEUE, 5)
             if not item:
                 continue
             task = json.loads(item[1])
             db = SessionLocal()
             try:
-                process_review_task(db, task)
+                await asyncio.to_thread(process_review_task, db, task)
             finally:
                 db.close()
         except redis.RedisError:

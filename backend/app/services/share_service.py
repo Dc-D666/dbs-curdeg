@@ -141,18 +141,24 @@ def cleanup_expired(db: Session) -> int:
 
 
 async def cleanup_loop() -> None:
-    """后台清理任务：每 CLEANUP_INTERVAL_SECONDS 跑一次（startup 时启动）。"""
+    """后台清理任务：每 CLEANUP_INTERVAL_SECONDS 跑一次（startup 时启动）。
+
+    Redis/DB 操作经 asyncio.to_thread，避免同步阻塞事件循环。
+    """
     from app.db import SessionLocal
 
     while True:
         try:
             db = SessionLocal()
             try:
-                n = cleanup_expired(db)
+                n = await asyncio.to_thread(cleanup_expired, db)
                 if n:
                     logger.info("清理过期短链 %s 条", n)
             finally:
-                db.close()
+                try:
+                    db.close()
+                except Exception:
+                    pass  # shutdown 取消时连接可能处于中间态
         except Exception:
             logger.exception("短链清理任务异常")
         await asyncio.sleep(CLEANUP_INTERVAL_SECONDS)
