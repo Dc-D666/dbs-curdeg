@@ -50,6 +50,8 @@ def test_create_community_initializes_roles_and_member(ctx):
     assert data["my_member_type"] == 0  # owner
     assert data["member_count"] == 1
     assert data["number"]  # 频道号非空
+    assert len(data["boards"]) == 1  # 自动创建默认版块（保证立即可发帖）
+    assert data["boards"][0]["name"] == "默认版块"
 
 
 def test_join_free_community(ctx):
@@ -81,10 +83,10 @@ def test_board_crud_only_owner(ctx):
     )
     assert res.status_code == 200, res.text
     board_id = res.json()["data"]["id"]
-    # 列表可见
+    # 列表可见（默认版块 + 新建 = 2）
     res2 = client.get(f"/api/v1/communities/{ctx['cid']}/boards")
     assert res2.status_code == 200
-    assert len(res2.json()["data"]) == 1
+    assert len(res2.json()["data"]) == 2
     # 普通成员不能建版块
     res3 = client.post(
         f"/api/v1/communities/{ctx['cid']}/boards",
@@ -104,7 +106,7 @@ def test_board_crud_only_owner(ctx):
     res5 = client.delete(f"/api/v1/communities/{ctx['cid']}/boards/{board_id}", headers=_auth(ctx["owner"]))
     assert res5.status_code == 200
     res6 = client.get(f"/api/v1/communities/{ctx['cid']}/boards")
-    assert len(res6.json()["data"]) == 0
+    assert len(res6.json()["data"]) == 1  # 只剩默认版块
 
 
 def test_reviewed_join_flow(ctx):

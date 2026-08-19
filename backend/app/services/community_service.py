@@ -43,7 +43,7 @@ def _gen_number() -> str:
 
 
 def create_community(db: Session, user: User, payload: CreateCommunityRequest) -> CommunityOut:
-    """创建频道：自动成为 owner + 初始化 owner/admin/normal 三个默认身份组。"""
+    """创建频道：自动成为 owner + 初始化身份组 + 默认版块（否则新频道无法发帖）。"""
     community = Community(
         number=_gen_number(),
         name=payload.name,
@@ -69,6 +69,8 @@ def create_community(db: Session, user: User, payload: CreateCommunityRequest) -
         nickname=user.nickname or user.username,
     )
     db.add(member)
+    # 默认版块：保证建频道后立即可发帖（发帖必须挂版块）
+    db.add(Board(community_id=community.id, name="默认版块", description="", sort=0))
     db.commit()
     db.refresh(community)
     return community_out(db, community, current_user_id=user.id)
