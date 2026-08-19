@@ -348,6 +348,37 @@ def test_feed_board_filter(ctx):
     assert all(p["id"] == pid2 for p in items2)
 
 
+def test_post_rich_content_segments(ctx):
+    """富文本分片发帖：rich_content 原样存储，source_markdown 提取纯文本（含链接显示文字）。"""
+    client, owner, cid, bid = ctx["client"], ctx["owner"], ctx["cid"], ctx["bid"]
+    rich = [
+        {"type": 1, "text": "第一段文本"},
+        {"type": 3, "url": "https://example.com/doc", "display_text": "参考文档", "url_type": 10},
+        {"type": 1, "text": "第二段"},
+    ]
+    res = client.post(
+        f"/api/v1/communities/{cid}/boards/{bid}/posts",
+        json={"title": "分片帖", "rich_content": rich, "images": []},
+        headers=_auth(owner),
+    )
+    assert res.status_code == 200, res.text
+    data = res.json()["data"]
+    assert data["rich_content"] == rich  # 原样返回（4.4 契约）
+    assert data["source_markdown"] == "第一段文本参考文档第二段"  # 纯文本提取
+    # 编辑时 rich_content 可替换
+    rich2 = [{"type": 1, "text": "改后的内容"}]
+    res = client.put(f"/api/v1/posts/{data['id']}", json={"rich_content": rich2}, headers=_auth(owner))
+    assert res.status_code == 200
+    assert res.json()["data"]["source_markdown"] == "改后的内容"
+    # 二者都不提供 → 400
+    res = client.post(
+        f"/api/v1/communities/{cid}/boards/{bid}/posts",
+        json={"title": "空内容帖"},
+        headers=_auth(owner),
+    )
+    assert res.status_code == 400
+
+
 def test_global_feed(ctx):
     """全站帖子流：latest/hot 都能看到新发帖子（首页用）。"""
     client, owner, cid, bid = ctx["client"], ctx["owner"], ctx["cid"], ctx["bid"]

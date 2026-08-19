@@ -11,23 +11,10 @@
         <input v-model.trim="form.title" class="input" type="text" maxlength="128" placeholder="一句话说清楚" />
       </label>
 
-      <label class="field">
-        <span class="field-label">内容</span>
-        <textarea v-model="form.content" class="input textarea" maxlength="10000" placeholder="分享你的内容…" />
-      </label>
-
       <div class="field">
-        <span class="field-label">图片（最多 9 张）</span>
-        <div class="image-grid">
-          <div v-for="(img, i) in form.images" :key="img" class="image-cell">
-            <img :src="img" alt="" />
-            <button type="button" class="image-remove" @click="form.images.splice(i, 1)">×</button>
-          </div>
-          <label v-if="form.images.length < 9" class="image-cell add-cell">
-            <span>{{ uploading ? '上传中…' : '+' }}</span>
-            <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden @change="onPickImage" />
-          </label>
-        </div>
+        <span class="field-label">内容</span>
+        <RichEditor v-model="form.rich" :initial-images="initialImages" @update:images="onImages" />
+        <p class="field-hint">支持插入链接与图片（最多 9 张图片）</p>
       </div>
 
       <p v-if="error" class="error">{{ error }}</p>
@@ -42,8 +29,10 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import RichEditor, { type RichSegment } from '@/components/RichEditor.vue'
 import { postApi } from '@/api/post'
-import { request, tokenStore } from '@/api/http'
+import { tokenStore } from '@/api/http'
+import { toast } from '@/utils/toast'
 
 const route = useRoute()
 const router = useRouter()
@@ -51,10 +40,10 @@ const cid = Number(route.params.id)
 const bid = Number(route.params.bid)
 const editId = Number(route.query.edit) || 0
 
-const form = reactive({ title: '', content: '', images: [] as string[] })
+const form = reactive({ title: '', rich: [] as RichSegment[], images: [] as string[] })
+const initialImages = ref<string[]>([])
 const error = ref('')
 const submitting = ref(false)
-const uploading = ref(false)
 const editing = ref(editId > 0)
 const loading = ref(false)
 
@@ -64,8 +53,9 @@ onMounted(async () => {
   try {
     const post = await postApi.get(editId)
     form.title = post.title
-    form.content = post.source_markdown
+    form.rich = post.rich_content
     form.images = [...post.images]
+    initialImages.value = [...post.images] // 旧帖图片渲染进编辑器
   } catch (e) {
     error.value = e instanceof Error ? e.message : '加载帖子失败'
   } finally {
@@ -73,38 +63,26 @@ onMounted(async () => {
   }
 })
 
-async function onPickImage(e: Event) {
-  const input = e.target as HTMLInputElement
-  const file = input.files?.[0]
-  input.value = ''
-  if (!file) return
-  if (uploading.value) return
-  uploading.value = true
-  error.value = ''
-  const fd = new FormData()
-  fd.append('file', file)
-  try {
-    const up = await request<{ url: string }>({ url: '/uploads', method: 'POST', data: fd })
-    form.images.push(up.url)
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : '上传失败'
-  } finally {
-    uploading.value = false
-  }
+function onImages(urls: string[]) {
+  form.images = urls
 }
 
 async function onSubmit() {
   if (submitting.value) return
   if (!tokenStore.access) {
-    window.location.href = '/login'
+    window.location.href = `/login?redirect=${encodeURIComponent(route.fullPath)}`
     return
   }
   if (!form.title) {
     error.value = '请填写标题'
     return
   }
-  if (!form.content) {
+  if (form.rich.length === 0 && form.images.length === 0) {
     error.value = '请填写内容'
+    return
+  }
+  if (form.images.length > 9) {
+    error.value = '图片最多 9 张'
     return
   }
   submitting.value = true
@@ -113,12 +91,17 @@ async function onSubmit() {
     if (editing.value) {
       const post = await postApi.update(editId, {
         title: form.title,
-        content: form.content,
+        rich_content: form.rich,
         images: form.images,
       })
+      toast('已保存', 'success')
       router.push(`/p/${post.id}`)
     } else {
-      const post = await postApi.create(cid, bid, { title: form.title, content: form.content, images: form.images })
+      const post = await postApi.create(cid, bid, {
+        title: form.title,
+        rich_content: form.rich,
+        images: form.images,
+      })
       router.push(`/p/${post.id}`)
     }
   } catch (e) {

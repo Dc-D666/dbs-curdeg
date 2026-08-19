@@ -8,13 +8,16 @@ from pydantic import BaseModel, Field
 
 class CreatePostRequest(BaseModel):
     title: str = Field(min_length=1, max_length=128)
-    content: str = Field(min_length=1, max_length=10000)  # 纯文本（服务端转 rich_content 分片）
+    # 二选一：content（纯文本，兼容）或 rich_content（4.4 分片结构，优先）
+    content: str | None = Field(default=None, min_length=1, max_length=10000)
+    rich_content: list | None = Field(default=None, description="4.4 分片：[{type:1,text},{type:3,url,display_text}]")
     images: list[str] = Field(default_factory=list, max_length=9)
 
 
 class UpdatePostRequest(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=128)
     content: str | None = Field(default=None, min_length=1, max_length=10000)
+    rich_content: list | None = Field(default=None)
     images: list[str] | None = Field(default=None, max_length=9)
 
 

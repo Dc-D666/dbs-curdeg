@@ -23,7 +23,16 @@
         </div>
 
         <div class="post-body">
-          <p v-for="(seg, i) in textSegments" :key="i" class="post-text">{{ seg }}</p>
+          <template v-for="(seg, i) in richSegments" :key="i">
+            <p v-if="seg.type === 1 && seg.text" class="post-text">{{ seg.text }}</p>
+            <a
+              v-else-if="seg.type === 3 && seg.url"
+              :href="seg.url"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="post-link"
+            >{{ seg.display_text || seg.url }}</a>
+          </template>
           <div v-if="post.images.length" class="post-images">
             <img v-for="(img, i) in post.images" :key="img" :src="img" alt="" @click="previewIndex = i" />
           </div>
@@ -162,11 +171,7 @@ interface ReplyState {
 }
 const replyMap = ref(new Map<number, ReplyState>())
 
-const textSegments = computed(() =>
-  (post.value?.rich_content ?? [])
-    .filter((s) => s.type === 1 && s.text)
-    .map((s) => s.text as string),
-)
+const richSegments = computed(() => post.value?.rich_content ?? [])
 const canManage = computed(() => {
   const p = post.value
   if (!p) return false
@@ -438,6 +443,21 @@ async function onDeletePost() {
   line-height: 1.7;
   white-space: pre-wrap;
   word-break: break-word;
+}
+.post-link {
+  display: inline-block;
+  margin: 0 0 var(--sp-2);
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-btn);
+  background: var(--bg-secondary);
+  color: var(--brand);
+  font-size: var(--fs-body);
+  text-decoration: none;
+  transition: border-color var(--anim-duration) var(--anim-ease);
+}
+.post-link:hover {
+  border-color: var(--brand);
 }
 .post-images {
   display: flex;

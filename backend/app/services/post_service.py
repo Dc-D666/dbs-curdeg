@@ -29,14 +29,15 @@ def create_post(
     """发帖：需为频道成员且未被禁言/封禁；版块 allow_post_role_ids 非空时校验身份组。"""
     member = _require_member(db, community.id, user.id)
     _check_board_post_perm(db, community, board, user, member)
+    rich, plain = _normalize_content(payload)
 
     post = Post(
         community_id=community.id,
         board_id=board.id,
         author_id=user.id,
         title=payload.title,
-        rich_content=[{"type": 1, "text": payload.content}],
-        source_markdown=payload.content,
+        rich_content=rich,
+        source_markdown=plain,
         images=payload.images,
     )
     db.add(post)
@@ -55,9 +56,10 @@ def update_post(
         raise PermissionError_("只能编辑自己的帖子")
     _require_member(db, community.id, user.id)
     data = payload.model_dump(exclude_unset=True)
-    if "content" in data and data["content"] is not None:
-        post.rich_content = [{"type": 1, "text": data["content"]}]
-        post.source_markdown = data["content"]
+    if "content" in data or "rich_content" in data:
+        rich, plain = _normalize_content(payload)
+        post.rich_content = rich
+        post.source_markdown = plain
     if "title" in data:
         post.title = data["title"]
     if "images" in data:
@@ -346,6 +348,28 @@ def post_out(db: Session, post: Post, current_user_id: int | None) -> PostOut:
         ).scalar_one_or_none()
         out.is_member = member is not None
     return out
+
+
+# ---------- 内容规范化 ----------
+
+
+def _normalize_content(payload) -> tuple[list, str]:
+    """rich_content（4.4 分片）优先；否则 content 纯文本转单文本分片。返回 (分片, 纯文本)。"""
+    if payload.rich_content:
+        rich = payload.rich_content
+        parts = []
+        for seg in rich:
+            if not isinstance(seg, dict):
+                continue
+            t = seg.get("type")
+            if t == 1 and seg.get("text"):
+                parts.append(seg["text"])
+            elif t == 3 and seg.get("display_text"):
+                parts.append(seg["display_text"])
+        return rich, "".join(parts).strip()
+    if payload.content:
+        return [{"type": 1, "text": payload.content}], payload.content
+    raise ParamError("content 与 rich_content 至少提供一个")
 
 
 # ---------- 权限 ----------

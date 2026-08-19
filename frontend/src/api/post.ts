@@ -1,13 +1,21 @@
 /** 帖子/评论/点赞/关注 API（阶段 3）。 */
 import { request, type Page } from './http'
 
+export interface RichSegment {
+  type: number
+  text?: string
+  url?: string
+  display_text?: string
+  url_type?: number
+}
+
 export interface PostItem {
   id: number
   community_id: number
   board_id: number
   author_id: number
   title: string
-  rich_content: Array<{ type: number; text?: string; url?: string; display_text?: string }>
+  rich_content: RichSegment[]
   source_markdown: string
   images: string[]
   like_count: number
@@ -68,10 +76,10 @@ export const postApi = {
   get(id: number) {
     return request<PostItem>({ url: `/posts/${id}` })
   },
-  create(cid: number, bid: number, data: { title: string; content: string; images?: string[] }) {
+  create(cid: number, bid: number, data: { title: string; content?: string; rich_content?: RichSegment[]; images?: string[] }) {
     return request<PostItem>({ url: `/communities/${cid}/boards/${bid}/posts`, method: 'POST', data })
   },
-  update(id: number, data: { title?: string; content?: string; images?: string[] }) {
+  update(id: number, data: { title?: string; content?: string; rich_content?: RichSegment[]; images?: string[] }) {
     return request<PostItem>({ url: `/posts/${id}`, method: 'PUT', data })
   },
   remove(id: number) {
