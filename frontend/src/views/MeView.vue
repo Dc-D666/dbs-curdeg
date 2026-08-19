@@ -7,12 +7,20 @@
 
     <section class="panel">
       <div class="profile-row">
-        <div class="avatar">{{ initial }}</div>
+        <div class="avatar-wrap">
+          <img v-if="auth.user?.avatar_url" :src="auth.user.avatar_url" class="avatar-img" alt="头像" />
+          <div v-else class="avatar">{{ initial }}</div>
+          <label class="avatar-edit" title="更换头像">
+            <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" @change="onAvatarChange" />
+            <span>更换</span>
+          </label>
+        </div>
         <div class="profile-main">
           <p class="nickname">{{ form.nickname || auth.user?.username }}</p>
           <p class="meta">@{{ auth.user?.username }} · 注册于 {{ createdDate }}</p>
         </div>
       </div>
+      <p v-if="avatarMsg" class="msg">{{ avatarMsg }}</p>
     </section>
 
     <section class="panel">
@@ -68,6 +76,7 @@ const form = reactive({
 })
 const saving = ref(false)
 const msg = ref('')
+const avatarMsg = ref('')
 
 const initial = computed(() => (auth.user?.nickname || auth.user?.username || 'U').slice(0, 1).toUpperCase())
 const createdDate = computed(() => (auth.user?.created_at || '').slice(0, 10))
@@ -82,6 +91,22 @@ onMounted(async () => {
     form.city = me.city
   }
 })
+
+async function onAvatarChange(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  avatarMsg.value = '上传中…'
+  const fd = new FormData()
+  fd.append('file', file)
+  try {
+    const updated = await request<UserInfo>({ url: '/users/me/avatar', method: 'POST', data: fd })
+    auth.user = updated
+    avatarMsg.value = '头像已更新'
+  } catch (err) {
+    avatarMsg.value = err instanceof Error ? err.message : '上传失败'
+  }
+}
 
 async function onSave() {
   if (saving.value) return
@@ -148,6 +173,32 @@ async function onSave() {
   justify-content: center;
   font-size: 22px;
   font-weight: 600;
+}
+.avatar-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+.avatar-img {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid var(--border);
+}
+.avatar-edit {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 11px;
+  color: var(--text-2);
+  padding: 0 4px;
+  cursor: pointer;
+}
+.avatar-edit input {
+  display: none;
 }
 .nickname {
   margin: 0;

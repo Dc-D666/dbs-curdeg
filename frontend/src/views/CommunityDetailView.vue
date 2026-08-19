@@ -44,16 +44,37 @@
           <p class="state">版块还未创建，帖子功能将在后续阶段上线</p>
         </div>
       </section>
+
+      <section v-if="community.my_member_type === 0" class="panel owner-panel">
+        <h3 class="panel-title">频道管理</h3>
+        <div class="owner-row">
+          <span class="owner-label">头像 / 封面</span>
+          <label class="btn-ghost btn-sm">
+            上传图片
+            <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" @change="onCoverUpload" hidden />
+          </label>
+          <span class="owner-hint">同时设为头像与封面</span>
+        </div>
+        <div class="owner-row">
+          <span class="owner-label">频道状态</span>
+          <select v-model.number="statusForm.status" class="input status-select">
+            <option :value="0">正常</option>
+            <option :value="1">关闭</option>
+          </select>
+          <button class="btn-ghost btn-sm" @click="onStatusSave">保存</button>
+        </div>
+        <p v-if="ownerMsg" class="msg">{{ ownerMsg }}</p>
+      </section>
     </div>
     <div v-else class="state">频道不存在</div>
   </main>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { communityApi, type Community } from '@/api/community'
-import { tokenStore } from '@/api/http'
+import { request, tokenStore } from '@/api/http'
 
 const route = useRoute()
 const cid = Number(route.params.id)
@@ -61,6 +82,8 @@ const community = ref<Community | null>(null)
 const loading = ref(true)
 const joining = ref(false)
 const activeBoard = ref<number | null>(null)
+const ownerMsg = ref('')
+const statusForm = reactive({ status: 0 })
 
 const activeBoardInfo = computed(
   () => community.value?.boards.find((b) => b.id === activeBoard.value) ?? null,
@@ -72,6 +95,7 @@ onMounted(async () => {
     if (community.value.boards.length > 0) {
       activeBoard.value = community.value.boards[0].id
     }
+    statusForm.status = community.value.status
   } finally {
     loading.value = false
   }
@@ -101,6 +125,32 @@ async function onLeave() {
     community.value = await communityApi.get(cid)
   } catch (e) {
     alert(e instanceof Error ? e.message : '操作失败')
+  }
+}
+
+async function onCoverUpload(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  ownerMsg.value = '上传中…'
+  const fd = new FormData()
+  fd.append('file', file)
+  try {
+    const up = await request<{ url: string }>({ url: '/uploads', method: 'POST', data: fd })
+    community.value = await communityApi.update(cid, { avatar_url: up.url, cover_url: up.url })
+    ownerMsg.value = '图片已更新'
+  } catch (err) {
+    ownerMsg.value = err instanceof Error ? err.message : '上传失败'
+  }
+}
+
+async function onStatusSave() {
+  ownerMsg.value = ''
+  try {
+    community.value = await communityApi.updateStatus(cid, statusForm.status)
+    ownerMsg.value = '状态已保存'
+  } catch (err) {
+    ownerMsg.value = err instanceof Error ? err.message : '保存失败'
   }
 }
 </script>
@@ -231,5 +281,40 @@ async function onLeave() {
   display: inline-flex;
   align-items: center;
   cursor: pointer;
+}
+.btn-sm {
+  height: 32px;
+  padding: 0 var(--sp-3);
+  font-size: var(--fs-caption);
+}
+.owner-panel .panel-title {
+  margin: 0 0 var(--sp-3);
+  font-size: var(--fs-title);
+  font-weight: 600;
+}
+.owner-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) 0;
+}
+.owner-label {
+  width: 72px;
+  font-size: var(--fs-caption);
+  color: var(--text-2);
+}
+.owner-hint {
+  font-size: var(--fs-caption);
+  color: var(--text-3);
+}
+.status-select {
+  height: 32px;
+  padding: 0 var(--sp-2);
+  font-size: var(--fs-caption);
+}
+.msg {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--fs-caption);
+  color: var(--success);
 }
 </style>

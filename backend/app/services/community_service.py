@@ -143,6 +143,22 @@ def dissolve_community(db: Session, community: Community, user: User) -> None:
     db.commit()
 
 
+def update_community_status(
+    db: Session, community: Community, user: User, status: int
+) -> CommunityOut:
+    """频道状态调整：owner 可 正常/关闭；违规封禁(2)仅系统管理员。"""
+    if status == 2:
+        if user.user_type != 1:  # 系统管理员
+            raise PermissionError_("违规封禁需要系统管理员权限")
+        community.status = 2
+    else:
+        _ensure_owner(db, community, user)
+        community.status = status
+    db.commit()
+    db.refresh(community)
+    return community_out(db, community, current_user_id=user.id)
+
+
 def _ensure_owner(db: Session, community: Community, user: User) -> None:
     member = db.execute(
         select(Member).where(Member.community_id == community.id, Member.user_id == user.id)

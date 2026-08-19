@@ -7,7 +7,7 @@ from app.core.response import NotFoundError, ok
 from app.db import get_db
 from app.models.community import Community
 from app.models.user import User
-from app.schemas.community import CreateCommunityRequest, UpdateCommunityRequest
+from app.schemas.community import CreateCommunityRequest, UpdateCommunityRequest, UpdateCommunityStatusRequest
 from app.services import community_service
 
 router = APIRouter(prefix="/communities", tags=["communities"])
@@ -75,6 +75,20 @@ def dissolve_community(
         raise NotFoundError("频道不存在")
     community_service.dissolve_community(db, community, user)
     return ok(message="频道已解散")
+
+
+@router.put("/{community_id}/status")
+def update_community_status(
+    community_id: int,
+    payload: UpdateCommunityStatusRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """频道状态调整：0正常/1关闭(owner) / 2违规封禁(系统管理员)。"""
+    community = db.get(Community, community_id)
+    if community is None:
+        raise NotFoundError("频道不存在")
+    return ok(data=community_service.update_community_status(db, community, user, payload.status))
 
 
 @router.post("/{community_id}/join")

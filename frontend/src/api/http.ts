@@ -93,8 +93,11 @@ http.interceptors.response.use(
   },
 )
 
-/** 统一解包：非 0 code 抛出业务错误 */
+/** 统一解包：非 0 code 抛出业务错误。FormData 自动识别 multipart。 */
 export async function request<T>(config: AxiosRequestConfig): Promise<T> {
+  if (config.data instanceof FormData) {
+    config.headers = { ...(config.headers as object), 'Content-Type': 'multipart/form-data' }
+  }
   const res = await http.request<ApiResponse<T>>(config)
   const body = res.data
   if (body.code !== 0) {

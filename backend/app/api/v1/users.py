@@ -1,5 +1,5 @@
-"""用户接口：个人资料查看/编辑、他人主页。"""
-from fastapi import APIRouter, Depends
+"""用户接口：个人资料查看/编辑、他人主页、头像上传。"""
+from fastapi import APIRouter, Depends, File, UploadFile
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user
@@ -7,7 +7,7 @@ from app.core.response import NotFoundError, ok
 from app.db import get_db
 from app.models.user import User
 from app.schemas.user import UpdateProfileRequest, UserOut
-from app.services import auth_service
+from app.services import auth_service, upload_service
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -26,6 +26,20 @@ def update_me(
 ):
     """更新个人资料。"""
     return ok(data=auth_service.update_profile(db, user, payload))
+
+
+@router.post("/me/avatar")
+def upload_avatar(
+    file: UploadFile = File(...),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """上传头像：保存图片并更新 avatar_url。"""
+    url = upload_service.save_image(file)
+    user.avatar_url = url
+    db.commit()
+    db.refresh(user)
+    return ok(data=auth_service.get_user_out(user), message="头像已更新")
 
 
 @router.get("/{user_id}")

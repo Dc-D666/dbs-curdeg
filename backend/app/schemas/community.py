@@ -42,6 +42,10 @@ class HandleJoinRequest(BaseModel):
     approve: bool  # True=通过 False=驳回
 
 
+class UpdateCommunityStatusRequest(BaseModel):
+    status: int = Field(ge=0, le=2)  # 0正常 1关闭 2违规封禁
+
+
 # ---------- 响应 ----------
 
 

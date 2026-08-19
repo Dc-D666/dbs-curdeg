@@ -68,6 +68,9 @@ export const communityApi = {
   update(id: number, data: Partial<Community>) {
     return request<Community>({ url: `/communities/${id}`, method: 'PUT', data })
   },
+  updateStatus(id: number, status: number) {
+    return request<Community>({ url: `/communities/${id}/status`, method: 'PUT', data: { status } })
+  },
   dissolve(id: number) {
     return request<null>({ url: `/communities/${id}`, method: 'DELETE' })
   },
