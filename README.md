@@ -7,6 +7,8 @@
 - **Android**：Kotlin + Jetpack Compose（独立 App，另仓/本仓 android/ 目录）
 - **部署**：Docker Compose + GitHub Actions 自动部署 —— **push 到 main 即自动上线**
 
+> 🌐 线上地址：https://guild.weaxi.cn （HTTPS，Let's Encrypt 证书自动续期）
+
 ## 目录结构
 
 ```
