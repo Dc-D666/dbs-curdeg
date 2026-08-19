@@ -3,6 +3,7 @@
     <header class="home-header">
       <h1 class="brand">SDUdiscord</h1>
       <nav v-if="auth.user" class="nav">
+        <router-link to="/discover" class="nav-link">发现</router-link>
         <router-link to="/me" class="nav-link">
           {{ auth.user.nickname || auth.user.username }}
         </router-link>
