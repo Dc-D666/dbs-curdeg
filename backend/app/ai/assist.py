@@ -32,5 +32,13 @@ def build_messages(payload) -> list[dict]:
 
 
 def assist_stream(payload) -> iter:
-    """SSE 文本块迭代器。"""
-    return llm_gateway.stream(build_messages(payload))
+    """SSE 文本块迭代器。
+
+    说明：GLM-4.7-Flash 是推理模型，流式响应 content 恒为空（思考过程在
+    reasoning_content），因此这里用 chat 一次性取回完整文本，再按小块切分
+    模拟流式（前端打字机效果不变，SSE 协议不变）。
+    """
+    text = llm_gateway.chat(build_messages(payload), max_tokens=2048, temperature=0.7)
+    step = 8
+    for i in range(0, len(text), step):
+        yield text[i:i + step]

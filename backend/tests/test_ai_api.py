@@ -99,8 +99,8 @@ def test_assist_sse_stream(ctx):
     body = res.text
     assert "data: " in body
     assert body.rstrip().endswith("data: [DONE]")
-    # mock stream 的三个块都出现
-    assert "AI 生成" in body and "内容" in body
+    # mock chat 的固定回复被分块输出
+    assert "测试回复" in body
 
 
 def test_assist_requires_auth(ctx):
