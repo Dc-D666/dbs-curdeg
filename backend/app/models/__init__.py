@@ -15,5 +15,10 @@ from app.models.comment import Comment
 from app.models.like import Like
 from app.models.follow import Follow
 from app.models.topic import Topic
+from app.models.op_log import OpLog
+from app.models.search_record import SearchRecord
 
-__all__ = ["User", "Community", "Board", "Role", "Member", "JoinRequest", "Post", "Comment", "Like", "Follow", "Topic"]
+__all__ = [
+    "User", "Community", "Board", "Role", "Member", "JoinRequest", "Post",
+    "Comment", "Like", "Follow", "Topic", "OpLog", "SearchRecord",
+]

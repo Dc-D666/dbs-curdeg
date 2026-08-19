@@ -4,6 +4,13 @@ import secrets
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.permissions import (
+    PERMS_ADMIN,
+    PERMS_NORMAL,
+    PERMS_OWNER,
+    PERM_MEMBER_MANAGE,
+    require_perms,
+)
 from app.core.response import ConflictError, NotFoundError, ParamError, PermissionError_
 from app.models.board import Board
 from app.models.community import Community
@@ -21,17 +28,7 @@ from app.schemas.community import (
     UpdateBoardRequest,
     UpdateCommunityRequest,
 )
-
-# 默认权限点（见方案 4.3）
-PERMS_OWNER = [
-    "post.create", "comment.create", "top", "essence", "delete_post",
-    "shutup", "kick", "member_manage", "role_manage", "moderate", "super",
-]
-PERMS_ADMIN = [
-    "post.create", "comment.create", "top", "essence", "delete_post",
-    "shutup", "kick", "member_manage", "moderate",
-]
-PERMS_NORMAL = ["post.create", "comment.create"]
+from app.services.op_log_service import log_op
 
 
 def _gen_number() -> str:
@@ -211,6 +208,8 @@ def join_community(db: Session, community: Community, user: User) -> dict:
         select(Member).where(Member.community_id == community.id, Member.user_id == user.id)
     ).scalar_one_or_none()
     if existing:
+        if existing.is_blocked:
+            raise ConflictError("你已被移出该频道，无法重新加入")
         raise ConflictError("你已经是该频道成员")
 
     if community.join_setting == 0:
@@ -283,8 +282,8 @@ def list_join_requests(db: Session, community: Community, user: User, page: int,
 def handle_join_request(
     db: Session, community: Community, user: User, req: JoinRequest, approve: bool
 ) -> None:
-    """审核加入申请。"""
-    _ensure_admin(db, community, user)
+    """审核加入申请（member_manage 权限，留痕）。"""
+    require_perms(db, community.id, user, PERM_MEMBER_MANAGE)
     if req.status != JOIN_PENDING:
         raise ParamError("该申请已处理")
     req.status = JOIN_APPROVED if approve else JOIN_REJECTED
@@ -297,6 +296,10 @@ def handle_join_request(
         if applicant is None:
             raise NotFoundError("申请用户不存在")
         _add_member(db, community, applicant, join_channel=0)
+    log_op(
+        db, community.id, user.id, "approve_join" if approve else "reject_join",
+        "join_request", req.id, {"user_id": req.user_id},
+    )
     db.commit()
 
 
@@ -323,6 +326,10 @@ def _decorate_members(db: Session, members: list[Member]) -> list[MemberOut]:
         return []
     uids = {m.user_id for m in members}
     users = {u.id: u for u in db.execute(select(User).where(User.id.in_(uids))).scalars().all()}
+    rids = {m.role_id for m in members if m.role_id}
+    roles = {}
+    if rids:
+        roles = {r.id: r for r in db.execute(select(Role).where(Role.id.in_(rids))).scalars().all()}
     out = []
     for m in members:
         mo = MemberOut.model_validate(m)
@@ -331,6 +338,9 @@ def _decorate_members(db: Session, members: list[Member]) -> list[MemberOut]:
             mo.username = u.username
             mo.user_nickname = u.nickname or u.username
             mo.avatar_url = u.avatar_url
+        role = roles.get(m.role_id)
+        if role:
+            mo.role_name = role.name
         out.append(mo)
     return out
 

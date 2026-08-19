@@ -72,8 +72,11 @@
         </button>
       </section>
 
-      <section v-if="community.my_member_type === 0" class="panel owner-panel">
-        <h3 class="panel-title">频道管理</h3>
+      <section v-if="community.my_member_type === 0 || community.my_member_type === 1" class="panel owner-panel">
+        <div class="panel-title-row">
+          <h3 class="panel-title">频道管理</h3>
+          <router-link :to="`/c/${cid}/admin`" class="btn-ghost btn-sm">管理后台</router-link>
+        </div>
 
         <div class="owner-row">
           <span class="owner-label">头像 / 封面</span>
@@ -513,9 +516,15 @@ async function onDissolve() {
   font-size: var(--fs-caption);
 }
 .owner-panel .panel-title {
-  margin: 0 0 var(--sp-3);
+  margin: 0;
   font-size: var(--fs-title);
   font-weight: 600;
+}
+.panel-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--sp-3);
 }
 .owner-row {
   display: flex;

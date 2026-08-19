@@ -8,6 +8,7 @@
 from sqlalchemy import Select, func, or_, select, update
 from sqlalchemy.orm import Session
 
+from app.core.permissions import PERM_DELETE_POST, PERM_ESSENCE, PERM_TOP, require_perms
 from app.core.response import NotFoundError, ParamError, PermissionError_
 from app.models.board import Board
 from app.models.community import Community
@@ -17,6 +18,7 @@ from app.models.member import MEMBER_ADMIN, MEMBER_OWNER, Member
 from app.models.post import Post, POST_STATUS_DELETED, POST_STATUS_NORMAL
 from app.models.user import User
 from app.schemas.post import CreatePostRequest, PostOut, UpdatePostRequest
+from app.services.op_log_service import log_op
 
 
 def create_post(
@@ -71,10 +73,12 @@ def update_post(
 
 
 def delete_post(db: Session, community: Community, post: Post, user: User) -> None:
-    """删除帖子（软删）：作者本人或频道主/管理员。"""
-    member = _require_member(db, community.id, user.id)
-    if post.author_id != user.id and member.member_type not in (MEMBER_OWNER, MEMBER_ADMIN):
-        raise PermissionError_("只能删除自己的帖子，或需要频道主/管理员权限")
+    """删除帖子（软删）：作者本人，或拥有 delete_post 权限的管理者；管理删除留痕。"""
+    is_author = post.author_id == user.id
+    if not is_author:
+        require_perms(db, community.id, user, PERM_DELETE_POST)
+    else:
+        _require_member(db, community.id, user.id)
     post.status = POST_STATUS_DELETED
     # 原子递减（不为负）
     db.execute(
@@ -82,22 +86,26 @@ def delete_post(db: Session, community: Community, post: Post, user: User) -> No
         .where(Community.id == community.id)
         .values(post_count=func.greatest(0, Community.post_count - 1))
     )
+    if not is_author:
+        log_op(db, community.id, user.id, "delete_post", "post", post.id, {"author_id": post.author_id})
     db.commit()
 
 
 def set_top(db: Session, community: Community, post: Post, user: User, is_top: bool) -> PostOut:
-    """置顶/取消置顶（仅频道主/管理员）。"""
-    _ensure_moderator(db, community.id, user.id)
+    """置顶/取消置顶（top 权限）。"""
+    require_perms(db, community.id, user, PERM_TOP)
     post.is_top = is_top
+    log_op(db, community.id, user.id, "set_top", "post", post.id, {"is_top": is_top})
     db.commit()
     db.refresh(post)
     return post_out(db, post, current_user_id=user.id)
 
 
 def set_essence(db: Session, community: Community, post: Post, user: User, is_essence: bool) -> PostOut:
-    """精华/取消精华（仅频道主/管理员）。"""
-    _ensure_moderator(db, community.id, user.id)
+    """精华/取消精华（essence 权限）。"""
+    require_perms(db, community.id, user, PERM_ESSENCE)
     post.is_essence = is_essence
+    log_op(db, community.id, user.id, "set_essence", "post", post.id, {"is_essence": is_essence})
     db.commit()
     db.refresh(post)
     return post_out(db, post, current_user_id=user.id)
@@ -418,13 +426,6 @@ def _require_member(db: Session, community_id: int, user_id: int) -> Member:
 
     if member.shutup_expire_at and member.shutup_expire_at > datetime.now():
         raise PermissionError_("你已被禁言，无法操作")
-    return member
-
-
-def _ensure_moderator(db: Session, community_id: int, user_id: int) -> Member:
-    member = _require_member(db, community_id, user_id)
-    if member.member_type not in (MEMBER_OWNER, MEMBER_ADMIN):
-        raise PermissionError_("需要频道主或管理员权限")
     return member
 
 

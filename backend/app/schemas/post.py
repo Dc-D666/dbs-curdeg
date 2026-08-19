@@ -80,3 +80,9 @@ class FeedOut(BaseModel):
     items: list[PostOut]
     next_cursor: str | None = None  # latest: "id"；hot: "like_count:id"
     has_more: bool = False
+
+
+class SearchPostOut(PostOut):
+    """搜索结果（阶段 4）：追加标题高亮与正文摘要。"""
+    highlight_title: str = ""  # 关键词 <em class="hl"> 高亮后的标题
+    snippet: str = ""          # 关键词高亮的正文摘要

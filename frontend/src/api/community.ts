@@ -40,9 +40,32 @@ export interface Member {
   join_time: string
   shutup_expire_at: string | null
   is_blocked: boolean
+  role_id: number | null
+  role_name: string
   username: string
   user_nickname: string
   avatar_url: string
+}
+
+export interface RoleItem {
+  id: number
+  community_id: number
+  name: string
+  color: string
+  level: number
+  perms: string[]
+  is_default: boolean
+  created_at: string
+}
+
+export interface OpLogItem {
+  id: number
+  action: string
+  target_type: string
+  target_id: number | null
+  detail: Record<string, unknown> | null
+  created_at: string
+  operator_nickname: string
 }
 
 export interface JoinRequestItem {
@@ -98,5 +121,52 @@ export const communityApi = {
       method: 'POST',
       data: { approve },
     })
+  },
+}
+
+// ---------- 身份组（阶段 4） ----------
+
+export const roleApi = {
+  list(cid: number) {
+    return request<RoleItem[]>({ url: `/communities/${cid}/roles` })
+  },
+  create(cid: number, data: { name: string; color?: string; level?: number; perms?: string[] }) {
+    return request<RoleItem>({ url: `/communities/${cid}/roles`, method: 'POST', data })
+  },
+  update(cid: number, roleId: number, data: Partial<RoleItem>) {
+    return request<RoleItem>({ url: `/communities/${cid}/roles/${roleId}`, method: 'PUT', data })
+  },
+  remove(cid: number, roleId: number) {
+    return request<null>({ url: `/communities/${cid}/roles/${roleId}`, method: 'DELETE' })
+  },
+  assign(cid: number, userId: number, roleId: number | null) {
+    return request<Member>({
+      url: `/communities/${cid}/members/${userId}/role`,
+      method: 'POST',
+      data: { role_id: roleId },
+    })
+  },
+}
+
+// ---------- 管理动作（阶段 4） ----------
+
+export const manageApi = {
+  shutup(cid: number, userId: number, hours: number) {
+    return request<Member>({ url: `/communities/${cid}/members/${userId}/shutup`, method: 'POST', data: { hours } })
+  },
+  unshutup(cid: number, userId: number) {
+    return request<Member>({ url: `/communities/${cid}/members/${userId}/unshutup`, method: 'POST' })
+  },
+  kick(cid: number, userId: number) {
+    return request<Member>({ url: `/communities/${cid}/members/${userId}/kick`, method: 'POST' })
+  },
+  block(cid: number, userId: number) {
+    return request<Member>({ url: `/communities/${cid}/members/${userId}/block`, method: 'POST' })
+  },
+  unblock(cid: number, userId: number) {
+    return request<Member>({ url: `/communities/${cid}/members/${userId}/unblock`, method: 'POST' })
+  },
+  ops(cid: number, page = 1, pageSize = 20) {
+    return request<Page<OpLogItem>>({ url: `/communities/${cid}/ops`, params: { page, page_size: pageSize } })
   },
 }

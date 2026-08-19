@@ -46,6 +46,52 @@ class UpdateCommunityStatusRequest(BaseModel):
     status: int = Field(ge=0, le=2)  # 0正常 1关闭 2违规封禁
 
 
+# ---------- 身份组（阶段 4） ----------
+
+
+class CreateRoleRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=32)
+    color: str = Field(default="#1a73e8", pattern=r"^#[0-9a-fA-F]{6}$")
+    level: int = Field(default=0, ge=0, le=99)  # 100 为频道主保留
+    perms: list[str] = Field(default_factory=list)
+
+
+class UpdateRoleRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=32)
+    color: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$")
+    level: int | None = Field(default=None, ge=0, le=99)
+    perms: list[str] | None = None
+
+
+class AssignRoleRequest(BaseModel):
+    role_id: int | None = None  # None = 清除身份
+
+
+class RoleOut(BaseModel):
+    id: int
+    community_id: int
+    name: str
+    color: str
+    level: int
+    perms: list
+    is_default: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class OpLogOut(BaseModel):
+    id: int
+    action: str
+    target_type: str
+    target_id: int | None
+    detail: dict | None
+    created_at: datetime
+    operator_nickname: str = ""  # 视图增强
+
+    model_config = {"from_attributes": True}
+
+
 # ---------- 响应 ----------
 
 
@@ -93,6 +139,8 @@ class MemberOut(BaseModel):
     join_time: datetime
     shutup_expire_at: datetime | None
     is_blocked: bool
+    role_id: int | None = None   # 身份组（阶段 4）
+    role_name: str = ""
     # 冗余用户信息
     username: str = ""
     user_nickname: str = ""

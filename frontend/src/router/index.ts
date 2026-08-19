@@ -7,6 +7,7 @@ const router = createRouter({
     { path: '/', name: 'home', component: () => import('@/views/HomeView.vue') },
     { path: '/discover', name: 'discover', component: () => import('@/views/DiscoverView.vue') },
     { path: '/c/:id', name: 'community', component: () => import('@/views/CommunityDetailView.vue') },
+    { path: '/c/:id/admin', name: 'community-admin', component: () => import('@/views/AdminView.vue') },
     { path: '/c/:id/boards/:bid/post/new', name: 'post-create', component: () => import('@/views/PostCreateView.vue') },
     { path: '/p/:id', name: 'post', component: () => import('@/views/PostDetailView.vue') },
     { path: '/login', name: 'login', component: () => import('@/views/auth/LoginView.vue') },
@@ -21,7 +22,7 @@ const router = createRouter({
 // 需要登录的页面守卫
 router.beforeEach((to) => {
   const authed = !!tokenStore.access
-  if (to.name === 'me' && !authed) return { name: 'login' }
+  if ((to.name === 'me' || to.name === 'community-admin') && !authed) return { name: 'login' }
   if ((to.name === 'login' || to.name === 'register') && authed) return { name: 'home' }
   return true
 })

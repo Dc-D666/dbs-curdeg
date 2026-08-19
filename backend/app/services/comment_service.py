@@ -2,13 +2,14 @@
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
-from app.core.response import ParamError, PermissionError_
+from app.core.permissions import PERM_DELETE_COMMENT, require_perms
+from app.core.response import ParamError
 from app.models.comment import Comment
 from app.models.like import Like
-from app.models.member import MEMBER_ADMIN, MEMBER_OWNER, Member
 from app.models.post import Post
 from app.models.user import User
 from app.schemas.post import CommentOut, CreateCommentRequest
+from app.services.op_log_service import log_op
 from app.services.post_service import _require_member
 
 
@@ -81,14 +82,12 @@ def list_replies(
 
 
 def delete_comment(db: Session, post: Post, comment: Comment, user: User) -> None:
-    """软删评论：本人或频道主/管理员；删顶层评论时级联软删其楼中楼回复。"""
-    member = db.execute(
-        select(Member).where(Member.community_id == post.community_id, Member.user_id == user.id)
-    ).scalar_one_or_none()
-    if member is None:
-        raise PermissionError_("只有频道成员可以执行此操作")
-    if comment.author_id != user.id and member.member_type not in (MEMBER_OWNER, MEMBER_ADMIN):
-        raise PermissionError_("只能删除自己的评论，或需要频道主/管理员权限")
+    """软删评论：本人，或拥有 delete_comment 权限的管理者；删顶层评论时级联软删其楼中楼回复。"""
+    is_author = comment.author_id == user.id
+    if is_author:
+        _require_member(db, post.community_id, user.id)
+    else:
+        require_perms(db, post.community_id, user, PERM_DELETE_COMMENT)
 
     removed = 1
     if comment.parent_id is None:
@@ -110,6 +109,8 @@ def delete_comment(db: Session, post: Post, comment: Comment, user: User) -> Non
         .where(Post.id == post.id)
         .values(comment_count=func.greatest(0, Post.comment_count - removed))
     )
+    if not is_author:
+        log_op(db, post.community_id, user.id, "delete_comment", "comment", comment.id, {"author_id": comment.author_id})
     db.commit()
 
 
