@@ -102,17 +102,28 @@ http.interceptors.response.use(
   },
 )
 
-/** 统一解包：非 0 code 抛出业务错误。FormData 自动识别 multipart。 */
+/** 统一解包：非 0 code 抛出业务错误；HTTP 错误时提取后端 message。FormData 自动识别 multipart。 */
 export async function request<T>(config: AxiosRequestConfig): Promise<T> {
   if (config.data instanceof FormData) {
     config.headers = { ...(config.headers as object), 'Content-Type': 'multipart/form-data' }
   }
-  const res = await http.request<ApiResponse<T>>(config)
-  const body = res.data
-  if (body.code !== 0) {
-    throw new Error(body.message || `业务错误 code=${body.code}`)
+  try {
+    const res = await http.request<ApiResponse<T>>(config)
+    const body = res.data
+    if (body.code !== 0) {
+      throw new Error(body.message || `业务错误 code=${body.code}`)
+    }
+    return body.data
+  } catch (e) {
+    // axios HTTP 错误：优先提取后端统一响应里的 message
+    if (axios.isAxiosError(e)) {
+      const data = e.response?.data as ApiResponse | undefined
+      if (data && typeof data.message === 'string') {
+        throw new Error(data.message)
+      }
+    }
+    throw e
   }
-  return body.data
 }
 
 export default http
