@@ -48,6 +48,10 @@ onMounted(async () => {
 * {
   box-sizing: border-box;
 }
+html,
+body {
+  overflow-x: hidden; /* 防页面内容横向溢出导致布局错乱 */
+}
 body {
   margin: 0;
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'PingFang SC',
@@ -67,6 +71,7 @@ button {
 }
 #app {
   min-height: 100vh;
+  overflow-x: hidden;
 }
 .app-shell {
   min-height: 100vh;
@@ -81,6 +86,8 @@ button {
   right: 0;
   bottom: 0;
   height: var(--tabbar-height);
+  max-width: 100vw;
+  overflow: hidden;
   background: var(--bg-card);
   border-top: 1px solid var(--border);
   display: flex;
@@ -88,6 +95,8 @@ button {
 }
 .tab-item {
   flex: 1;
+  min-width: 0;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -102,8 +111,18 @@ button {
 .tab-icon {
   width: 24px;
   height: 24px;
+  flex-shrink: 0;
+}
+.tab-icon :deep(svg) {
+  width: 24px;
+  height: 24px;
+  display: block;
 }
 .tab-label {
   font-size: 12px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>

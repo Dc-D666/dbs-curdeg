@@ -228,6 +228,16 @@ async function onChangePassword() {
   align-items: center;
   gap: var(--sp-4);
 }
+.profile-main {
+  min-width: 0;
+  flex: 1;
+}
+.profile-main .nickname,
+.profile-main .meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .avatar {
   width: 56px;
   height: 56px;
@@ -297,6 +307,7 @@ async function onChangePassword() {
 }
 .field-row .field {
   flex: 1;
+  min-width: 0;
 }
 .field-label {
   font-size: var(--fs-caption);
@@ -338,6 +349,7 @@ async function onChangePassword() {
   font-size: var(--fs-body);
   text-decoration: none;
   padding: var(--sp-1) 0;
+  min-width: 0;
 }
 .feed-arrow {
   color: var(--text-3);
