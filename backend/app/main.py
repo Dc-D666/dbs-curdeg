@@ -10,7 +10,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.v1 import auth, boards, communities, members, uploads, users
+from app.api.v1 import auth, boards, comments, communities, interact, members, posts, uploads, users
 from app.core.config import settings
 
 app = FastAPI(
@@ -83,6 +83,9 @@ app.include_router(communities.router, prefix=API_V1)
 app.include_router(boards.router, prefix=API_V1)
 app.include_router(members.router, prefix=API_V1)
 app.include_router(uploads.router, prefix=API_V1)
+app.include_router(posts.router, prefix=API_V1)
+app.include_router(comments.router, prefix=API_V1)
+app.include_router(interact.router, prefix=API_V1)
 
 
 @app.get("/healthz")

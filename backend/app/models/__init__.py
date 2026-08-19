@@ -10,5 +10,9 @@ from app.models.board import Board
 from app.models.role import Role
 from app.models.member import Member
 from app.models.join_request import JoinRequest
+from app.models.post import Post
+from app.models.comment import Comment
+from app.models.like import Like
+from app.models.follow import Follow
 
-__all__ = ["User", "Community", "Board", "Role", "Member", "JoinRequest"]
+__all__ = ["User", "Community", "Board", "Role", "Member", "JoinRequest", "Post", "Comment", "Like", "Follow"]

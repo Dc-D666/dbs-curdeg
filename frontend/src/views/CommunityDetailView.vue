@@ -41,8 +41,44 @@
         </div>
         <div v-if="activeBoardInfo" class="board-desc">{{ activeBoardInfo.description || '暂无版块描述' }}</div>
         <div v-else-if="community.boards.length === 0" class="empty-block">
-          <p class="state">版块还未创建，帖子功能将在后续阶段上线</p>
+          <p class="state">版块还未创建</p>
         </div>
+      </section>
+
+      <section v-if="activeBoardInfo" class="panel feed-panel">
+        <div class="feed-toolbar">
+          <div class="feed-tabs" role="tablist">
+            <button class="tab" :class="{ active: feedSort === 'latest' }" @click="switchSort('latest')">最新</button>
+            <button class="tab" :class="{ active: feedSort === 'hot' }" @click="switchSort('hot')">热门</button>
+          </div>
+          <router-link
+            v-if="community.is_member"
+            :to="`/c/${cid}/boards/${activeBoard}/post/new`"
+            class="btn-primary btn-sm"
+          >发帖</router-link>
+        </div>
+
+        <p v-if="feedLoading && feedItems.length === 0" class="state">加载中…</p>
+        <p v-else-if="feedItems.length === 0" class="state">暂无帖子，来发第一帖吧</p>
+        <ul v-else class="feed-list">
+          <li v-for="p in feedItems" :key="p.id" class="feed-item" @click="$router.push(`/p/${p.id}`)">
+            <div class="feed-head">
+              <span class="feed-title">{{ p.title }}</span>
+              <span v-if="p.is_top" class="tag tag-top">置顶</span>
+              <span v-if="p.is_essence" class="tag tag-essence">精华</span>
+            </div>
+            <p class="feed-excerpt">{{ p.source_markdown }}</p>
+            <div class="feed-meta">
+              <span>{{ p.author_nickname }}</span>
+              <span>{{ p.like_count }} 赞</span>
+              <span>{{ p.comment_count }} 评论</span>
+              <span class="feed-time">{{ p.created_at.slice(0, 16) }}</span>
+            </div>
+          </li>
+        </ul>
+        <button v-if="feedHasMore" class="btn-ghost load-more" :disabled="feedLoading" @click="loadFeed()">
+          {{ feedLoading ? '加载中…' : '加载更多' }}
+        </button>
       </section>
 
       <section v-if="community.my_member_type === 0" class="panel owner-panel">
@@ -71,9 +107,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { communityApi, type Community } from '@/api/community'
+import { postApi, type PostItem } from '@/api/post'
 import { request, tokenStore } from '@/api/http'
 
 const route = useRoute()
@@ -88,6 +125,43 @@ const statusForm = reactive({ status: 0 })
 const activeBoardInfo = computed(
   () => community.value?.boards.find((b) => b.id === activeBoard.value) ?? null,
 )
+
+// ---------- 帖子流 ----------
+const feedItems = ref<PostItem[]>([])
+const feedSort = ref<'latest' | 'hot'>('latest')
+const feedCursor = ref<string | null>(null)
+const feedHasMore = ref(false)
+const feedLoading = ref(false)
+
+async function loadFeed(reset = false) {
+  if (!activeBoard.value || feedLoading.value) return
+  if (reset) {
+    feedItems.value = []
+    feedCursor.value = null
+    feedHasMore.value = false
+  }
+  feedLoading.value = true
+  try {
+    const data = await postApi.feed(cid, feedSort.value, feedCursor.value)
+    feedItems.value = reset ? data.items : [...feedItems.value, ...data.items]
+    feedCursor.value = data.next_cursor
+    feedHasMore.value = data.has_more
+  } catch (e) {
+    alert(e instanceof Error ? e.message : '加载失败')
+  } finally {
+    feedLoading.value = false
+  }
+}
+
+function switchSort(sort: 'latest' | 'hot') {
+  if (feedSort.value === sort) return
+  feedSort.value = sort
+  loadFeed(true)
+}
+
+watch(activeBoard, (bid) => {
+  if (bid) loadFeed(true)
+})
 
 onMounted(async () => {
   try {
@@ -316,5 +390,70 @@ async function onStatusSave() {
   margin: var(--sp-2) 0 0;
   font-size: var(--fs-caption);
   color: var(--success);
+}
+.feed-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+.feed-tabs {
+  display: flex;
+  gap: var(--sp-2);
+}
+.feed-list {
+  margin: var(--sp-3) 0 0;
+  padding: 0;
+  list-style: none;
+}
+.feed-item {
+  padding: var(--sp-3) 0;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+.feed-item:last-child {
+  border-bottom: none;
+}
+.feed-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.feed-title {
+  font-size: var(--fs-body);
+  font-weight: 600;
+  color: var(--text-1);
+}
+.tag-top {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+.tag-essence {
+  color: #b8860b;
+  border-color: #b8860b;
+}
+.feed-excerpt {
+  margin: var(--sp-1) 0 0;
+  font-size: var(--fs-caption);
+  color: var(--text-2);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.feed-meta {
+  margin-top: var(--sp-1);
+  display: flex;
+  gap: var(--sp-3);
+  font-size: var(--fs-caption);
+  color: var(--text-3);
+}
+.feed-time {
+  margin-left: auto;
+}
+.load-more {
+  margin-top: var(--sp-3);
+  width: 100%;
+  justify-content: center;
 }
 </style>
