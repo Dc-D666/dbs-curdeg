@@ -1,12 +1,26 @@
 /** 帖子/评论/点赞/关注 API（阶段 3）。 */
 import { request, type Page } from './http'
 
+export interface SegStyle {
+  bold?: boolean
+  italic?: boolean
+  strike?: boolean
+  code?: boolean
+  color?: string
+  bg?: string
+  size?: string
+}
+
 export interface RichSegment {
   type: number
   text?: string
+  style?: SegStyle
   url?: string
   display_text?: string
   url_type?: number
+  at_user?: { id: number; nick: string }
+  emoji?: { id: string; pattern_id?: string; char: string }
+  topic?: { topic_id: number; topic_name: string }
 }
 
 export interface PostItem {

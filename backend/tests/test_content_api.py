@@ -379,6 +379,77 @@ def test_post_rich_content_segments(ctx):
     assert res.status_code == 400
 
 
+def test_at_mention_requires_member(ctx):
+    """@提及分片：目标必须是频道成员；非成员被拒。"""
+    client, owner, normal, cid, bid = ctx["client"], ctx["owner"], ctx["normal"], ctx["cid"], ctx["bid"]
+    # 成员 id（normal 已加入，owner 是频道主）
+    me = client.get("/api/v1/users/me", headers=_auth(owner)).json()["data"]["id"]
+    other = _register(client, "atoutsider", "atoutsider@test.com")
+    outsider_id = client.get("/api/v1/users/me", headers=_auth(other)).json()["data"]["id"]
+    rich = [{"type": 1, "text": "你好 "}, {"type": 2, "at_user": {"id": me, "nick": "频道主"}}]
+    res = client.post(
+        f"/api/v1/communities/{cid}/boards/{bid}/posts",
+        json={"title": "@帖", "rich_content": rich, "images": []},
+        headers=_auth(owner),
+    )
+    assert res.status_code == 200
+    assert "频道主" in res.json()["data"]["source_markdown"]  # 纯文本含 @昵称
+    # 提及非成员 → 400
+    rich_bad = [{"type": 2, "at_user": {"id": outsider_id, "nick": "外人"}}]
+    res = client.post(
+        f"/api/v1/communities/{cid}/boards/{bid}/posts",
+        json={"title": "越权@", "rich_content": rich_bad, "images": []},
+        headers=_auth(owner),
+    )
+    assert res.status_code == 400
+    assert "成员" in res.json()["message"]
+
+
+def test_topic_upsert_and_extract(ctx):
+    """话题：创建/upsert 幂等；分片纯文本提取 #话题名。"""
+    client, owner, cid, bid = ctx["client"], ctx["owner"], ctx["cid"], ctx["bid"]
+    res = client.post(f"/api/v1/communities/{cid}/topics", json={"name": "日常"}, headers=_auth(owner))
+    assert res.status_code == 200
+    tid = res.json()["data"]["id"]
+    # 同名 upsert 返回同一话题
+    res2 = client.post(f"/api/v1/communities/{cid}/topics", json={"name": "日常"}, headers=_auth(owner))
+    assert res2.json()["data"]["id"] == tid
+    # 列表
+    lst = client.get(f"/api/v1/communities/{cid}/topics").json()["data"]
+    assert any(t["name"] == "日常" for t in lst)
+    # 分片引用话题 → source_markdown 含 #日常
+    rich = [{"type": 8, "topic": {"topic_id": tid, "topic_name": "日常"}}, {"type": 1, "text": "今天聊点啥"}]
+    res = client.post(
+        f"/api/v1/communities/{cid}/boards/{bid}/posts",
+        json={"title": "话题帖", "rich_content": rich, "images": []},
+        headers=_auth(owner),
+    )
+    assert res.status_code == 200
+    assert res.json()["data"]["source_markdown"] == "#日常今天聊点啥"
+    # 非成员不能建话题
+    outsider = _register(client, "topicoutsider", "topicoutsider@test.com")
+    res = client.post(f"/api/v1/communities/{cid}/topics", json={"name": "越权"}, headers=_auth(outsider))
+    assert res.status_code == 403
+
+
+def test_style_segments_extract(ctx):
+    """样式分片（bold/color）存储与纯文本提取。"""
+    client, owner, cid, bid = ctx["client"], ctx["owner"], ctx["cid"], ctx["bid"]
+    rich = [
+        {"type": 1, "text": "重点", "style": {"bold": True, "color": "#d54941"}},
+        {"type": 4, "emoji": {"id": "1", "char": "🔥"}},
+    ]
+    res = client.post(
+        f"/api/v1/communities/{cid}/boards/{bid}/posts",
+        json={"title": "样式帖", "rich_content": rich, "images": []},
+        headers=_auth(owner),
+    )
+    assert res.status_code == 200
+    data = res.json()["data"]
+    assert data["rich_content"][0]["style"]["bold"] is True
+    assert data["source_markdown"] == "重点🔥"
+
+
 def test_global_feed(ctx):
     """全站帖子流：latest/hot 都能看到新发帖子（首页用）。"""
     client, owner, cid, bid = ctx["client"], ctx["owner"], ctx["cid"], ctx["bid"]

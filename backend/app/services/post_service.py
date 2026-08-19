@@ -30,7 +30,7 @@ def create_post(
     member = _require_member(db, community.id, user.id)
     _check_board_post_perm(db, community, board, user, member)
     rich, plain = _normalize_content(payload)
-
+    _validate_at_users(db, community.id, rich)
     post = Post(
         community_id=community.id,
         board_id=board.id,
@@ -58,6 +58,7 @@ def update_post(
     data = payload.model_dump(exclude_unset=True)
     if "content" in data or "rich_content" in data:
         rich, plain = _normalize_content(payload)
+        _validate_at_users(db, community.id, rich)
         post.rich_content = rich
         post.source_markdown = plain
     if "title" in data:
@@ -354,7 +355,10 @@ def post_out(db: Session, post: Post, current_user_id: int | None) -> PostOut:
 
 
 def _normalize_content(payload) -> tuple[list, str]:
-    """rich_content（4.4 分片）优先；否则 content 纯文本转单文本分片。返回 (分片, 纯文本)。"""
+    """rich_content（4.4 分片）优先；否则 content 纯文本转单文本分片。返回 (分片, 纯文本)。
+
+    纯文本提取规则：type1 text / type3 display_text / type2 at_user.nick / type8 topic_name / type4 emoji.char。
+    """
     if payload.rich_content:
         rich = payload.rich_content
         parts = []
@@ -364,12 +368,37 @@ def _normalize_content(payload) -> tuple[list, str]:
             t = seg.get("type")
             if t == 1 and seg.get("text"):
                 parts.append(seg["text"])
+            elif t == 2 and isinstance(seg.get("at_user"), dict):
+                parts.append(f"@{seg['at_user'].get('nick', '')}")
             elif t == 3 and seg.get("display_text"):
                 parts.append(seg["display_text"])
+            elif t == 4 and isinstance(seg.get("emoji"), dict):
+                parts.append(seg["emoji"].get("char", ""))
+            elif t == 8 and isinstance(seg.get("topic"), dict):
+                parts.append(f"#{seg['topic'].get('topic_name', '')}")
         return rich, "".join(parts).strip()
     if payload.content:
         return [{"type": 1, "text": payload.content}], payload.content
     raise ParamError("content 与 rich_content 至少提供一个")
+
+
+def _validate_at_users(db: Session, community_id: int, rich: list) -> None:
+    """@ 提及（type 2）目标必须是频道成员。"""
+    at_ids = {
+        seg["at_user"]["id"]
+        for seg in rich
+        if isinstance(seg, dict) and seg.get("type") == 2 and isinstance(seg.get("at_user"), dict)
+    }
+    if not at_ids:
+        return
+    member_ids = set(
+        db.execute(
+            select(Member.user_id).where(Member.community_id == community_id, Member.user_id.in_(at_ids))
+        ).scalars().all()
+    )
+    invalid = at_ids - member_ids
+    if invalid:
+        raise ParamError(f"只能提及频道成员（id={sorted(invalid)} 不是成员）")
 
 
 # ---------- 权限 ----------

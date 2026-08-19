@@ -14,5 +14,6 @@ from app.models.post import Post
 from app.models.comment import Comment
 from app.models.like import Like
 from app.models.follow import Follow
+from app.models.topic import Topic
 
-__all__ = ["User", "Community", "Board", "Role", "Member", "JoinRequest", "Post", "Comment", "Like", "Follow"]
+__all__ = ["User", "Community", "Board", "Role", "Member", "JoinRequest", "Post", "Comment", "Like", "Follow", "Topic"]

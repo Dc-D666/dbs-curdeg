@@ -24,7 +24,18 @@
 
         <div class="post-body">
           <template v-for="(seg, i) in richSegments" :key="i">
-            <p v-if="seg.type === 1 && seg.text" class="post-text">{{ seg.text }}</p>
+            <!-- 文本分片（含样式） -->
+            <p v-if="seg.type === 1 && seg.text" class="post-text" :style="segStyle(seg.style)">
+              <template v-for="(piece, j) in splitMarkdown(seg.text)" :key="j">
+                <code v-if="piece.code" class="post-code">{{ piece.text }}</code>
+                <span v-else :style="piece.style">{{ piece.text }}</span>
+              </template>
+            </p>
+            <!-- @提及 -->
+            <span v-else-if="seg.type === 2 && seg.at_user" class="post-at">
+              <router-link :to="`/users/${seg.at_user.id}`">@{{ seg.at_user.nick }}</router-link>
+            </span>
+            <!-- 链接卡片 -->
             <a
               v-else-if="seg.type === 3 && seg.url"
               :href="seg.url"
@@ -32,6 +43,14 @@
               rel="noopener noreferrer"
               class="post-link"
             >{{ seg.display_text || seg.url }}</a>
+            <!-- emoji -->
+            <span v-else-if="seg.type === 4 && seg.emoji" class="post-emoji">{{ seg.emoji.char }}</span>
+            <!-- 话题 -->
+            <router-link
+              v-else-if="seg.type === 8 && seg.topic"
+              :to="`/c/${post.community_id}`"
+              class="post-topic"
+            >#{{ seg.topic.topic_name }}</router-link>
           </template>
           <div v-if="post.images.length" class="post-images">
             <img v-for="(img, i) in post.images" :key="img" :src="img" alt="" @click="previewIndex = i" />
@@ -172,6 +191,46 @@ interface ReplyState {
 const replyMap = ref(new Map<number, ReplyState>())
 
 const richSegments = computed(() => post.value?.rich_content ?? [])
+
+interface SegStyleLike {
+  bold?: boolean
+  italic?: boolean
+  strike?: boolean
+  code?: boolean
+  color?: string
+  bg?: string
+  size?: string
+}
+
+function segStyle(s?: SegStyleLike): Record<string, string> {
+  const css: Record<string, string> = {}
+  if (s?.bold) css.fontWeight = 'bold'
+  if (s?.italic) css.fontStyle = 'italic'
+  if (s?.strike) css.textDecorationLine = 'line-through'
+  if (s?.color) css.color = s.color
+  if (s?.bg) css.backgroundColor = s.bg
+  if (s?.size) css.fontSize = s.size
+  return css
+}
+
+function splitMarkdown(text: string): Array<{ text: string; code?: boolean; style: Record<string, string> }> {
+  // 渲染端解析 markdown 快捷语法（**加粗** *斜体* `代码` ~~删除线~~）
+  const parts: Array<{ text: string; code?: boolean; style: Record<string, string> }> = []
+  const re = /(\*\*[^*]+\*\*|\*[^*\n]+\*|`[^`]+`|~~[^~]+~~)/g
+  let last = 0
+  let m: RegExpExecArray | null
+  while ((m = re.exec(text))) {
+    if (m.index > last) parts.push({ text: text.slice(last, m.index), style: {} })
+    const raw = m[0]
+    if (raw.startsWith('**')) parts.push({ text: raw.slice(2, -2), style: { fontWeight: 'bold' } })
+    else if (raw.startsWith('~~')) parts.push({ text: raw.slice(2, -2), style: { textDecorationLine: 'line-through' } })
+    else if (raw.startsWith('`')) parts.push({ text: raw.slice(1, -1), code: true, style: {} })
+    else if (raw.startsWith('*')) parts.push({ text: raw.slice(1, -1), style: { fontStyle: 'italic' } })
+    last = m.index + raw.length
+  }
+  if (last < text.length) parts.push({ text: text.slice(last), style: {} })
+  return parts
+}
 const canManage = computed(() => {
   const p = post.value
   if (!p) return false
@@ -458,6 +517,37 @@ async function onDeletePost() {
 }
 .post-link:hover {
   border-color: var(--brand);
+}
+.post-at {
+  margin-right: var(--sp-1);
+}
+.post-at a {
+  color: var(--brand);
+  background: var(--brand-weak);
+  border-radius: 4px;
+  padding: 0 3px;
+  text-decoration: none;
+}
+.post-topic {
+  display: inline-block;
+  margin: 0 var(--sp-2) var(--sp-2) 0;
+  color: #8a6d1a;
+  background: #fff7e6;
+  border-radius: 4px;
+  padding: 0 6px;
+  text-decoration: none;
+  font-size: var(--fs-body);
+}
+.post-code {
+  font-family: Consolas, Monaco, monospace;
+  background: var(--bg-secondary);
+  border-radius: 4px;
+  padding: 0 4px;
+  font-size: 0.92em;
+}
+.post-emoji {
+  font-size: 18px;
+  margin-right: 2px;
 }
 .post-images {
   display: flex;

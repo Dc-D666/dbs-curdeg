@@ -13,7 +13,7 @@
 
       <div class="field">
         <span class="field-label">内容</span>
-        <RichEditor v-model="form.rich" :initial-images="initialImages" @update:images="onImages" />
+        <RichEditor v-model="form.rich" :cid="cid" :initial-images="initialImages" @update:images="onImages" />
         <p class="field-hint">支持插入链接与图片（最多 9 张图片）</p>
       </div>
 
@@ -29,8 +29,8 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import RichEditor, { type RichSegment } from '@/components/RichEditor.vue'
-import { postApi } from '@/api/post'
+import RichEditor from '@/components/RichEditor.vue'
+import { postApi, type RichSegment } from '@/api/post'
 import { tokenStore } from '@/api/http'
 import { toast } from '@/utils/toast'
 
