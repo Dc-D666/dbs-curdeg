@@ -58,6 +58,35 @@
         </button>
       </form>
     </section>
+
+    <section class="panel">
+      <router-link to="/me/feed" class="feed-link">
+        <span>我关注的频道</span>
+        <span class="feed-arrow">→</span>
+      </router-link>
+    </section>
+
+    <section class="panel">
+      <h3 class="panel-title">修改密码</h3>
+      <form class="form" @submit.prevent="onChangePassword">
+        <label class="field">
+          <span class="field-label">原密码</span>
+          <input v-model="pwForm.old_password" class="input" type="password" autocomplete="current-password" />
+        </label>
+        <label class="field">
+          <span class="field-label">新密码（至少 6 位，含字母和数字）</span>
+          <input v-model="pwForm.new_password" class="input" type="password" autocomplete="new-password" />
+        </label>
+        <label class="field">
+          <span class="field-label">确认新密码</span>
+          <input v-model="pwForm.confirm" class="input" type="password" autocomplete="new-password" />
+        </label>
+        <p v-if="pwMsg" class="msg" :class="{ error: pwError }">{{ pwMsg }}</p>
+        <button class="btn-primary" type="submit" :disabled="pwSaving">
+          {{ pwSaving ? '提交中…' : '修改密码' }}
+        </button>
+      </form>
+    </section>
   </main>
 </template>
 
@@ -77,6 +106,10 @@ const form = reactive({
 const saving = ref(false)
 const msg = ref('')
 const avatarMsg = ref('')
+const pwForm = reactive({ old_password: '', new_password: '', confirm: '' })
+const pwSaving = ref(false)
+const pwMsg = ref('')
+const pwError = ref(false)
 
 const initial = computed(() => (auth.user?.nickname || auth.user?.username || 'U').slice(0, 1).toUpperCase())
 const createdDate = computed(() => (auth.user?.created_at || '').slice(0, 10))
@@ -124,6 +157,39 @@ async function onSave() {
     msg.value = e instanceof Error ? e.message : '保存失败'
   } finally {
     saving.value = false
+  }
+}
+
+async function onChangePassword() {
+  if (pwSaving.value) return
+  pwMsg.value = ''
+  pwError.value = false
+  if (pwForm.new_password.length < 6 || !/[a-zA-Z]/.test(pwForm.new_password) || !/\d/.test(pwForm.new_password)) {
+    pwMsg.value = '新密码至少 6 位，且需同时包含字母和数字'
+    pwError.value = true
+    return
+  }
+  if (pwForm.new_password !== pwForm.confirm) {
+    pwMsg.value = '两次输入的新密码不一致'
+    pwError.value = true
+    return
+  }
+  pwSaving.value = true
+  try {
+    await request<null>({
+      url: '/auth/password',
+      method: 'PUT',
+      data: { old_password: pwForm.old_password, new_password: pwForm.new_password },
+    })
+    pwMsg.value = '密码已修改，下次登录请使用新密码'
+    pwForm.old_password = ''
+    pwForm.new_password = ''
+    pwForm.confirm = ''
+  } catch (e) {
+    pwMsg.value = e instanceof Error ? e.message : '修改失败'
+    pwError.value = true
+  } finally {
+    pwSaving.value = false
   }
 }
 </script>
@@ -260,6 +326,21 @@ async function onSave() {
   margin: 0;
   font-size: var(--fs-caption);
   color: var(--success);
+}
+.msg.error {
+  color: var(--danger);
+}
+.feed-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--text-1);
+  font-size: var(--fs-body);
+  text-decoration: none;
+  padding: var(--sp-1) 0;
+}
+.feed-arrow {
+  color: var(--text-3);
 }
 .btn-primary {
   height: 40px;

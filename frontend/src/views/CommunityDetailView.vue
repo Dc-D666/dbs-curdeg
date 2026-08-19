@@ -9,6 +9,11 @@
     <div v-if="loading" class="state">加载中…</div>
     <div v-else-if="community">
       <section class="panel head-panel">
+        <div v-if="community.cover_url" class="cover" :style="{ backgroundImage: `url('${community.cover_url}')` }"></div>
+        <div class="head-title-row">
+          <img v-if="community.avatar_url" :src="community.avatar_url" class="head-avatar" alt="" />
+          <h1 class="head-name">{{ community.name }}</h1>
+        </div>
         <p class="profile">{{ community.profile || '暂无简介' }}</p>
         <div class="meta">
           <span>{{ community.member_count }} 成员</span>
@@ -18,7 +23,6 @@
         <div class="actions">
           <template v-if="community.is_member">
             <button v-if="community.my_member_type !== 0" class="btn-ghost" @click="onLeave">退出频道</button>
-            <router-link v-if="community.my_member_type === 0" to="/me" class="btn-ghost">管理</router-link>
           </template>
           <button v-else class="btn-primary" :disabled="joining" @click="onJoin">
             {{ joining ? '处理中…' : '加入频道' }}
@@ -83,6 +87,7 @@
 
       <section v-if="community.my_member_type === 0" class="panel owner-panel">
         <h3 class="panel-title">频道管理</h3>
+
         <div class="owner-row">
           <span class="owner-label">头像 / 封面</span>
           <label class="btn-ghost btn-sm">
@@ -91,6 +96,7 @@
           </label>
           <span class="owner-hint">同时设为头像与封面</span>
         </div>
+
         <div class="owner-row">
           <span class="owner-label">频道状态</span>
           <select v-model.number="statusForm.status" class="input status-select">
@@ -99,6 +105,45 @@
           </select>
           <button class="btn-ghost btn-sm" @click="onStatusSave">保存</button>
         </div>
+
+        <div class="owner-row">
+          <span class="owner-label">创建版块</span>
+          <input v-model.trim="boardForm.name" class="input board-input" placeholder="版块名称" maxlength="64" />
+          <input v-model.trim="boardForm.description" class="input board-input" placeholder="简介（可选）" maxlength="255" />
+          <button class="btn-ghost btn-sm" :disabled="boardCreating" @click="onCreateBoard">创建</button>
+        </div>
+
+        <div class="owner-row">
+          <span class="owner-label">成员列表</span>
+          <button class="btn-ghost btn-sm" @click="toggleMembers">{{ membersOpen ? '收起' : `${community.member_count} 人` }}</button>
+        </div>
+        <div v-if="membersOpen" class="manage-list">
+          <div v-for="m in members" :key="m.id" class="manage-item">
+            <span class="manage-name">{{ m.user_nickname || m.nickname }}</span>
+            <span class="manage-type">{{ memberTypeName(m.member_type) }}</span>
+          </div>
+          <p v-if="members.length === 0" class="manage-empty">暂无成员</p>
+        </div>
+
+        <div v-if="community.join_setting === 1" class="owner-row">
+          <span class="owner-label">加入审核</span>
+          <button class="btn-ghost btn-sm" @click="toggleRequests">{{ requestsOpen ? '收起' : `${requests.length} 条待审` }}</button>
+        </div>
+        <div v-if="requestsOpen" class="manage-list">
+          <div v-for="r in requests" :key="r.id" class="manage-item">
+            <span class="manage-name">{{ r.user_nickname || r.username }}</span>
+            <span class="manage-time">{{ r.created_at.slice(5, 16) }}</span>
+            <button class="btn-ghost btn-sm" @click="handleRequest(r, true)">通过</button>
+            <button class="btn-ghost btn-sm danger" @click="handleRequest(r, false)">驳回</button>
+          </div>
+          <p v-if="requests.length === 0" class="manage-empty">暂无待审申请</p>
+        </div>
+
+        <div class="owner-row">
+          <span class="owner-label">解散频道</span>
+          <button class="btn-ghost btn-sm danger" @click="onDissolve">解散</button>
+        </div>
+
         <p v-if="ownerMsg" class="msg">{{ ownerMsg }}</p>
       </section>
     </div>
@@ -108,12 +153,13 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
-import { communityApi, type Community } from '@/api/community'
+import { useRoute, useRouter } from 'vue-router'
+import { communityApi, type Community, type JoinRequestItem, type Member } from '@/api/community'
 import { postApi, type PostItem } from '@/api/post'
 import { request, tokenStore } from '@/api/http'
 
 const route = useRoute()
+const router = useRouter()
 const cid = Number(route.params.id)
 const community = ref<Community | null>(null)
 const loading = ref(true)
@@ -121,6 +167,14 @@ const joining = ref(false)
 const activeBoard = ref<number | null>(null)
 const ownerMsg = ref('')
 const statusForm = reactive({ status: 0 })
+
+// 管理面板
+const boardForm = reactive({ name: '', description: '' })
+const boardCreating = ref(false)
+const membersOpen = ref(false)
+const members = ref<Member[]>([])
+const requestsOpen = ref(false)
+const requests = ref<JoinRequestItem[]>([])
 
 const activeBoardInfo = computed(
   () => community.value?.boards.find((b) => b.id === activeBoard.value) ?? null,
@@ -182,7 +236,7 @@ onMounted(async () => {
 
 async function onJoin() {
   if (!tokenStore.access) {
-    window.location.href = '/login'
+    window.location.href = `/login?redirect=${encodeURIComponent(route.fullPath)}`
     return
   }
   if (joining.value) return
@@ -230,6 +284,82 @@ async function onStatusSave() {
     ownerMsg.value = '状态已保存'
   } catch (err) {
     ownerMsg.value = err instanceof Error ? err.message : '保存失败'
+  }
+}
+
+async function onCreateBoard() {
+  if (!boardForm.name) {
+    ownerMsg.value = '请填写版块名称'
+    return
+  }
+  boardCreating.value = true
+  ownerMsg.value = ''
+  try {
+    await communityApi.createBoard(cid, { name: boardForm.name, description: boardForm.description })
+    boardForm.name = ''
+    boardForm.description = ''
+    community.value = await communityApi.get(cid)
+    if (activeBoard.value === null && community.value.boards.length > 0) {
+      activeBoard.value = community.value.boards[0].id
+    }
+    ownerMsg.value = '版块已创建'
+  } catch (err) {
+    ownerMsg.value = err instanceof Error ? err.message : '创建失败'
+  } finally {
+    boardCreating.value = false
+  }
+}
+
+async function toggleMembers() {
+  membersOpen.value = !membersOpen.value
+  if (membersOpen.value && members.value.length === 0) {
+    try {
+      const data = await communityApi.members(cid, 1, 50)
+      members.value = data.items
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '加载成员失败')
+    }
+  }
+}
+
+async function toggleRequests() {
+  requestsOpen.value = !requestsOpen.value
+  if (requestsOpen.value && requests.value.length === 0) {
+    await loadRequests()
+  }
+}
+
+async function loadRequests() {
+  try {
+    const data = await communityApi.joinRequests(cid, 1, 50)
+    requests.value = data.items
+  } catch (e) {
+    alert(e instanceof Error ? e.message : '加载申请失败')
+  }
+}
+
+async function handleRequest(r: JoinRequestItem, approve: boolean) {
+  try {
+    await communityApi.handleJoinRequest(cid, r.id, approve)
+    requests.value = requests.value.filter((x) => x.id !== r.id)
+    community.value = await communityApi.get(cid)
+    ownerMsg.value = approve ? '已通过申请' : '已驳回申请'
+  } catch (e) {
+    alert(e instanceof Error ? e.message : '操作失败')
+  }
+}
+
+function memberTypeName(t: number): string {
+  return t === 0 ? '频道主' : t === 1 ? '管理员' : '成员'
+}
+
+async function onDissolve() {
+  if (!confirm('确定解散该频道？此操作不可撤销！')) return
+  try {
+    await communityApi.dissolve(cid)
+    router.push('/discover')
+  } catch (e) {
+    alert(e instanceof Error ? e.message : '解散失败')
   }
 }
 </script>
@@ -284,6 +414,31 @@ async function onStatusSave() {
 .head-panel .profile {
   margin: 0;
   color: var(--text-2);
+}
+.cover {
+  height: 110px;
+  border-radius: var(--radius-card);
+  background-size: cover;
+  background-position: center;
+  margin: calc(-1 * var(--sp-4)) calc(-1 * var(--sp-4)) var(--sp-4);
+}
+.head-title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-2);
+}
+.head-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  object-fit: cover;
+  border: 1px solid var(--border);
+}
+.head-name {
+  margin: 0;
+  font-size: var(--fs-page);
+  font-weight: 600;
 }
 .meta {
   margin-top: var(--sp-3);
@@ -395,6 +550,51 @@ async function onStatusSave() {
   margin: var(--sp-2) 0 0;
   font-size: var(--fs-caption);
   color: var(--success);
+}
+.board-input {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  padding: 0 var(--sp-2);
+  font-size: var(--fs-caption);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-btn);
+  outline: none;
+}
+.board-input:focus {
+  border-color: var(--brand);
+}
+.manage-list {
+  margin: var(--sp-1) 0 var(--sp-2) 96px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+.manage-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-1) 0;
+  font-size: var(--fs-caption);
+  border-bottom: 1px dashed var(--border);
+}
+.manage-item:last-child {
+  border-bottom: none;
+}
+.manage-name {
+  font-weight: 600;
+}
+.manage-type,
+.manage-time {
+  color: var(--text-3);
+}
+.manage-empty {
+  color: var(--text-3);
+  font-size: var(--fs-caption);
+}
+.btn-ghost.danger {
+  color: var(--danger);
+  border-color: var(--danger);
 }
 .feed-toolbar {
   display: flex;

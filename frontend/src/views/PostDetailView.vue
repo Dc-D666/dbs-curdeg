@@ -1,7 +1,7 @@
 <template>
   <main class="detail-page">
     <header class="page-header">
-      <router-link :to="`/c/${post?.community_id ?? ''}`" class="back">← 返回</router-link>
+      <router-link :to="post ? `/c/${post.community_id}` : '/discover'" class="back">← 返回</router-link>
       <h1 class="page-title">帖子</h1>
     </header>
 
@@ -16,7 +16,7 @@
             <span v-if="post.is_essence" class="tag tag-essence">精华</span>
           </h2>
           <div class="post-meta">
-            <span class="author">{{ post.author_nickname }}</span>
+            <router-link :to="`/users/${post.author_id}`" class="author">{{ post.author_nickname }}</router-link>
             <span>{{ post.community_name }} · {{ post.board_name }}</span>
             <span>{{ post.created_at.slice(0, 16) }}</span>
           </div>
@@ -40,6 +40,11 @@
         </div>
 
         <div v-if="canManage" class="manage-row">
+          <router-link
+            v-if="post.author_id === auth.user?.id"
+            :to="`/c/${post.community_id}/boards/${post.board_id}/post/new?edit=${post.id}`"
+            class="btn-ghost btn-sm"
+          >编辑</router-link>
           <button class="btn-ghost btn-sm" @click="onToggleTop">{{ post.is_top ? '取消置顶' : '置顶' }}</button>
           <button class="btn-ghost btn-sm" @click="onToggleEssence">{{ post.is_essence ? '取消精华' : '设精华' }}</button>
           <button class="btn-ghost btn-sm danger" @click="onDeletePost">删除帖子</button>
@@ -70,7 +75,7 @@
         <ul v-else class="comment-list">
           <li v-for="c in comments" :key="c.id" class="comment-item">
             <div class="comment-head">
-              <span class="author">{{ c.author_nickname }}</span>
+              <router-link :to="`/users/${c.author_id}`" class="author">{{ c.author_nickname }}</router-link>
               <span class="comment-time">{{ c.created_at.slice(5, 16) }}</span>
               <button v-if="canDeleteComment(c)" class="comment-del" @click="deleteComment(c.id)">删除</button>
             </div>
@@ -197,7 +202,7 @@ async function loadComments(page: number) {
 
 function requireLogin(): boolean {
   if (tokenStore.access) return true
-  window.location.href = '/login'
+  window.location.href = `/login?redirect=${encodeURIComponent(route.fullPath)}`
   return false
 }
 
@@ -420,6 +425,7 @@ async function onDeletePost() {
 }
 .author {
   color: var(--brand);
+  text-decoration: none;
 }
 .post-body {
   margin-top: var(--sp-4);

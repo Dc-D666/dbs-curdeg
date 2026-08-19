@@ -2,7 +2,7 @@
   <main class="create-page">
     <header class="page-header">
       <router-link :to="`/c/${cid}`" class="back">← 返回</router-link>
-      <h1 class="page-title">发帖</h1>
+      <h1 class="page-title">{{ editing ? '编辑帖子' : '发帖' }}</h1>
     </header>
 
     <section class="panel">
@@ -32,15 +32,15 @@
 
       <p v-if="error" class="error">{{ error }}</p>
 
-      <button class="btn-primary submit" :disabled="submitting" @click="onSubmit">
-        {{ submitting ? '发布中…' : '发布' }}
+      <button class="btn-primary submit" :disabled="submitting || loading" @click="onSubmit">
+        {{ submitting ? '保存中…' : editing ? '保存' : '发布' }}
       </button>
     </section>
   </main>
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { postApi } from '@/api/post'
 import { request, tokenStore } from '@/api/http'
@@ -49,11 +49,29 @@ const route = useRoute()
 const router = useRouter()
 const cid = Number(route.params.id)
 const bid = Number(route.params.bid)
+const editId = Number(route.query.edit) || 0
 
 const form = reactive({ title: '', content: '', images: [] as string[] })
 const error = ref('')
 const submitting = ref(false)
 const uploading = ref(false)
+const editing = ref(editId > 0)
+const loading = ref(false)
+
+onMounted(async () => {
+  if (!editing.value) return
+  loading.value = true
+  try {
+    const post = await postApi.get(editId)
+    form.title = post.title
+    form.content = post.source_markdown
+    form.images = [...post.images]
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : '加载帖子失败'
+  } finally {
+    loading.value = false
+  }
+})
 
 async function onPickImage(e: Event) {
   const input = e.target as HTMLInputElement
@@ -92,8 +110,17 @@ async function onSubmit() {
   submitting.value = true
   error.value = ''
   try {
-    const post = await postApi.create(cid, bid, { title: form.title, content: form.content, images: form.images })
-    router.push(`/p/${post.id}`)
+    if (editing.value) {
+      const post = await postApi.update(editId, {
+        title: form.title,
+        content: form.content,
+        images: form.images,
+      })
+      router.push(`/p/${post.id}`)
+    } else {
+      const post = await postApi.create(cid, bid, { title: form.title, content: form.content, images: form.images })
+      router.push(`/p/${post.id}`)
+    }
   } catch (e) {
     error.value = e instanceof Error ? e.message : '发布失败'
   } finally {

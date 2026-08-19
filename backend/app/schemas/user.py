@@ -74,6 +74,22 @@ class UserOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class PublicUserOut(BaseModel):
+    """他人主页公开资料（不含 email/手机号等隐私字段）。"""
+    id: int
+    username: str
+    nickname: str
+    avatar_url: str
+    bio: str
+    gender: int
+    province: str
+    city: str
+    user_type: int
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class TokenOut(BaseModel):
     access_token: str
     refresh_token: str

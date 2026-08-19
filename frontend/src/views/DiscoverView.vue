@@ -15,6 +15,7 @@
         @click="goDetail(c.id)"
       >
         <div class="card-head">
+          <img v-if="c.avatar_url" :src="c.avatar_url" class="card-avatar" alt="" />
           <h3 class="card-name">{{ c.name }}</h3>
           <span v-if="c.is_member" class="tag tag-member">已加入</span>
           <span v-else-if="c.join_setting === 1" class="tag">审核制</span>
@@ -162,6 +163,14 @@ function goDetail(id: number) {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
+}
+.card-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 1px solid var(--border);
+  flex-shrink: 0;
 }
 .card-name {
   margin: 0;

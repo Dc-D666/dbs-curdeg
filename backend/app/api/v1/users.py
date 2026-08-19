@@ -6,7 +6,7 @@ from app.core.deps import get_current_user
 from app.core.response import NotFoundError, ok
 from app.db import get_db
 from app.models.user import User
-from app.schemas.user import UpdateProfileRequest, UserOut
+from app.schemas.user import PublicUserOut, UpdateProfileRequest, UserOut
 from app.services import auth_service, upload_service
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -44,8 +44,8 @@ def upload_avatar(
 
 @router.get("/{user_id}")
 def get_user(user_id: int, db: Session = Depends(get_db)):
-    """他人主页（公开资料）。"""
+    """他人主页（公开资料，不含邮箱等隐私字段）。"""
     user = db.get(User, user_id)
     if user is None or user.status != 0:
         raise NotFoundError("用户不存在")
-    return ok(data=auth_service.get_user_out(user))
+    return ok(data=PublicUserOut.model_validate(user))
