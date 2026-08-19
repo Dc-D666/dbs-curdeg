@@ -61,7 +61,7 @@
         <div class="panel">
           <div class="role-form">
             <t-input v-model.trim="roleForm.name" class="role-name-input" placeholder="身份组名称" maxlength="32" clearable />
-            <t-color-picker v-model="roleForm.color" :color-modes="['monochrome']" class="color-picker" />
+            <t-color-picker v-model="roleForm.color" :color-modes="['monochrome']" :enable-alpha="false" class="color-picker" />
             <t-checkbox v-model="roleForm.is_level_role" class="level-role-check">等级身份</t-checkbox>
             <t-input-number
               v-if="roleForm.is_level_role"
@@ -366,7 +366,9 @@ async function onAssign(m: Member) {
 async function onCreateRole() {
   roleSaving.value = true
   try {
-    await roleApi.create(cid, { ...roleForm, perms: [] })
+    // 调色盘可能输出 8 位 hex（#RRGGBBAA）：归一化为 6 位
+    const color = (roleForm.color || '#1a73e8').replace(/^#([0-9a-fA-F]{6})[0-9a-fA-F]{2}$/, '#$1')
+    await roleApi.create(cid, { name: roleForm.name, color, level: roleForm.level, is_level_role: roleForm.is_level_role, perms: [] })
     roleForm.name = ''
     roleForm.level = 1
     roleForm.is_level_role = false

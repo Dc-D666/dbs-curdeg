@@ -51,7 +51,7 @@ class UpdateCommunityStatusRequest(BaseModel):
 
 class CreateRoleRequest(BaseModel):
     name: str = Field(min_length=1, max_length=32)
-    color: str = Field(default="#1a73e8", pattern=r"^#[0-9a-fA-F]{6}$")
+    color: str = Field(default="#1a73e8", pattern=r"^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$")  # 6 或 8 位 hex
     level: int = Field(default=0, ge=0)  # 等级身份门槛（仅 is_level_role 生效）
     perms: list[str] = Field(default_factory=list)
     is_level_role: bool = False  # 等级身份：成员活跃等级 ≥ level 自动授予
@@ -59,7 +59,7 @@ class CreateRoleRequest(BaseModel):
 
 class UpdateRoleRequest(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=32)
-    color: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$")
+    color: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$")
     level: int | None = Field(default=None, ge=0)
     perms: list[str] | None = None
     is_level_role: bool | None = None
