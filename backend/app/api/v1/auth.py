@@ -1,0 +1,62 @@
+"""认证接口：验证码、注册、登录、刷新、登出、改密。"""
+from fastapi import APIRouter, Depends, Request
+from sqlalchemy.orm import Session
+
+from app.core.deps import get_current_user
+from app.core.response import ok
+from app.db import get_db
+from app.models.user import User
+from app.schemas.user import (
+    ChangePasswordRequest,
+    LoginRequest,
+    RefreshRequest,
+    RegisterRequest,
+    SendCodeRequest,
+    TokenOut,
+)
+from app.services import auth_service
+
+router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+@router.post("/send-code")
+def send_code(payload: SendCodeRequest):
+    """发送注册邮箱验证码。"""
+    auth_service.send_code(payload.email)
+    return ok(message="验证码已发送")
+
+
+@router.post("/register")
+def register(payload: RegisterRequest, db: Session = Depends(get_db)):
+    """注册：邮箱验证码 + 用户名 + 密码。"""
+    return ok(data=auth_service.register(db, payload), message="注册成功")
+
+
+@router.post("/login")
+def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)):
+    """登录：用户名或邮箱 + 密码。"""
+    return ok(data=auth_service.login(db, payload), message="登录成功")
+
+
+@router.post("/refresh")
+def refresh(payload: RefreshRequest, db: Session = Depends(get_db)):
+    """刷新 access token。"""
+    return ok(data=auth_service.refresh(db, payload.refresh_token))
+
+
+@router.post("/logout")
+def logout(payload: RefreshRequest):
+    """登出：注销 refresh token。"""
+    auth_service.logout(payload.refresh_token)
+    return ok(message="已登出")
+
+
+@router.put("/password")
+def change_password(
+    payload: ChangePasswordRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """修改密码。"""
+    auth_service.change_password(db, user, payload.old_password, payload.new_password)
+    return ok(message="密码已修改")
