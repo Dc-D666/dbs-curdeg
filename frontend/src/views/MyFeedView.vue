@@ -8,23 +8,9 @@
     <p v-if="loading && items.length === 0" class="state">加载中…</p>
     <p v-else-if="items.length === 0" class="state">还没有关注的频道，去发现页逛逛吧</p>
 
-    <ul v-else class="feed-list">
-      <li v-for="p in items" :key="p.id" class="feed-item" @click="$router.push(`/p/${p.id}`)">
-        <div class="feed-head">
-          <span class="feed-title">{{ p.title }}</span>
-          <span v-if="p.is_top" class="tag tag-top">置顶</span>
-          <span v-if="p.is_essence" class="tag tag-essence">精华</span>
-        </div>
-        <p class="feed-excerpt">{{ p.source_markdown }}</p>
-        <div class="feed-meta">
-          <span>{{ p.community_name }}</span>
-          <span>{{ p.author_nickname }}</span>
-          <span>{{ p.like_count }} 赞</span>
-          <span>{{ p.comment_count }} 评论</span>
-          <span class="feed-time">{{ p.created_at.slice(0, 16) }}</span>
-        </div>
-      </li>
-    </ul>
+    <div v-else class="feed-list">
+      <FeedCard v-for="p in items" :key="p.id" :post="p" show-community />
+    </div>
 
     <button v-if="hasMore" class="btn-ghost load-more" :disabled="loading" @click="loadMore()">
       {{ loading ? '加载中…' : '加载更多' }}
@@ -38,6 +24,7 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import FeedCard from '@/components/FeedCard.vue'
 import { postApi, type PostItem } from '@/api/post'
 
 const items = ref<PostItem[]>([])
@@ -94,59 +81,9 @@ async function loadMore() {
 }
 .feed-list {
   margin: var(--sp-4) 0 0;
-  padding: 0;
-  list-style: none;
-}
-.feed-item {
-  padding: var(--sp-3) var(--sp-4);
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
-  margin-bottom: var(--sp-3);
-  cursor: pointer;
-}
-.feed-head {
   display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-}
-.feed-title {
-  font-size: var(--fs-body);
-  font-weight: 600;
-  color: var(--text-1);
-}
-.tag {
-  font-size: var(--fs-caption);
-  border-radius: 4px;
-  padding: 1px 6px;
-}
-.tag-top {
-  color: var(--danger);
-  border: 1px solid var(--danger);
-}
-.tag-essence {
-  color: #b8860b;
-  border: 1px solid #b8860b;
-}
-.feed-excerpt {
-  margin: var(--sp-1) 0 0;
-  font-size: var(--fs-caption);
-  color: var(--text-2);
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-.feed-meta {
-  margin-top: var(--sp-1);
-  display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: var(--sp-3);
-  font-size: var(--fs-caption);
-  color: var(--text-3);
-}
-.feed-time {
-  margin-left: auto;
 }
 .load-more {
   width: 100%;

@@ -346,3 +346,16 @@ def test_feed_board_filter(ctx):
     items2 = client.get(f"/api/v1/communities/{cid}/feed", params={"board_id": bid2}).json()["data"]["items"]
     assert all(p["id"] == pid1 for p in items1)
     assert all(p["id"] == pid2 for p in items2)
+
+
+def test_global_feed(ctx):
+    """全站帖子流：latest/hot 都能看到新发帖子（首页用）。"""
+    client, owner, cid, bid = ctx["client"], ctx["owner"], ctx["cid"], ctx["bid"]
+    pid = _create_post(client, owner, cid, bid, title="全站可见帖")
+    for sort in ("latest", "hot"):
+        res = client.get("/api/v1/feed", params={"sort": sort})
+        assert res.status_code == 200
+        items = res.json()["data"]["items"]
+        assert any(p["id"] == pid for p in items)
+        # 全站流带频道名（首页展示）
+        assert all(p["community_name"] for p in items)

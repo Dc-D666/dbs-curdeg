@@ -3,14 +3,12 @@
     <header class="home-header">
       <h1 class="brand">SDUdiscord</h1>
       <nav v-if="auth.user" class="nav">
-        <router-link to="/discover" class="nav-link">发现</router-link>
         <router-link to="/me" class="nav-link">
           {{ auth.user.nickname || auth.user.username }}
         </router-link>
         <button class="nav-logout" @click="onLogout">退出</button>
       </nav>
       <nav v-else class="nav">
-        <router-link to="/discover" class="nav-link">发现</router-link>
         <router-link to="/login" class="nav-link">登录</router-link>
         <router-link to="/register" class="nav-link">注册</router-link>
       </nav>
@@ -18,34 +16,77 @@
 
     <section class="hero">
       <h2 class="hero-title">仿腾讯频道 · 私域社区</h2>
-      <p class="hero-desc">频道 → 版块 → 帖子 → 评论，构建你的兴趣社区（课设项目，功能逐步上线）</p>
-      <router-link to="/discover" class="btn-primary hero-btn">浏览频道</router-link>
+      <p class="hero-desc">频道 → 版块 → 帖子 → 评论，构建你的兴趣社区</p>
+      <div class="hero-actions">
+        <router-link to="/discover" class="btn-primary hero-btn">浏览频道</router-link>
+      </div>
     </section>
 
-    <section class="panel">
-      <h3 class="panel-title">功能进度</h3>
-      <ul class="progress-list">
-        <li class="done">账号系统：注册（邮箱验证码）/ 登录 / JWT / 资料</li>
-        <li class="done">频道 / 版块：创建 / 加入 / 审核 / 成员管理 / 图片上传</li>
-        <li class="done">内容互动：发帖 / 评论楼中楼 / 点赞 / 关注 / 帖子流</li>
-        <li>管理后台 / 搜索：待开发（阶段 4~5）</li>
-        <li>通知 / AI：待开发（阶段 6~7）</li>
-      </ul>
+    <section class="feed-section">
+      <div class="feed-head">
+        <h3 class="feed-title">最新帖子</h3>
+        <div class="feed-tabs" role="tablist">
+          <button class="tab" :class="{ active: sort === 'latest' }" @click="switchSort('latest')">最新</button>
+          <button class="tab" :class="{ active: sort === 'hot' }" @click="switchSort('hot')">热门</button>
+        </div>
+      </div>
+
+      <p v-if="loading && items.length === 0" class="state">加载中…</p>
+      <p v-else-if="items.length === 0" class="state">还没有帖子</p>
+      <div v-else class="feed-list">
+        <FeedCard v-for="p in items" :key="p.id" :post="p" show-community />
+      </div>
+      <button v-if="hasMore" class="btn-ghost load-more" :disabled="loading" @click="loadMore()">
+        {{ loading ? '加载中…' : '加载更多' }}
+      </button>
     </section>
   </main>
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import FeedCard from '@/components/FeedCard.vue'
+import { postApi, type PostItem } from '@/api/post'
 import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
 const router = useRouter()
 
+const items = ref<PostItem[]>([])
+const sort = ref<'latest' | 'hot'>('latest')
+const cursor = ref<string | null>(null)
+const hasMore = ref(false)
+const loading = ref(false)
+
 onMounted(() => {
   auth.fetchMe()
+  loadMore()
 })
+
+async function loadMore() {
+  if (loading.value) return
+  loading.value = true
+  try {
+    const data = await postApi.globalFeed(sort.value, cursor.value)
+    const seen = new Set(items.value.map((p) => p.id))
+    items.value = [...items.value, ...data.items.filter((p) => !seen.has(p.id))]
+    cursor.value = data.next_cursor
+    hasMore.value = data.has_more
+  } catch (e) {
+    alert(e instanceof Error ? e.message : '加载失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+function switchSort(s: 'latest' | 'hot') {
+  if (sort.value === s) return
+  sort.value = s
+  items.value = []
+  cursor.value = null
+  loadMore()
+}
 
 function onLogout() {
   auth.logout()
@@ -68,21 +109,18 @@ function onLogout() {
 }
 .brand {
   margin: 0;
-  font-size: var(--fs-title);
-  font-weight: 600;
+  font-size: var(--fs-page);
+  font-weight: 700;
   color: var(--brand);
 }
 .nav {
   display: flex;
   align-items: center;
-  gap: var(--sp-4);
-  font-size: var(--fs-body);
+  gap: var(--sp-3);
 }
 .nav-link {
   color: var(--text-1);
-}
-.nav-link:hover {
-  color: var(--brand);
+  font-size: var(--fs-body);
 }
 .nav-logout {
   border: none;
@@ -92,61 +130,94 @@ function onLogout() {
   cursor: pointer;
 }
 .hero {
-  padding: var(--sp-6) 0 var(--sp-5);
-  border-bottom: 1px solid var(--border);
+  padding: var(--sp-5) 0;
 }
 .hero-title {
   margin: 0;
-  font-size: 24px;
-  font-weight: 600;
+  font-size: 22px;
+  font-weight: 700;
 }
 .hero-desc {
   margin: var(--sp-2) 0 0;
   color: var(--text-2);
+  font-size: var(--fs-body);
 }
-.hero-btn {
+.hero-actions {
+  margin-top: var(--sp-4);
+}
+.btn-primary {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  margin-top: var(--sp-4);
-  height: 40px;
+  height: 38px;
   padding: 0 var(--sp-5);
   border-radius: var(--radius-btn);
   background: var(--brand);
   color: #fff;
   font-size: var(--fs-body);
-  text-decoration: none;
+  cursor: pointer;
+  transition: background var(--anim-duration) var(--anim-ease);
 }
-.hero-btn:hover {
+.btn-primary:hover {
   background: var(--brand-hover);
 }
-.panel {
-  margin-top: var(--sp-5);
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
-  padding: var(--sp-4);
+.feed-section {
+  margin-top: var(--sp-2);
 }
-.panel-title {
-  margin: 0 0 var(--sp-3);
+.feed-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--sp-3);
+}
+.feed-title {
+  margin: 0;
   font-size: var(--fs-title);
   font-weight: 600;
 }
-.progress-list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
+.feed-tabs {
+  display: flex;
+  gap: var(--sp-2);
+}
+.tab {
+  height: 30px;
+  padding: 0 var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-btn);
+  background: var(--bg-card);
+  color: var(--text-2);
+  font-size: var(--fs-caption);
+  cursor: pointer;
+  transition: all var(--anim-duration) var(--anim-ease);
+}
+.tab.active {
+  border-color: var(--brand);
+  color: var(--brand);
+  background: var(--brand-weak);
+}
+.feed-list {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-2);
+  gap: var(--sp-3);
+}
+.state {
+  padding: var(--sp-6) 0;
+  text-align: center;
   color: var(--text-3);
+}
+.load-more {
+  margin-top: var(--sp-3);
+  width: 100%;
+  height: 36px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-btn);
+  background: var(--bg-card);
+  color: var(--text-2);
   font-size: var(--fs-body);
+  cursor: pointer;
 }
-.progress-list .done {
-  color: var(--text-1);
-}
-.progress-list .done::before {
-  content: '✓ ';
-  color: var(--success);
+.load-more:disabled {
+  color: var(--text-3);
+  cursor: not-allowed;
 }
 </style>

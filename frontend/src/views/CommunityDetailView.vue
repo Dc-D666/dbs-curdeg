@@ -64,22 +64,9 @@
 
         <p v-if="feedLoading && feedItems.length === 0" class="state">加载中…</p>
         <p v-else-if="feedItems.length === 0" class="state">暂无帖子，来发第一帖吧</p>
-        <ul v-else class="feed-list">
-          <li v-for="p in feedItems" :key="p.id" class="feed-item" @click="$router.push(`/p/${p.id}`)">
-            <div class="feed-head">
-              <span class="feed-title">{{ p.title }}</span>
-              <span v-if="p.is_top" class="tag tag-top">置顶</span>
-              <span v-if="p.is_essence" class="tag tag-essence">精华</span>
-            </div>
-            <p class="feed-excerpt">{{ p.source_markdown }}</p>
-            <div class="feed-meta">
-              <span>{{ p.author_nickname }}</span>
-              <span>{{ p.like_count }} 赞</span>
-              <span>{{ p.comment_count }} 评论</span>
-              <span class="feed-time">{{ p.created_at.slice(0, 16) }}</span>
-            </div>
-          </li>
-        </ul>
+        <div v-else class="feed-list">
+          <FeedCard v-for="p in feedItems" :key="p.id" :post="p" />
+        </div>
         <button v-if="feedHasMore" class="btn-ghost load-more" :disabled="feedLoading" @click="loadFeed()">
           {{ feedLoading ? '加载中…' : '加载更多' }}
         </button>
@@ -156,6 +143,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { communityApi, type Community, type JoinRequestItem, type Member } from '@/api/community'
 import { postApi, type PostItem } from '@/api/post'
+import FeedCard from '@/components/FeedCard.vue'
 import { request, tokenStore } from '@/api/http'
 
 const route = useRoute()
@@ -608,8 +596,9 @@ async function onDissolve() {
 }
 .feed-list {
   margin: var(--sp-3) 0 0;
-  padding: 0;
-  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
 }
 .feed-item {
   padding: var(--sp-3) 0;

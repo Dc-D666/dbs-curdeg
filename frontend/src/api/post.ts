@@ -49,6 +49,12 @@ export interface CommentItem {
 
 export const postApi = {
   // 帖子流
+  globalFeed(sort: 'latest' | 'hot' = 'latest', cursor?: string | null, pageSize = 20) {
+    return request<FeedResult>({
+      url: '/feed',
+      params: { sort, cursor: cursor ?? undefined, page_size: pageSize },
+    })
+  },
   feed(cid: number, sort: 'latest' | 'hot' = 'latest', cursor?: string | null, pageSize = 20, boardId?: number | null) {
     return request<FeedResult>({
       url: `/communities/${cid}/feed`,

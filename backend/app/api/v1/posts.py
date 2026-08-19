@@ -44,6 +44,19 @@ def feed(
     return ok(data=post_service.feed(db, community, sort, cursor, page_size, uid, board_id))
 
 
+@router.get("/feed")
+def global_feed(
+    sort: str = Query("latest", pattern="^(latest|hot)$"),
+    cursor: str | None = Query(None, description="游标：latest 为最后帖子 id，hot 为 like_count:id"),
+    page_size: int = Query(20, ge=1, le=50),
+    user: User | None = Depends(get_current_user_optional),
+    db: Session = Depends(get_db),
+):
+    """全站帖子流（首页）：latest 最新 / hot 热门；游客可见。"""
+    uid = user.id if user else None
+    return ok(data=post_service.global_feed(db, sort, cursor, page_size, uid))
+
+
 @router.get("/me/feed")
 def my_feed(
     cursor: str | None = Query(None),

@@ -173,6 +173,47 @@ def feed(
     }
 
 
+def global_feed(
+    db: Session,
+    sort: str,
+    cursor: str | None,
+    page_size: int,
+    current_user_id: int | None,
+) -> dict:
+    """全站帖子流（首页用）：latest 时间倒序 / hot 点赞倒序，keyset 游标。"""
+    if sort not in ("latest", "hot"):
+        raise ParamError("sort 仅支持 latest / hot")
+    stmt = select(Post).where(Post.status == POST_STATUS_NORMAL)
+    if sort == "latest":
+        last_id = int(cursor) if cursor and cursor.isdigit() else None
+        if last_id:
+            stmt = stmt.where(Post.id < last_id)
+        stmt = stmt.order_by(Post.id.desc())
+    else:  # hot
+        last_lc = last_hid = None
+        if cursor and ":" in cursor:
+            try:
+                last_lc, last_hid = (int(x) for x in cursor.split(":", 1))
+            except ValueError:
+                last_lc = last_hid = None
+        if last_lc is not None and last_hid is not None:
+            stmt = stmt.where(
+                or_(Post.like_count < last_lc, (Post.like_count == last_lc) & (Post.id < last_hid))
+            )
+        stmt = stmt.order_by(Post.like_count.desc(), Post.id.desc())
+    posts = db.execute(stmt.limit(page_size)).scalars().all()
+    has_more = len(posts) == page_size
+    next_cursor = None
+    if has_more and posts:
+        last = posts[-1]
+        next_cursor = f"{last.like_count}:{last.id}" if sort == "hot" else str(last.id)
+    return {
+        "items": post_outs(db, posts, current_user_id),
+        "next_cursor": next_cursor,
+        "has_more": has_more,
+    }
+
+
 def my_feed(
     db: Session,
     user: User,

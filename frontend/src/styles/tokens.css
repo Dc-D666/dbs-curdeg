@@ -1,37 +1,40 @@
 /* ============================================================
-   SDUdiscord 设计 tokens —— 去 AI 味视觉规范（详见方案附录 A.6）
+   SDUdiscord 设计 tokens —— 对齐 TDesign 设计体系（tdesign.tencent.com）
    ============================================================
-   原则：
-   - 单一品牌蓝，禁用渐变；圆角分面；细线分割优先
-   - 字号阶梯 13/15/17/20；行高 1.6；间距 4/8/12/16/24
-   - 状态四态齐全（骨架/空/错误/加载）
+   来源：TDesign 官方 token（tdesign-common/style/web/_variables.less）
+   - 品牌色 #0052d9 系（hover #366ef4 / active #0034b5 / 浅态 #d9e1ff）
+   - 功能色：success #00a870 / warning #e37318 / error #d54941
+   - 文字色阶 rgba(0,0,0,.9/.6/.4)；字号 12/14/16/20；行高 1.5
+   - 间距 8px 基数（4/8/12/16/24/32）；圆角 6/12/16；三级阴影
+   - 动效 cubic-bezier(.38,0,.24,1) 0.2s
    ============================================================ */
 :root {
   /* 品牌色：单一主色，无渐变 */
-  --brand: #1a73e8;
-  --brand-hover: #1765c8;
-  --brand-active: #1457b0;
-  --brand-weak: #e8f0fe;
+  --brand: #0052d9;
+  --brand-hover: #366ef4;
+  --brand-active: #0034b5;
+  --brand-weak: #d9e1ff; /* 浅色选中态 */
 
-  /* 中性色阶 */
-  --text-1: #1f2329; /* 主文字 */
-  --text-2: #4e5969; /* 次级文字 */
-  --text-3: #86909c; /* 弱文字/占位 */
-  --bg-page: #f5f6f7;
+  /* 中性色阶（对齐 TDesign font-gray / bg 体系） */
+  --text-1: rgba(0, 0, 0, 0.9); /* 主文字 */
+  --text-2: rgba(0, 0, 0, 0.6); /* 次级文字 */
+  --text-3: rgba(0, 0, 0, 0.4); /* 弱文字/占位 */
+  --bg-page: #f3f3f3;
   --bg-card: #ffffff;
-  --border: #e8e8e8; /* 1px 细分割线 */
+  --bg-secondary: #f3f3f3; /* 次级容器（评论回复区等） */
+  --border: #e7e7e7; /* 1px 细分割线 */
 
   /* 功能色（克制使用） */
-  --danger: #d93026;
-  --success: #1a7f37;
-  --warning: #b25e09;
+  --danger: #d54941;
+  --success: #00a870;
+  --warning: #e37318;
 
-  /* 圆角分面：按钮 8 / 卡片 10 / 弹层 14 */
-  --radius-btn: 8px;
-  --radius-card: 10px;
-  --radius-overlay: 14px;
+  /* 圆角（对齐 TDesign radius-small/medium/large/extraLarge） */
+  --radius-btn: 6px;
+  --radius-card: 12px;
+  --radius-overlay: 16px;
 
-  /* 间距 token */
+  /* 间距 token（8px 基数） */
   --sp-1: 4px;
   --sp-2: 8px;
   --sp-3: 12px;
@@ -39,16 +42,24 @@
   --sp-5: 24px;
   --sp-6: 32px;
 
-  /* 字号阶梯 */
-  --fs-caption: 13px;
-  --fs-body: 15px;
-  --fs-title: 17px;
+  /* 字号阶梯（TDesign 12/14/16/20） */
+  --fs-caption: 12px;
+  --fs-body: 14px;
+  --fs-title: 16px;
   --fs-page: 20px;
 
-  /* 阴影：仅浮层使用 */
-  --shadow-overlay: 0 4px 16px rgba(31, 35, 41, 0.12);
+  /* 阴影（TDesign shadow-1 hover / shadow-2 浮层） */
+  --shadow-1: 0 1px 10px rgba(0, 0, 0, 0.05), 0 4px 5px rgba(0, 0, 0, 0.08),
+    0 2px 4px -1px rgba(0, 0, 0, 0.12);
+  --shadow-overlay: 0 3px 14px 2px rgba(0, 0, 0, 0.05),
+    0 8px 10px 1px rgba(0, 0, 0, 0.06), 0 5px 5px -3px rgba(0, 0, 0, 0.1);
+
+  /* 动效（TDesign easing） */
+  --anim-ease: cubic-bezier(0.38, 0, 0.24, 1);
+  --anim-duration: 0.2s;
 
   /* 布局 */
   --page-max: 720px;
   --nav-height: 52px;
+  --tabbar-height: 56px;
 }

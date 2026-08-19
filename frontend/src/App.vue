@@ -1,15 +1,38 @@
 <template>
   <div class="app-shell">
     <router-view />
+
+    <nav v-if="showTabbar" class="tabbar">
+      <router-link v-for="t in tabs" :key="t.path" :to="t.path" class="tab-item"
+        :class="{ active: route.path === t.path }">
+        <component :is="t.icon" class="tab-icon" />
+        <span class="tab-label">{{ t.label }}</span>
+      </router-link>
+    </nav>
   </div>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
+import { useRoute } from 'vue-router'
+import { HomeIcon, BrowseIcon, UserIcon } from 'tdesign-icons-vue-next'
 import { onMounted } from 'vue'
 import { request } from '@/api/http'
 
+const route = useRoute()
+
+const tabs = [
+  { path: '/', label: '首页', icon: HomeIcon },
+  { path: '/discover', label: '发现', icon: BrowseIcon },
+  { path: '/me', label: '我的', icon: UserIcon },
+]
+
+// 主 tab 页面显示底部导航；子页面（频道/帖子/发帖/登录注册）全屏
+const showTabbar = computed(() =>
+  tabs.some((t) => t.path === route.path),
+)
+
 onMounted(async () => {
-  // 骨架阶段：探测后端连通性（后续由真实页面取代）
   try {
     const data = await request<{ message: string }>({ url: '/ping' })
     console.log('[SDUdiscord] 后端连通:', data.message)
@@ -30,7 +53,7 @@ body {
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'PingFang SC',
     'Microsoft YaHei', sans-serif;
   font-size: var(--fs-body);
-  line-height: 1.6;
+  line-height: 1.5;
   color: var(--text-1);
   background: var(--bg-page);
   -webkit-font-smoothing: antialiased;
@@ -44,5 +67,43 @@ button {
 }
 #app {
   min-height: 100vh;
+}
+.app-shell {
+  min-height: 100vh;
+  padding-bottom: var(--tabbar-height);
+}
+</style>
+
+<style scoped>
+.tabbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--tabbar-height);
+  background: var(--bg-card);
+  border-top: 1px solid var(--border);
+  display: flex;
+  z-index: 50;
+}
+.tab-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  color: var(--text-3);
+  transition: color var(--anim-duration) var(--anim-ease);
+}
+.tab-item.active {
+  color: var(--brand);
+}
+.tab-icon {
+  width: 24px;
+  height: 24px;
+}
+.tab-label {
+  font-size: 12px;
 }
 </style>
