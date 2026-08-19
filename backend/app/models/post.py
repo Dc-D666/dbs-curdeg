@@ -29,6 +29,8 @@ class Post(Base):
     comment_count: Mapped[int] = mapped_column(Integer, default=0)
     is_top: Mapped[bool] = mapped_column(default=False)     # 置顶
     is_essence: Mapped[bool] = mapped_column(default=False)  # 精华
+    # RAG 语义向量（阶段 6）：GLM Embedding-3 API 生成，应用层余弦相似度召回
+    embedding: Mapped[list | None] = mapped_column(JSON, nullable=True)
     status: Mapped[int] = mapped_column(Integer, default=POST_STATUS_NORMAL)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

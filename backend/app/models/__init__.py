@@ -20,9 +20,11 @@ from app.models.search_record import SearchRecord
 from app.models.notification import Notification
 from app.models.feed_strategy import FeedStrategy
 from app.models.short_link import ShortLink
+from app.models.review import Review
+from app.models.ai_config import AiConfig
 
 __all__ = [
     "User", "Community", "Board", "Role", "Member", "JoinRequest", "Post",
     "Comment", "Like", "Follow", "Topic", "OpLog", "SearchRecord",
-    "Notification", "FeedStrategy", "ShortLink",
+    "Notification", "FeedStrategy", "ShortLink", "Review", "AiConfig",
 ]

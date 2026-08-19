@@ -67,6 +67,10 @@ def create_post(
         )
     # 热度缓存：新帖入 zset（缓存存在时）
     heat_service.bump(db, post, community.id)
+    # AI 内容审核：异步入队快审（开关关闭时静默跳过）
+    from app.ai.review import enqueue_post_review
+
+    enqueue_post_review(post.id)
     return post_out(db, post, current_user_id=user.id)
 
 

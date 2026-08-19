@@ -14,6 +14,9 @@
         <span class="tab-label">{{ t.label }}</span>
       </router-link>
     </nav>
+
+    <!-- AI 问答助手浮窗（阶段 6） -->
+    <AiBot />
   </div>
 </template>
 
@@ -24,6 +27,7 @@ import { HomeIcon, BrowseIcon, UserIcon, NotificationIcon } from 'tdesign-icons-
 import { request } from '@/api/http'
 import { useNotificationStore } from '@/stores/notification'
 import { useWebSocket } from '@/composables/useWebSocket'
+import AiBot from '@/components/AiBot.vue'
 
 const route = useRoute()
 const notif = useNotificationStore()

@@ -124,3 +124,71 @@ def client(test_engine):
     fastapi_app.dependency_overrides.clear()
     transaction.rollback()
     connection.close()
+
+
+@pytest.fixture()
+def client_ctx(test_engine):
+    """client + 同一事务连接的 session（AI 审核测试用：API 发帖后可手动驱动审核任务）。
+
+    与 client 不同：这里把 session 暴露给测试，审核任务处理（process_review_task /
+    appeal）与请求共享同一连接，数据互相可见；测试结束整体回滚。
+    """
+    from fastapi.testclient import TestClient
+    from app.main import app as fastapi_app
+    from app.db import get_db
+
+    connection = test_engine.connect()
+    transaction = connection.begin()
+    connection.begin_nested()
+    Session = _make_session_factory(connection)
+    session = Session()
+
+    def override_get_db():
+        db = Session()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    fastapi_app.dependency_overrides[get_db] = override_get_db
+    with TestClient(fastapi_app) as c:
+        yield c, session
+    fastapi_app.dependency_overrides.clear()
+    transaction.rollback()
+    connection.close()
+
+
+@pytest.fixture(autouse=True)
+def _mock_llm_gateway(monkeypatch):
+    """全局 mock LLM 网关（阶段 6）：测试绝不真实调用外部 AI API。
+
+    - chat：审核 prompt → 通过；复审 → 通过；其余 → 固定文本
+    - stream：固定两个文本块
+    - embed：确定性伪向量（同文本同向量，便于相似度断言）
+    同时关闭发帖自动入队（审核流程由测试手动调用 process_review_task 驱动）。
+    """
+    from app.ai import llm_gateway
+    from app.core.config import settings
+
+    def fake_chat(messages, model="", max_tokens=1024, temperature=0.7):
+        text = " ".join(str(m.get("content", "")) for m in messages)
+        if "内容审核员" in text:
+            return '{"pass": true, "type": "", "detail": ""}'
+        if "复审员" in text:
+            return '{"decision": "pass", "detail": "测试复审通过"}'
+        return "这是 AI 生成的测试回复。"
+
+    def fake_stream(messages, model="", max_tokens=2048, temperature=0.7):
+        return iter(["AI 生成", " 的测试", "内容"])
+
+    def fake_embed(text):
+        # 确定性伪向量：基于文本哈希
+        import hashlib
+
+        h = hashlib.md5(text.encode("utf-8")).digest()
+        return [1.0 if (b % 3 == 0) else 0.0 for b in h]
+
+    monkeypatch.setattr(llm_gateway, "chat", fake_chat)
+    monkeypatch.setattr(llm_gateway, "stream", fake_stream)
+    monkeypatch.setattr(llm_gateway, "embed", fake_embed)
+    monkeypatch.setattr(settings, "AI_REVIEW_ENABLED", False)

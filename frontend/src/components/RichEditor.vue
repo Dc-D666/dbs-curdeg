@@ -281,6 +281,20 @@ function onInput() {
   emit('update:images', images.value)
 }
 
+/** 外部注入纯文本（AI 帮写用）：append 追加 / replace 替换，触发序列化。 */
+function insertText(text: string, mode: 'append' | 'replace' = 'append') {
+  const el = editorEl.value
+  if (!el) return
+  if (mode === 'replace') {
+    el.innerHTML = ''
+  }
+  el.append(document.createTextNode(text))
+  onInput()
+  el.focus()
+}
+
+defineExpose({ insertText })
+
 function serialize(): RichSegment[] {
   const segs: RichSegment[] = []
   const el = editorEl.value

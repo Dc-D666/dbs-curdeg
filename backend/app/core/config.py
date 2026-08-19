@@ -39,8 +39,14 @@ class Settings(BaseSettings):
     # AI 模型（智谱主 + DeepSeek 兜底）
     ZHIPU_API_KEY: str = ""
     ZHIPU_BASE_URL: str = "https://open.bigmodel.cn/api/paas/v4"
+    ZHIPU_MODEL: str = "glm-4.7-flash"
+    ZHIPU_EMBED_MODEL: str = "embedding-3"
     DEEPSEEK_API_KEY: str = ""
     DEEPSEEK_BASE_URL: str = "https://api.deepseek.com/v1"
+    DEEPSEEK_MODEL: str = "deepseek-chat"
+    # 内容审核：发帖后异步快审（False 关闭，测试/开发可关）
+    AI_REVIEW_ENABLED: bool = True
+    AI_REVIEW_QUEUE: str = "ai:review:queue"
 
     # CORS
     CORS_ORIGINS: list[str] = ["*"]
