@@ -31,7 +31,10 @@ fi
 PREVIOUS="$LOCAL"
 log "检测到新提交 $REMOTE（上一提交 $PREVIOUS），开始部署"
 
-# 2. 部署新代码（docker layer 缓存让未变更服务秒级完成）
+# 2. 切换到新提交（必须 reset，否则 compose 构建的是旧工作区 → 假成功）
+git reset --hard "$REMOTE"
+
+# 3. 部署新代码（docker layer 缓存让未变更服务秒级完成）
 if ! docker compose -f "$COMPOSE_FILE" up -d --build; then
   log "构建失败，回滚到 $PREVIOUS"
   git reset --hard "$PREVIOUS" || true
