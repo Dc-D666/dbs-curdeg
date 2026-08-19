@@ -17,5 +17,6 @@ jobs:
           python-version: '3.12'
       - name: 安装依赖
         run: pip install -r backend/requirements.txt
-      - name: 后端冒烟测试
-        run: cd backend && python -c "from app.main import app; print('OK: API 应用可加载')"
+      - name: 后端测试（冒烟，无需数据库）
+        working-directory: backend
+        run: python -m pytest -q

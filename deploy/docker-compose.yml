@@ -10,11 +10,13 @@ services:
     networks: [app]
 
   mysql:
-    image: mysql:8.0
+    image: mysql:5.7
     restart: always
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: channel
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-guild}
+      MYSQL_USER: ${MYSQL_USER:-guild}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
       TZ: Asia/Shanghai
     command: ["mysqld", "--innodb-buffer-pool-size=384M", "--max-connections=120"]
     volumes:

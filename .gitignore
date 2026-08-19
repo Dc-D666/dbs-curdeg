@@ -18,6 +18,11 @@ venv/
 # ===== Node =====
 node_modules/
 dist/
+dev-dist/
+*.tsbuildinfo
+
+# ===== 临时文件 =====
+_tmp_*.py
 
 # ===== IDE / OS =====
 .idea/

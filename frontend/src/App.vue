@@ -1,22 +1,39 @@
 <template>
-  <main style="font-family: system-ui, sans-serif; max-width: 640px; margin: 0 auto; padding: 2rem">
-    <h1>仿腾讯频道 · Web 前端骨架</h1>
-    <p>Vite + Vue3 已就绪。替换本页内容开始开发。</p>
-    <hr />
-    <p>后端连通性测试：<code id="health">检测中…</code></p>
-  </main>
+  <div class="app-shell">
+    <router-view />
+  </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { onMounted } from 'vue'
+import { request } from '@/api/http'
 
 onMounted(async () => {
-  const el = document.getElementById('health')
+  // 骨架阶段：探测后端连通性（后续由真实页面取代）
   try {
-    const res = await fetch('/api/v1/ping')
-    el.textContent = JSON.stringify(await res.json())
+    const data = await request<{ message: string }>({ url: '/ping' })
+    console.log('[SDUdiscord] 后端连通:', data.message)
   } catch (e) {
-    el.textContent = '后端未连通：' + e.message
+    console.warn('[SDUdiscord] 后端未连通:', e)
   }
 })
 </script>
+
+<style>
+:root {
+  --brand: #1a73e8;
+  color-scheme: light;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'PingFang SC',
+    'Microsoft YaHei', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+#app {
+  min-height: 100vh;
+}
+</style>
