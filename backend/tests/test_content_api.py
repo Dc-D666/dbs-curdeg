@@ -271,3 +271,78 @@ def test_follow_and_my_feed(ctx):
     assert res.status_code == 200
     feed = client.get("/api/v1/me/feed", headers=_auth(normal)).json()["data"]
     assert feed["items"] == []
+
+
+# ---------- 审查修复回归：频道状态/权限边界 ----------
+
+
+def test_closed_community_blocks_writes(ctx):
+    """关闭频道后，评论/回复/点赞/编辑/置顶全部拒绝（写路径统一校验频道状态）。"""
+    client, owner, normal, cid, bid = ctx["client"], ctx["owner"], ctx["normal"], ctx["cid"], ctx["bid"]
+    pid = _create_post(client, owner, cid, bid)
+    cid1 = client.post(f"/api/v1/posts/{pid}/comments", json={"content": "评论"}, headers=_auth(normal)).json()["data"]["id"]
+    # owner 关闭频道
+    res = client.put(f"/api/v1/communities/{cid}/status", json={"status": 1}, headers=_auth(owner))
+    assert res.status_code == 200
+    # 评论 → 404（频道不存在口径）
+    assert client.post(f"/api/v1/posts/{pid}/comments", json={"content": "x"}, headers=_auth(normal)).status_code == 404
+    assert client.post(f"/api/v1/comments/{cid1}/replies", json={"content": "x"}, headers=_auth(normal)).status_code == 404
+    # 点赞/取消 → 404
+    assert client.post("/api/v1/likes", json={"post_id": pid}, headers=_auth(normal)).status_code == 404
+    assert client.delete("/api/v1/likes", params={"post_id": pid}, headers=_auth(normal)).status_code == 404
+    # 编辑/置顶/精华/删除 → 404
+    assert client.put(f"/api/v1/posts/{pid}", json={"title": "x"}, headers=_auth(owner)).status_code == 404
+    assert client.post(f"/api/v1/posts/{pid}/top", headers=_auth(owner)).status_code == 404
+    assert client.post(f"/api/v1/posts/{pid}/essence", headers=_auth(owner)).status_code == 404
+    assert client.delete(f"/api/v1/posts/{pid}", headers=_auth(owner)).status_code == 404
+    # 发帖 → 404
+    assert client.post(f"/api/v1/communities/{cid}/boards/{bid}/posts",
+                       json={"title": "t", "content": "c"}, headers=_auth(owner)).status_code == 404
+
+
+def test_like_requires_member(ctx):
+    """非成员不能点赞/取消点赞。"""
+    client, owner, cid, bid = ctx["client"], ctx["owner"], ctx["cid"], ctx["bid"]
+    pid = _create_post(client, owner, cid, bid)
+    outsider = _register(client, "likeoutsider", "likeoutsider@test.com")
+    assert client.post("/api/v1/likes", json={"post_id": pid}, headers=_auth(outsider)).status_code == 403
+    assert client.delete("/api/v1/likes", params={"post_id": pid}, headers=_auth(outsider)).status_code == 403
+
+
+def test_reply_to_deleted_post_rejected(ctx):
+    """帖子软删后，其评论不可再回复。"""
+    client, owner, cid, bid = ctx["client"], ctx["owner"], ctx["cid"], ctx["bid"]
+    pid = _create_post(client, owner, cid, bid)
+    cid1 = client.post(f"/api/v1/posts/{pid}/comments", json={"content": "评论"}, headers=_auth(owner)).json()["data"]["id"]
+    assert client.delete(f"/api/v1/posts/{pid}", headers=_auth(owner)).status_code == 200
+    assert client.post(f"/api/v1/comments/{cid1}/replies", json={"content": "x"}, headers=_auth(owner)).status_code == 404
+
+
+def test_delete_top_comment_cascades_replies(ctx):
+    """删顶层评论级联软删楼中楼回复，comment_count 同步扣减。"""
+    client, owner, normal, cid, bid = ctx["client"], ctx["owner"], ctx["normal"], ctx["cid"], ctx["bid"]
+    pid = _create_post(client, owner, cid, bid)
+    cid1 = client.post(f"/api/v1/posts/{pid}/comments", json={"content": "顶层"}, headers=_auth(normal)).json()["data"]["id"]
+    client.post(f"/api/v1/comments/{cid1}/replies", json={"content": "回复1"}, headers=_auth(owner))
+    client.post(f"/api/v1/comments/{cid1}/replies", json={"content": "回复2"}, headers=_auth(owner))
+    assert client.get(f"/api/v1/posts/{pid}").json()["data"]["comment_count"] == 3
+    # 删顶层 → 级联
+    assert client.delete(f"/api/v1/comments/{cid1}", headers=_auth(normal)).status_code == 200
+    detail = client.get(f"/api/v1/posts/{pid}").json()["data"]
+    assert detail["comment_count"] == 0
+    # 回复列表不可见（父评论已删 → 404）
+    assert client.get(f"/api/v1/comments/{cid1}/replies").status_code == 404
+    # 评论列表为空
+    assert client.get(f"/api/v1/posts/{pid}/comments").json()["data"]["total"] == 0
+
+
+def test_feed_board_filter(ctx):
+    """feed 按版块过滤：只返回指定版块的帖子。"""
+    client, owner, cid, bid = ctx["client"], ctx["owner"], ctx["cid"], ctx["bid"]
+    bid2 = _create_board(client, owner, cid, name="第二个版块")
+    pid1 = _create_post(client, owner, cid, bid, title="版块一帖子")
+    pid2 = _create_post(client, owner, cid, bid2, title="版块二帖子")
+    items1 = client.get(f"/api/v1/communities/{cid}/feed", params={"board_id": bid}).json()["data"]["items"]
+    items2 = client.get(f"/api/v1/communities/{cid}/feed", params={"board_id": bid2}).json()["data"]["items"]
+    assert all(p["id"] == pid1 for p in items1)
+    assert all(p["id"] == pid2 for p in items2)

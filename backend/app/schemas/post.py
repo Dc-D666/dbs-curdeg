@@ -75,5 +75,5 @@ class CommentOut(BaseModel):
 
 class FeedOut(BaseModel):
     items: list[PostOut]
-    next_cursor: int | None = None  # latest 用：下一页的 id 游标
+    next_cursor: str | None = None  # latest: "id"；hot: "like_count:id"
     has_more: bool = False

@@ -52,7 +52,7 @@ def create_reply(
     if comment is None or comment.status != 0:
         raise NotFoundError("评论不存在")
     post = db.get(Post, comment.post_id)
-    if post is None:
+    if post is None or post.status != POST_STATUS_NORMAL:
         raise NotFoundError("帖子不存在")
     payload = CreateCommentRequest(
         content=payload.content,

@@ -1,5 +1,5 @@
 """评论业务逻辑：顶层评论/楼中楼回复/删除（阶段 3）。"""
-from sqlalchemy import select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.core.response import ParamError, PermissionError_
@@ -39,7 +39,8 @@ def create_comment(
         content=payload.content,
     )
     db.add(comment)
-    post.comment_count += 1
+    # 原子自增，避免并发 read-modify-write 丢计数
+    db.execute(update(Post).where(Post.id == post.id).values(comment_count=Post.comment_count + 1))
     db.commit()
     db.refresh(comment)
     return comment_out(db, comment, user.id)
@@ -80,7 +81,7 @@ def list_replies(
 
 
 def delete_comment(db: Session, post: Post, comment: Comment, user: User) -> None:
-    """软删评论：本人或频道主/管理员。"""
+    """软删评论：本人或频道主/管理员；删顶层评论时级联软删其楼中楼回复。"""
     member = db.execute(
         select(Member).where(Member.community_id == post.community_id, Member.user_id == user.id)
     ).scalar_one_or_none()
@@ -88,8 +89,27 @@ def delete_comment(db: Session, post: Post, comment: Comment, user: User) -> Non
         raise PermissionError_("只有频道成员可以执行此操作")
     if comment.author_id != user.id and member.member_type not in (MEMBER_OWNER, MEMBER_ADMIN):
         raise PermissionError_("只能删除自己的评论，或需要频道主/管理员权限")
+
+    removed = 1
+    if comment.parent_id is None:
+        # 顶层评论：级联软删楼中楼回复，计数一并扣减
+        reply_ids = db.execute(
+            select(Comment.id).where(Comment.parent_id == comment.id, Comment.status == 0)
+        ).scalars().all()
+        if reply_ids:
+            db.execute(
+                update(Comment)
+                .where(Comment.id.in_(reply_ids))
+                .values(status=1)
+            )
+            removed += len(reply_ids)
     comment.status = 1
-    post.comment_count = max(0, post.comment_count - 1)
+    # 原子递减（不为负）
+    db.execute(
+        update(Post)
+        .where(Post.id == post.id)
+        .values(comment_count=func.greatest(0, Post.comment_count - removed))
+    )
     db.commit()
 
 

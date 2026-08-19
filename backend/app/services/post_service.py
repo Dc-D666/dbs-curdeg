@@ -5,7 +5,7 @@
 - hot：is_top desc, like_count desc, id desc；游标 = "like_count:last_id"
 - 置顶帖子数量少，分页时整段返回（不参与游标推进）
 """
-from sqlalchemy import Select, func, or_, select
+from sqlalchemy import Select, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.core.response import NotFoundError, ParamError, PermissionError_
@@ -40,7 +40,8 @@ def create_post(
         images=payload.images,
     )
     db.add(post)
-    community.post_count += 1
+    # 原子自增，避免并发 read-modify-write 丢计数
+    db.execute(update(Community).where(Community.id == community.id).values(post_count=Community.post_count + 1))
     db.commit()
     db.refresh(post)
     return post_out(db, post, current_user_id=user.id)
@@ -72,7 +73,12 @@ def delete_post(db: Session, community: Community, post: Post, user: User) -> No
     if post.author_id != user.id and member.member_type not in (MEMBER_OWNER, MEMBER_ADMIN):
         raise PermissionError_("只能删除自己的帖子，或需要频道主/管理员权限")
     post.status = POST_STATUS_DELETED
-    community.post_count = max(0, community.post_count - 1)
+    # 原子递减（不为负）
+    db.execute(
+        update(Community)
+        .where(Community.id == community.id)
+        .values(post_count=func.greatest(0, Community.post_count - 1))
+    )
     db.commit()
 
 
@@ -112,8 +118,9 @@ def feed(
     cursor: str | None,
     page_size: int,
     current_user_id: int | None,
+    board_id: int | None = None,
 ) -> dict:
-    """频道帖子流：置顶恒顶；latest 按时间倒序，hot 按点赞数倒序。"""
+    """频道帖子流：置顶恒顶；latest 按时间倒序，hot 按点赞数倒序；可选按版块过滤。"""
     if sort not in ("latest", "hot"):
         raise ParamError("sort 仅支持 latest / hot")
 
@@ -123,13 +130,16 @@ def feed(
         .where(Post.community_id == community.id, Post.status == POST_STATUS_NORMAL, Post.is_top.is_(True))
         .order_by(Post.id.desc())
     )
-    top_posts = db.execute(top_stmt).scalars().all()
-
     # 普通帖子分页（keyset）
     normal_stmt = (
         select(Post)
         .where(Post.community_id == community.id, Post.status == POST_STATUS_NORMAL, Post.is_top.is_(False))
     )
+    if board_id:
+        top_stmt = top_stmt.where(Post.board_id == board_id)
+        normal_stmt = normal_stmt.where(Post.board_id == board_id)
+    top_posts = db.execute(top_stmt).scalars().all()
+
     if sort == "latest":
         last_id = int(cursor) if cursor and cursor.isdigit() else None
         if last_id:
@@ -157,7 +167,7 @@ def feed(
         last = normal_posts[-1]
         next_cursor = f"{last.like_count}:{last.id}" if sort == "hot" else str(last.id)
     return {
-        "items": [post_out(db, p, current_user_id) for p in items],
+        "items": post_outs(db, items, current_user_id),
         "next_cursor": next_cursor,
         "has_more": has_more,
     }
@@ -190,10 +200,71 @@ def my_feed(
     has_more = len(posts) == page_size
     next_cursor = str(posts[-1].id) if has_more and posts else None
     return {
-        "items": [post_out(db, p, user.id) for p in posts],
+        "items": post_outs(db, posts, user.id),
         "next_cursor": next_cursor,
         "has_more": has_more,
     }
+
+
+# ---------- 组装 ----------
+
+
+def post_outs(db: Session, posts: list[Post], current_user_id: int | None) -> list[PostOut]:
+    """批量组装：作者/版块/频道/点赞/关注/成员 各一次 IN 查询（feed 用，避免 N+1）。"""
+    if not posts:
+        return []
+    uids = {p.author_id for p in posts}
+    bids = {p.board_id for p in posts}
+    cids = {p.community_id for p in posts}
+    pids = [p.id for p in posts]
+
+    users = {u.id: u for u in db.execute(select(User).where(User.id.in_(uids))).scalars().all()}
+    boards = {b.id: b for b in db.execute(select(Board).where(Board.id.in_(bids))).scalars().all()}
+    comms = {c.id: c for c in db.execute(select(Community).where(Community.id.in_(cids))).scalars().all()}
+
+    out_map: dict[int, PostOut] = {}
+    for p in posts:
+        o = PostOut.model_validate(p)
+        u = users.get(p.author_id)
+        if u:
+            o.author_nickname = u.nickname or u.username
+            o.author_avatar = u.avatar_url
+        b = boards.get(p.board_id)
+        if b:
+            o.board_name = b.name
+        c = comms.get(p.community_id)
+        if c:
+            o.community_name = c.name
+        out_map[p.id] = o
+
+    if current_user_id:
+        liked_ids = set(
+            db.execute(
+                select(Like.post_id).where(
+                    Like.post_id.in_(pids), Like.comment_id == 0, Like.user_id == current_user_id
+                )
+            ).scalars().all()
+        )
+        followed_cids = set(
+            db.execute(
+                select(Follow.community_id).where(
+                    Follow.user_id == current_user_id, Follow.community_id.in_(cids)
+                )
+            ).scalars().all()
+        )
+        member_cids = set(
+            db.execute(
+                select(Member.community_id).where(
+                    Member.user_id == current_user_id, Member.community_id.in_(cids)
+                )
+            ).scalars().all()
+        )
+        for p in posts:
+            o = out_map[p.id]
+            o.is_liked = p.id in liked_ids
+            o.is_followed = p.community_id in followed_cids
+            o.is_member = p.community_id in member_cids
+    return [out_map[p.id] for p in posts]
 
 
 # ---------- 组装 ----------
@@ -240,6 +311,10 @@ def post_out(db: Session, post: Post, current_user_id: int | None) -> PostOut:
 
 
 def _require_member(db: Session, community_id: int, user_id: int) -> Member:
+    """频道成员校验：频道须正常（未关闭/封禁），且成员未被拉黑/禁言。"""
+    community = db.get(Community, community_id)
+    if community is None or community.status != 0:
+        raise NotFoundError("频道不存在")
     member = db.execute(
         select(Member).where(Member.community_id == community_id, Member.user_id == user_id)
     ).scalar_one_or_none()

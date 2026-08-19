@@ -142,8 +142,13 @@ async function loadFeed(reset = false) {
   }
   feedLoading.value = true
   try {
-    const data = await postApi.feed(cid, feedSort.value, feedCursor.value)
-    feedItems.value = reset ? data.items : [...feedItems.value, ...data.items]
+    const data = await postApi.feed(cid, feedSort.value, feedCursor.value, 20, activeBoard.value)
+    // 按 id 去重：置顶帖每页都会返回，避免"加载更多"后重复
+    const seen = new Set(feedItems.value.map((p) => p.id))
+    const merged = reset
+      ? data.items
+      : [...feedItems.value, ...data.items.filter((p) => !seen.has(p.id))]
+    feedItems.value = merged
     feedCursor.value = data.next_cursor
     feedHasMore.value = data.has_more
   } catch (e) {

@@ -164,7 +164,7 @@ const canManage = computed(() => {
   const p = post.value
   if (!p) return false
   if (!tokenStore.access) return false
-  return p.author_id === auth.user?.id || myMemberType.value === 0
+  return p.author_id === auth.user?.id || myMemberType.value === 0 || myMemberType.value === 1
 })
 
 onMounted(async () => {
@@ -204,26 +204,34 @@ function requireLogin(): boolean {
 async function toggleLike() {
   if (!post.value || !requireLogin()) return
   const p = post.value
-  if (p.is_liked) {
-    const r = await postApi.unlike(p.id)
-    p.is_liked = false
-    p.like_count = r.count
-  } else {
-    const r = await postApi.like(p.id)
-    p.is_liked = true
-    p.like_count = r.count
+  try {
+    if (p.is_liked) {
+      const r = await postApi.unlike(p.id)
+      p.is_liked = false
+      p.like_count = r.count
+    } else {
+      const r = await postApi.like(p.id)
+      p.is_liked = true
+      p.like_count = r.count
+    }
+  } catch (e) {
+    alert(e instanceof Error ? e.message : '操作失败')
   }
 }
 
 async function toggleFollow() {
   if (!post.value || !requireLogin()) return
   const p = post.value
-  if (p.is_followed) {
-    await postApi.unfollow(p.community_id)
-    p.is_followed = false
-  } else {
-    await postApi.follow(p.community_id)
-    p.is_followed = true
+  try {
+    if (p.is_followed) {
+      await postApi.unfollow(p.community_id)
+      p.is_followed = false
+    } else {
+      await postApi.follow(p.community_id)
+      p.is_followed = true
+    }
+  } catch (e) {
+    alert(e instanceof Error ? e.message : '操作失败')
   }
 }
 
@@ -310,20 +318,24 @@ async function loadMoreReplies(c: CommentItem) {
 
 async function toggleCommentLike(c: CommentItem) {
   if (!requireLogin()) return
-  if (c.is_liked) {
-    const r = await postApi.unlike(undefined, c.id)
-    c.is_liked = false
-    c.like_count = r.count
-  } else {
-    const r = await postApi.like(undefined, c.id)
-    c.is_liked = true
-    c.like_count = r.count
+  try {
+    if (c.is_liked) {
+      const r = await postApi.unlike(undefined, c.id)
+      c.is_liked = false
+      c.like_count = r.count
+    } else {
+      const r = await postApi.like(undefined, c.id)
+      c.is_liked = true
+      c.like_count = r.count
+    }
+  } catch (e) {
+    alert(e instanceof Error ? e.message : '操作失败')
   }
 }
 
 function canDeleteComment(c: CommentItem): boolean {
   if (!tokenStore.access) return false
-  return c.author_id === auth.user?.id || myMemberType.value === 0
+  return c.author_id === auth.user?.id || myMemberType.value === 0 || myMemberType.value === 1
 }
 
 async function deleteComment(commentId: number) {

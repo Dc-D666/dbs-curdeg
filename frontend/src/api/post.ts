@@ -49,10 +49,10 @@ export interface CommentItem {
 
 export const postApi = {
   // 帖子流
-  feed(cid: number, sort: 'latest' | 'hot' = 'latest', cursor?: string | null, pageSize = 20) {
+  feed(cid: number, sort: 'latest' | 'hot' = 'latest', cursor?: string | null, pageSize = 20, boardId?: number | null) {
     return request<FeedResult>({
       url: `/communities/${cid}/feed`,
-      params: { sort, cursor: cursor ?? undefined, page_size: pageSize },
+      params: { sort, board_id: boardId ?? undefined, cursor: cursor ?? undefined, page_size: pageSize },
     })
   },
   meFeed(cursor?: string | null, pageSize = 20) {

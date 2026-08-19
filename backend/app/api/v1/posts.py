@@ -32,15 +32,16 @@ def create_post(
 def feed(
     community_id: int,
     sort: str = Query("latest", pattern="^(latest|hot)$"),
+    board_id: int | None = Query(None, description="按版块过滤"),
     cursor: str | None = Query(None, description="游标：latest 为最后帖子 id，hot 为 like_count:id"),
     page_size: int = Query(20, ge=1, le=50),
     user: User | None = Depends(get_current_user_optional),
     db: Session = Depends(get_db),
 ):
-    """频道帖子流（置顶恒顶；latest 最新 / hot 热门；游客可见）。"""
+    """频道帖子流（置顶恒顶；latest 最新 / hot 热门；可选按版块过滤；游客可见）。"""
     community = _get_community(db, community_id)
     uid = user.id if user else None
-    return ok(data=post_service.feed(db, community, sort, cursor, page_size, uid))
+    return ok(data=post_service.feed(db, community, sort, cursor, page_size, uid, board_id))
 
 
 @router.get("/me/feed")
@@ -135,6 +136,6 @@ def _get_post_community(db: Session, post_id: int) -> tuple[Post, Community]:
     if post is None or post.status != POST_STATUS_NORMAL:
         raise NotFoundError("帖子不存在")
     community = db.get(Community, post.community_id)
-    if community is None:
+    if community is None or community.status != 0:
         raise NotFoundError("频道不存在")
     return post, community
