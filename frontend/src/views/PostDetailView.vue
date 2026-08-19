@@ -66,6 +66,7 @@
           <t-button variant="outline" :class="{ 't-active': post.is_followed }" @click="toggleFollow">
             {{ post.is_followed ? '已关注' : '关注频道' }}
           </t-button>
+          <t-button variant="outline" @click="sharePost">分享</t-button>
           <span class="action-note">{{ post.comment_count }} 评论</span>
         </div>
 
@@ -165,6 +166,7 @@ import { communityApi } from '@/api/community'
 import EmptyState from '@/components/EmptyState.vue'
 import { postApi, type CommentItem, type PostItem } from '@/api/post'
 import { tokenStore } from '@/api/http'
+import { request } from '@/api/http'
 import { useAuthStore } from '@/stores/auth'
 import { toast } from '@/utils/toast'
 import { confirmDialog } from '@/utils/confirm'
@@ -310,6 +312,28 @@ async function toggleFollow() {
     }
   } catch (e) {
     toast(e instanceof Error ? e.message : '操作失败', 'error')
+  }
+}
+
+/** 分享：生成短链并复制（阶段 5）。 */
+async function sharePost() {
+  if (!post.value || !requireLogin()) return
+  try {
+    const { code } = await request<{ code: string }>({
+      url: '/shares',
+      method: 'POST',
+      data: { target_type: 2, target_id: post.value.id },
+    })
+    const url = `${window.location.origin}/s/${code}`
+    try {
+      await navigator.clipboard.writeText(url)
+      toast('短链已复制，发送给好友即可打开', 'success')
+    } catch {
+      // 剪贴板不可用（非 https / 权限）：提示手动复制
+      toast(`请手动复制：${url}`, 'info')
+    }
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '生成短链失败', 'error')
   }
 }
 

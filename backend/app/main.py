@@ -14,11 +14,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
-from app.api.v1 import auth, boards, comments, communities, interact, manage, members, notifications, posts, roles, search, topics, uploads, users
+from app.api.v1 import auth, boards, comments, communities, interact, manage, members, notifications, posts, roles, search, shares, topics, uploads, users
 from app.core.config import settings
 from app.core.security import decode_token
 from app.db import get_db
 from app.models.user import User
+from app.services import share_service
 from app.ws import events
 from app.ws.manager import manager
 
@@ -100,12 +101,17 @@ app.include_router(roles.router, prefix=API_V1)
 app.include_router(manage.router, prefix=API_V1)
 app.include_router(search.router, prefix=API_V1)
 app.include_router(notifications.router, prefix=API_V1)
+app.include_router(shares.router, prefix=API_V1)
+# 短链跳转：根路径例外（nginx 反代 /s/ 到本路由，方案 §5.1）
+app.include_router(shares.public_router)
 
 
 @app.on_event("startup")
 async def _capture_ws_loop() -> None:
     """捕获 ASGI 主事件循环，供同步端点 run_coroutine_threadsafe 投递 WS 推送。"""
     events.set_ws_loop(asyncio.get_running_loop())
+    # 过期短链每日清理（后台任务）
+    asyncio.create_task(share_service.cleanup_loop())
 
 
 @app.websocket("/ws")
