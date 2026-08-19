@@ -2,14 +2,13 @@
   <div class="app-shell">
     <router-view />
 
-    <t-tab-bar v-if="showTabbar" :value="route.path" class="tabbar">
-      <t-tab-bar-item v-for="t in tabs" :key="t.path" :value="t.path" :router-link="{ to: t.path }">
-        <template #icon>
-          <component :is="t.icon" class="tab-icon" />
-        </template>
-        {{ t.label }}
-      </t-tab-bar-item>
-    </t-tab-bar>
+    <nav v-if="showTabbar" class="tabbar">
+      <router-link v-for="t in tabs" :key="t.path" :to="t.path" class="tab-item"
+        :class="{ active: route.path === t.path }">
+        <component :is="t.icon" class="tab-icon" />
+        <span class="tab-label">{{ t.label }}</span>
+      </router-link>
+    </nav>
   </div>
 </template>
 
@@ -81,17 +80,52 @@ button {
 </style>
 
 <style scoped>
+/* 底部导航：TDesign 设计 token + TDesign 图标自绘（tdesign-vue-next 无 TabBar 组件，
+   该组件属 TDesign Mobile 版；此处按 TDesign starter 视觉实现） */
 .tabbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--tabbar-height);
   max-width: 100vw;
+  overflow: hidden;
+  background: var(--td-bg-color-container);
+  border-top: 1px solid var(--td-component-border);
+  display: flex;
   z-index: 50;
+}
+.tab-item {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  color: var(--td-text-color-placeholder);
+  text-decoration: none;
+  transition: color var(--anim-duration) var(--anim-ease);
+}
+.tab-item.active {
+  color: var(--td-brand-color);
 }
 .tab-icon {
   width: 24px;
   height: 24px;
+  flex-shrink: 0;
 }
 .tab-icon :deep(svg) {
   width: 24px;
   height: 24px;
   display: block;
+}
+.tab-label {
+  font-size: 12px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>
