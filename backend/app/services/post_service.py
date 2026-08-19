@@ -5,7 +5,7 @@
 - hot：is_top desc, like_count desc, id desc；游标 = "like_count:last_id"
 - 置顶帖子数量少，分页时整段返回（不参与游标推进）
 """
-from sqlalchemy import Select, func, or_, select, update
+from sqlalchemy import Select, func, select, update
 from sqlalchemy.orm import Session
 
 from app.core.permissions import PERM_DELETE_POST, PERM_ESSENCE, PERM_TOP, require_perms
@@ -18,6 +18,8 @@ from app.models.member import MEMBER_ADMIN, MEMBER_OWNER, Member
 from app.models.post import Post, POST_STATUS_DELETED, POST_STATUS_NORMAL
 from app.models.user import User
 from app.schemas.post import CreatePostRequest, PostOut, UpdatePostRequest
+from app.services import heat_service
+from app.services.heat_service import hot_feed
 from app.services.level_service import LEVEL_POINTS, add_level
 from app.services.notify_service import notify
 from app.services.op_log_service import log_op
@@ -63,6 +65,8 @@ def create_post(
             summary=(post.title or "新帖子")[:80], ref_id=post.id,
             actor_id=user.id, community_id=community.id,
         )
+    # 热度缓存：新帖入 zset（缓存存在时）
+    heat_service.bump(db, post, community.id)
     return post_out(db, post, current_user_id=user.id)
 
 
@@ -159,9 +163,25 @@ def feed(
     current_user_id: int | None,
     board_id: int | None = None,
 ) -> dict:
-    """频道帖子流：置顶恒顶；latest 按时间倒序，hot 按点赞数倒序；可选按版块过滤。"""
+    """频道帖子流：latest 时间倒序 / hot 热度分倒序（阶段 5，Redis 缓存）；可选按版块过滤。
+
+    hot 说明：score = like*1 + comment*2 + favorite*3 + 置顶权重，指数时间衰减；
+    权重/衰减/缓存 TTL 由 feed_strategies 表按频道配置（PUT /feed-strategy）。
+    游标：latest 为最后帖子 id；hot 为页码（缓存流 offset 分页）。
+    """
     if sort not in ("latest", "hot"):
         raise ParamError("sort 仅支持 latest / hot")
+
+    if sort == "hot":
+        page = int(cursor) if cursor and cursor.isdigit() else 1
+        hot_posts, next_cursor, has_more = hot_feed(db, community.id, page, page_size)
+        if board_id is not None:
+            hot_posts = [p for p in hot_posts if p.board_id == board_id]
+        return {
+            "items": post_outs(db, hot_posts, current_user_id),
+            "next_cursor": next_cursor,
+            "has_more": has_more,
+        }
 
     # 置顶帖子（整段返回，不参与游标推进）
     top_stmt = (
@@ -179,32 +199,16 @@ def feed(
         normal_stmt = normal_stmt.where(Post.board_id == board_id)
     top_posts = db.execute(top_stmt).scalars().all()
 
-    if sort == "latest":
-        last_id = int(cursor) if cursor and cursor.isdigit() else None
-        if last_id:
-            normal_stmt = normal_stmt.where(Post.id < last_id)
-        normal_stmt = normal_stmt.order_by(Post.id.desc())
-    else:  # hot
-        last_lc = last_hid = None
-        if cursor and ":" in cursor:
-            try:
-                last_lc, last_hid = (int(x) for x in cursor.split(":", 1))
-            except ValueError:
-                last_lc = last_hid = None
-        if last_lc is not None and last_hid is not None:
-            normal_stmt = normal_stmt.where(
-                or_(Post.like_count < last_lc, (Post.like_count == last_lc) & (Post.id < last_hid))
-            )
-        normal_stmt = normal_stmt.order_by(Post.like_count.desc(), Post.id.desc())
+    last_id = int(cursor) if cursor and cursor.isdigit() else None
+    if last_id:
+        normal_stmt = normal_stmt.where(Post.id < last_id)
+    normal_stmt = normal_stmt.order_by(Post.id.desc())
 
     normal_posts = db.execute(normal_stmt.limit(page_size)).scalars().all()
 
     items = top_posts + normal_posts
     has_more = len(normal_posts) == page_size
-    next_cursor = None
-    if has_more and normal_posts:
-        last = normal_posts[-1]
-        next_cursor = f"{last.like_count}:{last.id}" if sort == "hot" else str(last.id)
+    next_cursor = str(normal_posts[-1].id) if has_more and normal_posts else None
     return {
         "items": post_outs(db, items, current_user_id),
         "next_cursor": next_cursor,
@@ -219,33 +223,25 @@ def global_feed(
     page_size: int,
     current_user_id: int | None,
 ) -> dict:
-    """全站帖子流（首页用）：latest 时间倒序 / hot 点赞倒序，keyset 游标。"""
+    """全站帖子流（首页用）：latest 时间倒序 / hot 热度分倒序（阶段 5）。"""
     if sort not in ("latest", "hot"):
         raise ParamError("sort 仅支持 latest / hot")
+    if sort == "hot":
+        page = int(cursor) if cursor and cursor.isdigit() else 1
+        hot_posts, next_cursor, has_more = hot_feed(db, None, page, page_size)
+        return {
+            "items": post_outs(db, hot_posts, current_user_id),
+            "next_cursor": next_cursor,
+            "has_more": has_more,
+        }
     stmt = select(Post).where(Post.status == POST_STATUS_NORMAL)
-    if sort == "latest":
-        last_id = int(cursor) if cursor and cursor.isdigit() else None
-        if last_id:
-            stmt = stmt.where(Post.id < last_id)
-        stmt = stmt.order_by(Post.id.desc())
-    else:  # hot
-        last_lc = last_hid = None
-        if cursor and ":" in cursor:
-            try:
-                last_lc, last_hid = (int(x) for x in cursor.split(":", 1))
-            except ValueError:
-                last_lc = last_hid = None
-        if last_lc is not None and last_hid is not None:
-            stmt = stmt.where(
-                or_(Post.like_count < last_lc, (Post.like_count == last_lc) & (Post.id < last_hid))
-            )
-        stmt = stmt.order_by(Post.like_count.desc(), Post.id.desc())
+    last_id = int(cursor) if cursor and cursor.isdigit() else None
+    if last_id:
+        stmt = stmt.where(Post.id < last_id)
+    stmt = stmt.order_by(Post.id.desc())
     posts = db.execute(stmt.limit(page_size)).scalars().all()
     has_more = len(posts) == page_size
-    next_cursor = None
-    if has_more and posts:
-        last = posts[-1]
-        next_cursor = f"{last.like_count}:{last.id}" if sort == "hot" else str(last.id)
+    next_cursor = str(posts[-1].id) if has_more and posts else None
     return {
         "items": post_outs(db, posts, current_user_id),
         "next_cursor": next_cursor,

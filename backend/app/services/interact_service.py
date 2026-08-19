@@ -15,6 +15,7 @@ from app.models.follow import Follow
 from app.models.like import Like
 from app.models.post import Post, POST_STATUS_NORMAL
 from app.models.user import User
+from app.services import heat_service
 from app.services.level_service import LEVEL_POINTS, add_level
 from app.services.notify_service import notify
 from app.services.post_service import _require_member
@@ -59,6 +60,8 @@ def like(db: Session, user: User, post_id: int | None = None, comment_id: int | 
             db, target.author_id, "like", "有人赞了你的内容",
             summary=summary, ref_id=ref, actor_id=user.id, community_id=community_id,
         )
+    # 热度缓存：点赞数变化
+    _bump_heat(db, target)
     return {"liked": True, "count": target.like_count}
 
 
@@ -80,6 +83,8 @@ def unlike(db: Session, user: User, post_id: int | None = None, comment_id: int 
     _bump_count(db, target, -1)
     db.commit()
     db.refresh(target)
+    # 热度缓存：点赞数变化
+    _bump_heat(db, target)
     return {"liked": False, "count": target.like_count}
 
 
@@ -157,3 +162,13 @@ def _bump_count(db: Session, target: Post | Comment, delta: int) -> None:
             .where(model.id == target.id)
             .values(like_count=func.greatest(0, col - 1))
         )
+
+
+def _bump_heat(db: Session, target: Post | Comment) -> None:
+    """点赞变化后更新热度缓存（评论点赞需定位其帖子）。"""
+    if isinstance(target, Post):
+        heat_service.bump(db, target, target.community_id)
+    else:
+        post = db.get(Post, target.post_id)
+        if post:
+            heat_service.bump(db, post, post.community_id)

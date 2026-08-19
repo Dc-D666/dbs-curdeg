@@ -122,13 +122,19 @@ def test_ws_requires_auth_first_message(client):
 
 
 def test_ws_disconnect_cleanup(ctx):
-    """断线后连接从 manager 清理。"""
+    """断线后连接从 manager 清理（服务端收到断开是异步的，轮询等待）。"""
+    import time
+
     client, owner = ctx["client"], ctx["owner"]
     before = manager.online_count()
     with client.websocket_connect("/ws") as ws:
         ws.send_json({"type": "auth", "token": owner})
         ws.receive_json()
         assert manager.online_count() == before + 1
+    for _ in range(20):
+        if manager.online_count() == before:
+            break
+        time.sleep(0.1)
     assert manager.online_count() == before
 
 

@@ -9,6 +9,7 @@ from app.models.like import Like
 from app.models.post import Post
 from app.models.user import User
 from app.schemas.post import CommentOut, CreateCommentRequest
+from app.services import heat_service
 from app.services.level_service import LEVEL_POINTS, add_level
 from app.services.notify_service import notify
 from app.services.op_log_service import log_op
@@ -48,6 +49,9 @@ def create_comment(
     add_level(db, post.community_id, user.id, LEVEL_POINTS["comment"])
     db.commit()
     db.refresh(comment)
+    # 热度缓存：评论数变化
+    db.refresh(post)
+    heat_service.bump(db, post, post.community_id)
     # 通知：帖子作者（新评论）；楼中楼回复额外通知被回复者（与作者不同人时）
     preview = comment.content[:100]
     if post.author_id != user.id:
@@ -128,6 +132,9 @@ def delete_comment(db: Session, post: Post, comment: Comment, user: User) -> Non
     if not is_author:
         log_op(db, post.community_id, user.id, "delete_comment", "comment", comment.id, {"author_id": comment.author_id})
     db.commit()
+    # 热度缓存：评论数减少
+    db.refresh(post)
+    heat_service.bump(db, post, post.community_id)
 
 
 def comment_out(db: Session, comment: Comment, current_user_id: int | None) -> CommentOut:
