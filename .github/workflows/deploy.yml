@@ -1,24 +1,21 @@
-name: deploy
+name: ci
 
+# 部署由服务器端 cron 自动完成（每 3 分钟拉取最新代码重建），
+# GitHub Actions 仅做代码冒烟测试（无 SSH、无入站依赖）。
 on:
   push:
     branches: [main]
-  workflow_dispatch: # 支持在 GitHub 页面上手动触发
+  workflow_dispatch:
 
 jobs:
-  deploy:
+  test:
     runs-on: ubuntu-latest
     steps:
-      - name: SSH 到服务器执行一键更新
-        uses: appleboy/ssh-action@v1
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: root
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          script: |
-            cd /opt/channel
-            git fetch origin main
-            git reset --hard origin/main
-            cd deploy
-            docker compose up -d --build
-            docker image prune -f
+          python-version: '3.12'
+      - name: 安装依赖
+        run: pip install -r backend/requirements.txt
+      - name: 后端冒烟测试
+        run: cd backend && python -c "from app.main import app; print('OK: API 应用可加载')"
