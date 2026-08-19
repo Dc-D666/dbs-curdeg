@@ -1,7 +1,9 @@
 <template>
   <main class="feed-page">
     <header class="page-header">
-      <router-link to="/me" class="back">← 我的</router-link>
+      <router-link to="/me" class="back">
+        <ArrowLeftIcon class="back-icon" /> 我的
+      </router-link>
       <h1 class="page-title">我关注的频道</h1>
     </header>
 
@@ -22,13 +24,14 @@
     </t-button>
 
     <p class="go-discover">
-      <router-link to="/discover" class="discover-link">去发现更多频道 →</router-link>
+      <router-link to="/discover" class="discover-link">去发现更多频道 <ArrowRightIcon class="discover-arrow" /></router-link>
     </p>
   </main>
 </template>
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { ArrowLeftIcon, ArrowRightIcon } from 'tdesign-icons-vue-next'
 import FeedCard from '@/components/FeedCard.vue'
 import SkeletonFeed from '@/components/SkeletonFeed.vue'
 import EmptyState from '@/components/EmptyState.vue'
@@ -75,6 +78,13 @@ async function loadMore() {
 .back {
   color: var(--text-3);
   font-size: var(--fs-body);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.back-icon {
+  width: 16px;
+  height: 16px;
 }
 .page-title {
   margin: 0;
@@ -104,5 +114,12 @@ async function loadMore() {
   color: var(--brand);
   font-size: var(--fs-caption);
   text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.discover-arrow {
+  width: 14px;
+  height: 14px;
 }
 </style>

@@ -1,7 +1,9 @@
 <template>
   <main class="create-page">
     <header class="page-header">
-      <router-link :to="`/c/${cid}`" class="back">← 返回</router-link>
+      <router-link :to="`/c/${cid}`" class="back">
+        <ArrowLeftIcon class="back-icon" /> 返回
+      </router-link>
       <h1 class="page-title">{{ editing ? '编辑帖子' : '发帖' }}</h1>
     </header>
 
@@ -29,6 +31,7 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { ArrowLeftIcon } from 'tdesign-icons-vue-next'
 import RichEditor from '@/components/RichEditor.vue'
 import { postApi, type RichSegment } from '@/api/post'
 import { tokenStore } from '@/api/http'
@@ -128,6 +131,13 @@ async function onSubmit() {
 .back {
   color: var(--text-3);
   font-size: var(--fs-body);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.back-icon {
+  width: 16px;
+  height: 16px;
 }
 .page-title {
   margin: 0;

@@ -1,7 +1,9 @@
 <template>
   <main class="admin">
     <header class="page-header">
-      <router-link :to="`/c/${cid}`" class="back">← {{ community?.name || '频道' }}</router-link>
+      <router-link :to="`/c/${cid}`" class="back">
+        <ArrowLeftIcon class="back-icon" /> {{ community?.name || '频道' }}
+      </router-link>
       <h1 class="page-title">管理后台</h1>
     </header>
 
@@ -9,8 +11,7 @@
       <!-- 成员管理 -->
       <t-tab-panel value="members" label="成员管理">
         <div class="panel">
-          <div class="member-row" v-for="m in members" :key="m.id">
-            <t-avatar :image="m.avatar_url || undefined" size="36px">
+          <div class="member-row" v-for="m in members" :key="m.id">            <t-avatar :image="m.avatar_url || undefined" size="36px">
               <template #icon>{{ (m.user_nickname || m.nickname).slice(0, 1) }}</template>
             </t-avatar>
             <div class="m-info">
@@ -44,6 +45,13 @@
             </div>
           </div>
           <t-empty v-if="members.length === 0" description="暂无成员" />
+          <t-button
+            v-if="membersHasMore"
+            variant="outline"
+            block
+            class="load-more-members"
+            @click="loadMoreMembers()"
+          >加载更多成员（{{ members.length }}/{{ membersTotal }}）</t-button>
         </div>
       </t-tab-panel>
 
@@ -52,7 +60,7 @@
         <div class="panel">
           <div class="role-form">
             <t-input v-model.trim="roleForm.name" class="role-name-input" placeholder="身份组名称" maxlength="32" clearable />
-            <t-input v-model="roleForm.color" class="color-input" placeholder="#1a73e8" maxlength="7" />
+            <t-color-picker v-model="roleForm.color" :color-modes="['monochrome']" class="color-picker" />
             <t-input-number v-model="roleForm.level" class="level-input" :min="0" :max="99" theme="column" />
             <t-button theme="primary" size="small" :loading="roleSaving" :disabled="!roleForm.name" @click="onCreateRole">
               {{ roleSaving ? '创建中…' : '新建身份组' }}
@@ -113,8 +121,9 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
+import { ArrowLeftIcon } from 'tdesign-icons-vue-next'
 import { useAuthStore } from '@/stores/auth'
 import { communityApi, manageApi, roleApi, type Community, type Member, type OpLogItem, type RoleItem } from '@/api/community'
 import { toast } from '@/utils/toast'
@@ -127,6 +136,9 @@ const cid = Number(route.params.id)
 const tab = ref<'members' | 'roles' | 'ops'>('members')
 const community = ref<Community | null>(null)
 const members = ref<Member[]>([])
+const membersPage = ref(1)
+const membersTotal = ref(0)
+const membersHasMore = computed(() => members.value.length < membersTotal.value)
 const roles = ref<RoleItem[]>([])
 const ops = ref<OpLogItem[]>([])
 const msg = ref('')
@@ -174,10 +186,22 @@ function canManage(m: Member): boolean {
   return m.user_id !== auth.user?.id && m.member_type !== 0
 }
 
-async function reloadMembers() {
-  const data = await communityApi.members(cid, 1, 100)
-  members.value = data.items
+async function loadMembers(page: number, append = false) {
+  // 后端 members 接口 page_size 上限 50，超出返回 400 —— 分页拉取
+  const data = await communityApi.members(cid, page, 50)
+  members.value = append ? [...members.value, ...data.items] : data.items
+  membersTotal.value = data.total
   for (const m of data.items) roleSel[m.user_id] = m.role_id ?? 0
+}
+
+async function reloadMembers() {
+  membersPage.value = 1
+  await loadMembers(1)
+}
+
+async function loadMoreMembers() {
+  membersPage.value += 1
+  await loadMembers(membersPage.value, true)
 }
 
 onMounted(async () => {
@@ -328,6 +352,13 @@ async function onDeleteRole(r: RoleItem) {
 .back {
   color: var(--text-3);
   font-size: var(--fs-body);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.back-icon {
+  width: 16px;
+  height: 16px;
 }
 .page-title {
   margin: 0;
@@ -399,11 +430,14 @@ async function onDeleteRole(r: RoleItem) {
   flex: 1;
   min-width: 120px;
 }
-.color-input {
-  width: 100px;
+.color-picker {
+  width: 40px;
 }
 .level-input {
   width: 90px;
+}
+.load-more-members {
+  margin-top: var(--sp-2);
 }
 .role-card {
   padding: var(--sp-2) 0;

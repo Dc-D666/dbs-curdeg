@@ -1,7 +1,9 @@
 <template>
   <main class="detail">
     <header class="page-header">
-      <router-link to="/discover" class="back">← 发现</router-link>
+      <router-link to="/discover" class="back">
+        <ArrowLeftIcon class="back-icon" /> 发现
+      </router-link>
       <h1 class="page-title">{{ community?.name || '频道' }}</h1>
       <span v-if="community?.is_member" class="tag tag-member">已加入</span>
     </header>
@@ -136,6 +138,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { ArrowLeftIcon } from 'tdesign-icons-vue-next'
 import { communityApi, type Community, type JoinRequestItem, type Member } from '@/api/community'
 import { postApi, type PostItem } from '@/api/post'
 import FeedCard from '@/components/FeedCard.vue'
@@ -371,6 +374,13 @@ async function onDissolve() {
 .back {
   color: var(--text-3);
   font-size: var(--fs-body);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.back-icon {
+  width: 16px;
+  height: 16px;
 }
 .page-title {
   margin: 0;

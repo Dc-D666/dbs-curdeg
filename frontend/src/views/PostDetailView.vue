@@ -1,7 +1,9 @@
 <template>
   <main class="detail-page">
     <header class="page-header">
-      <router-link :to="post ? `/c/${post.community_id}` : '/discover'" class="back">← 返回</router-link>
+      <router-link :to="post ? `/c/${post.community_id}` : '/discover'" class="back">
+        <ArrowLeftIcon class="back-icon" /> 返回
+      </router-link>
       <h1 class="page-title">帖子</h1>
     </header>
 
@@ -158,6 +160,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { ArrowLeftIcon } from 'tdesign-icons-vue-next'
 import { communityApi } from '@/api/community'
 import EmptyState from '@/components/EmptyState.vue'
 import { postApi, type CommentItem, type PostItem } from '@/api/post'
@@ -461,6 +464,13 @@ async function onDeletePost() {
 .back {
   color: var(--text-3);
   font-size: var(--fs-body);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.back-icon {
+  width: 16px;
+  height: 16px;
 }
 .page-title {
   margin: 0;

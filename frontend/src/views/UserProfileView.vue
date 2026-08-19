@@ -1,7 +1,9 @@
 <template>
   <main class="profile">
     <header class="page-header">
-      <t-button variant="text" @click="$router.back()">← 返回</t-button>
+      <t-button variant="text" @click="$router.back()">
+        <ArrowLeftIcon class="back-icon" /> 返回
+      </t-button>
       <h1 class="page-title">用户主页</h1>
     </header>
 
@@ -33,6 +35,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
+import { ArrowLeftIcon } from 'tdesign-icons-vue-next'
 import { userApi, type PublicUser } from '@/api/user'
 
 const route = useRoute()
@@ -88,6 +91,11 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: var(--sp-4);
+}
+.back-icon {
+  width: 16px;
+  height: 16px;
+  vertical-align: -2px;
 }
 .nickname {
   margin: 0;

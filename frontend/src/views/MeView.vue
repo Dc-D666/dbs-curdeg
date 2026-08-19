@@ -1,7 +1,9 @@
 <template>
   <main class="me">
     <header class="me-header">
-      <router-link to="/" class="back">← 返回</router-link>
+      <router-link to="/" class="back">
+        <ArrowLeftIcon class="back-icon" /> 返回
+      </router-link>
       <h1 class="me-title">个人中心</h1>
     </header>
 
@@ -63,7 +65,7 @@
     <section class="panel">
       <router-link to="/me/feed" class="feed-link">
         <span>我关注的频道</span>
-        <t-icon name="chevron-right" class="feed-arrow" />
+        <ArrowRightIcon class="feed-arrow" />
       </router-link>
     </section>
 
@@ -93,6 +95,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import { ArrowLeftIcon, ArrowRightIcon } from 'tdesign-icons-vue-next'
 import { request } from '@/api/http'
 import { useAuthStore, type UserInfo } from '@/stores/auth'
 
@@ -211,6 +214,13 @@ async function onChangePassword() {
 .back {
   color: var(--text-3);
   font-size: var(--fs-body);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.back-icon {
+  width: 16px;
+  height: 16px;
 }
 .me-title {
   margin: 0;
@@ -315,5 +325,7 @@ async function onChangePassword() {
 }
 .feed-arrow {
   color: var(--td-text-color-placeholder);
+  width: 16px;
+  height: 16px;
 }
 </style>
