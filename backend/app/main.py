@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
-from app.api.v1 import ai, auth, boards, comments, communities, interact, manage, members, notifications, posts, roles, search, shares, topics, uploads, users
+from app.api.v1 import admin, ai, auth, boards, comments, communities, interact, manage, members, notifications, posts, roles, search, shares, topics, uploads, users
 from app.core.config import settings
 from app.core.security import decode_token
 from app.db import get_db
@@ -104,6 +104,7 @@ app.include_router(shares.router, prefix=API_V1)
 # 短链跳转：根路径例外（nginx 反代 /s/ 到本路由，方案 §5.1）
 app.include_router(shares.public_router)
 app.include_router(ai.router, prefix=API_V1)
+app.include_router(admin.router, prefix=API_V1)
 
 
 @app.on_event("startup")

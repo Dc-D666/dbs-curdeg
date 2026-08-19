@@ -192,3 +192,4 @@ def _mock_llm_gateway(monkeypatch):
     monkeypatch.setattr(llm_gateway, "stream", fake_stream)
     monkeypatch.setattr(llm_gateway, "embed", fake_embed)
     monkeypatch.setattr(settings, "AI_REVIEW_ENABLED", False)
+    monkeypatch.setattr(settings, "RATE_LIMIT_ENABLED", False)  # 共享 Redis，避免限流串扰

@@ -47,6 +47,8 @@ class Settings(BaseSettings):
     # 内容审核：发帖后异步快审（False 关闭，测试/开发可关）
     AI_REVIEW_ENABLED: bool = True
     AI_REVIEW_QUEUE: str = "ai:review:queue"
+    # 接口限流（阶段 7）：False 关闭（测试环境关闭避免共享 Redis 串扰）
+    RATE_LIMIT_ENABLED: bool = True
 
     # CORS
     CORS_ORIGINS: list[str] = ["*"]

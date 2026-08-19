@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user
+from app.core.ratelimit import rate_limit
 from app.core.response import ok
 from app.db import get_db
 from app.models.user import User
@@ -19,22 +20,22 @@ from app.services import auth_service
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-@router.post("/send-code")
+@router.post("/send-code", dependencies=[Depends(rate_limit("send_code", limit=10, window=60))])
 def send_code(payload: SendCodeRequest):
-    """发送注册邮箱验证码。"""
+    """发送注册邮箱验证码（同 IP 1 分钟最多 10 次）。"""
     auth_service.send_code(payload.email)
     return ok(message="验证码已发送")
 
 
-@router.post("/register")
+@router.post("/register", dependencies=[Depends(rate_limit("register", limit=10, window=60))])
 def register(payload: RegisterRequest, db: Session = Depends(get_db)):
-    """注册：邮箱验证码 + 用户名 + 密码。"""
+    """注册：邮箱验证码 + 用户名 + 密码（同 IP 1 分钟最多 10 次）。"""
     return ok(data=auth_service.register(db, payload), message="注册成功")
 
 
-@router.post("/login")
+@router.post("/login", dependencies=[Depends(rate_limit("login", limit=20, window=60))])
 def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)):
-    """登录：用户名或邮箱 + 密码。"""
+    """登录：用户名或邮箱 + 密码（同 IP 1 分钟最多 20 次，防爆破）。"""
     return ok(data=auth_service.login(db, payload), message="登录成功")
 
 

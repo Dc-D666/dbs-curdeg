@@ -57,6 +57,12 @@ def search_posts(
             seen.add(post.id)
             merged.append(post.id)
 
+    # 语义召回（阶段 7）：embedding 余弦补漏（关键词命中优先，语义只补召回缺口）
+    for pid in _semantic_recall(db, q, community_id):
+        if pid not in seen:
+            seen.add(pid)
+            merged.append(pid)
+
     total = len(merged)
     page_ids = merged[(page - 1) * page_size: page * page_size]
     posts = []
@@ -148,11 +154,34 @@ def _like_posts(db: Session, q: str, community_id: int | None) -> list[Post]:
 
 
 def _semantic_recall(db: Session, q: str, community_id: int | None) -> list[int]:
-    """语义召回挂点：阶段 6 接入 embedding（GLM Embedding-3 API）后实现余弦召回。
+    """语义召回（阶段 7）：query embedding → 已构建 embedding 的帖子余弦 TopK。
 
-    当前未配置 embedding key，返回空（纯关键词路径，验收标准只要求关键词可搜）。
+    只召回过 embedding 的帖子（不在此处懒构建，避免搜索链路调外部 API）；
+    需要先通过问答/其他路径构建（posts.embedding 列）。GLM 不可用或相似度
+    低于阈值时返回空（不影响关键词路径）。
     """
-    return []
+    from app.ai import llm_gateway
+    from app.ai.rag import _cosine
+
+    try:
+        q_emb = llm_gateway.embed(q)
+    except Exception:
+        return []
+    stmt = (
+        select(Post)
+        .where(Post.status == POST_STATUS_NORMAL, Post.embedding.is_not(None))
+        .order_by(Post.id.desc())
+        .limit(50)
+    )
+    if community_id is not None:
+        stmt = stmt.where(Post.community_id == community_id)
+    scored = []
+    for p in db.execute(stmt).scalars().all():
+        score = _cosine(q_emb, p.embedding)
+        if score > 0.5:
+            scored.append((score, p.id))
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [pid for _, pid in scored[:20]]
 
 
 # ---------- 组装与高亮 ----------

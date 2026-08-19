@@ -69,6 +69,13 @@
       </router-link>
     </section>
 
+    <section v-if="auth.user?.user_type === 1" class="panel">
+      <router-link to="/dashboard" class="feed-link">
+        <span>📊 运营看板（系统管理员）</span>
+        <ArrowRightIcon class="feed-arrow" />
+      </router-link>
+    </section>
+
     <section class="panel">
       <h3 class="panel-title">修改密码</h3>
       <form class="form" @submit.prevent="onChangePassword">
