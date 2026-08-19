@@ -29,6 +29,9 @@ services:
   redis:
     image: redis:7-alpine
     restart: always
+    ports:
+      # 仅回环绑定：供本地开发/测试经 SSH 隧道访问；公网防火墙不开 6379
+      - "127.0.0.1:6379:6379"
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - redis_data:/data
