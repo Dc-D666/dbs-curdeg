@@ -2,7 +2,8 @@
 FROM node:20-alpine AS build
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci
+# 使用国内 npm 镜像（服务器在国内，直连 npmjs.org 慢/不稳）
+RUN npm config set registry https://registry.npmmirror.com && npm ci
 COPY . .
 RUN npm run build
 
