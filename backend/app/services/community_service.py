@@ -8,6 +8,7 @@ from app.core.permissions import (
     PERMS_ADMIN,
     PERMS_NORMAL,
     PERMS_OWNER,
+    PERMS_SUPER_ADMIN,
     PERM_MEMBER_MANAGE,
     require_perms,
 )
@@ -52,10 +53,11 @@ def create_community(db: Session, user: User, payload: CreateCommunityRequest) -
     db.add(community)
     db.flush()  # 拿到 id
 
-    owner_role = Role(community_id=community.id, name="频道主", level=100, perms=PERMS_OWNER, is_default=True)
-    admin_role = Role(community_id=community.id, name="管理员", level=50, perms=PERMS_ADMIN, is_default=True)
-    normal_role = Role(community_id=community.id, name="成员", level=10, perms=PERMS_NORMAL, is_default=True)
-    db.add_all([owner_role, admin_role, normal_role])
+    owner_role = Role(community_id=community.id, name="频道主", level=100, sort=0, perms=PERMS_OWNER, is_default=True)
+    super_admin_role = Role(community_id=community.id, name="超级管理员", level=1, sort=1, perms=PERMS_SUPER_ADMIN, is_default=True)
+    admin_role = Role(community_id=community.id, name="普通管理员", level=50, sort=2, perms=PERMS_ADMIN, is_default=True)
+    normal_role = Role(community_id=community.id, name="成员", level=10, sort=3, perms=PERMS_NORMAL, is_default=True)
+    db.add_all([owner_role, super_admin_role, admin_role, normal_role])
     db.flush()
 
     member = Member(

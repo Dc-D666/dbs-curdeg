@@ -19,6 +19,7 @@
                 {{ m.user_nickname || m.nickname }}
                 <t-tag v-if="m.role_name" size="small" variant="light" class="m-role">{{ m.role_name }}</t-tag>
                 <t-tag v-else size="small" variant="outline" class="m-role">{{ memberTypeName(m.member_type) }}</t-tag>
+                <t-tag size="small" variant="light" theme="warning" class="m-lv">Lv.{{ m.level }}</t-tag>
               </div>
               <div class="m-sub">
                 <span v-if="m.shutup_expire_at" class="m-muted">🔇 禁言至 {{ m.shutup_expire_at.slice(0, 16) }}</span>
@@ -61,31 +62,80 @@
           <div class="role-form">
             <t-input v-model.trim="roleForm.name" class="role-name-input" placeholder="身份组名称" maxlength="32" clearable />
             <t-color-picker v-model="roleForm.color" :color-modes="['monochrome']" class="color-picker" />
-            <t-input-number v-model="roleForm.level" class="level-input" :min="0" :max="99" theme="column" />
+            <t-checkbox v-model="roleForm.is_level_role" class="level-role-check">等级身份</t-checkbox>
+            <t-input-number
+              v-if="roleForm.is_level_role"
+              v-model="roleForm.level"
+              class="level-input"
+              :min="1"
+              :max="9999"
+              theme="column"
+              placeholder="门槛等级"
+            />
             <t-button theme="primary" size="small" :loading="roleSaving" :disabled="!roleForm.name" @click="onCreateRole">
               {{ roleSaving ? '创建中…' : '新建身份组' }}
             </t-button>
           </div>
-          <div class="role-card" v-for="r in roles" :key="r.id">
+          <p class="role-form-hint">排序在前（权重高）的身份组可管理排序在后的身份组；等级身份按成员活跃等级达标自动授予</p>
+          <div class="role-card" v-for="(r, i) in roles" :key="r.id">
             <div class="role-head">
               <span class="role-dot" :style="{ background: r.color }"></span>
               <span class="role-name">{{ r.name }}</span>
-              <t-tag size="small" variant="light" theme="primary">Lv.{{ r.level }}</t-tag>
               <t-tag v-if="r.is_default" size="small" variant="outline">默认</t-tag>
-              <span class="role-id">#{{ r.id }}</span>
+              <t-tag v-if="r.is_level_role" size="small" variant="light" theme="warning">等级 Lv.{{ r.level }}+</t-tag>
+              <span class="role-id">第 {{ i + 1 }} 位</span>
             </div>
             <div class="perms">
               <t-checkbox
                 v-for="p in PERM_ITEMS"
                 :key="p.key"
                 :checked="r.perms.includes(p.key)"
-                :disabled="r.name === '频道主'"
+                :disabled="!canEditRole(r)"
                 @change="(v: boolean) => onTogglePerm(r, p.key, v)"
               >
                 {{ p.label }}
               </t-checkbox>
             </div>
-            <t-button v-if="!r.is_default" variant="outline" size="small" theme="danger" @click="onDeleteRole(r)">删除</t-button>
+            <div class="role-ops">
+              <t-button
+                v-if="canEditRole(r)"
+                variant="outline"
+                size="small"
+                :disabled="i === 0"
+                @click="onMoveRole(r, 'up')"
+              >↑ 上移</t-button>
+              <t-button
+                v-if="canEditRole(r)"
+                variant="outline"
+                size="small"
+                :disabled="i === roles.length - 1"
+                @click="onMoveRole(r, 'down')"
+              >↓ 下移</t-button>
+              <t-checkbox
+                v-if="canEditRole(r)"
+                v-model="levelRoleMap[r.id]"
+                class="level-role-check"
+                @change="onToggleLevelRole(r, $event as unknown as boolean)"
+              >等级身份</t-checkbox>
+              <t-input-number
+                v-if="canEditRole(r) && r.is_level_role"
+                :model-value="r.level"
+                class="level-input"
+                :min="1"
+                :max="9999"
+                size="small"
+                theme="column"
+                @change="onChangeThreshold(r, $event as number)"
+              />
+              <t-button
+                v-if="!r.is_default && canEditRole(r)"
+                variant="outline"
+                size="small"
+                theme="danger"
+                @click="onDeleteRole(r)"
+              >删除</t-button>
+              <t-tag v-if="r.name === '频道主'" size="small" variant="light" theme="primary">拥有全部权限，不可修改</t-tag>
+            </div>
           </div>
         </div>
       </t-tab-panel>
@@ -125,7 +175,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ArrowLeftIcon } from 'tdesign-icons-vue-next'
 import { useAuthStore } from '@/stores/auth'
-import { communityApi, manageApi, roleApi, type Community, type Member, type OpLogItem, type RoleItem } from '@/api/community'
+import { communityApi, manageApi, roleApi, type Community, type Member, type MyRole, type OpLogItem, type RoleItem } from '@/api/community'
 import { toast } from '@/utils/toast'
 import { confirmDialog } from '@/utils/confirm'
 
@@ -144,7 +194,21 @@ const ops = ref<OpLogItem[]>([])
 const msg = ref('')
 const roleSel = reactive<Record<number, number>>({})
 const roleSaving = ref(false)
-const roleForm = reactive({ name: '', color: '#1a73e8', level: 0 })
+const roleForm = reactive({ name: '', color: '#1a73e8', level: 1, is_level_role: false })
+const myRole = ref<MyRole | null>(null)
+const levelRoleMap = reactive<Record<number, boolean>>({})
+
+/** 可编辑范围：频道主恒可；否则仅排序（sort）在本人之后的身份组 */
+function canEditRole(r: RoleItem): boolean {
+  if (r.name === '频道主') return false
+  if (myRole.value?.is_owner) return true
+  return (myRole.value?.sort ?? 99) < r.sort
+}
+
+async function reloadRoles() {
+  roles.value = await roleApi.list(cid)
+  for (const r of roles.value) levelRoleMap[r.id] = r.is_level_role
+}
 
 // 禁言弹窗
 const shutupDialog = ref(false)
@@ -208,7 +272,8 @@ onMounted(async () => {
   try {
     if (!auth.user) await auth.fetchMe()
     community.value = await communityApi.get(cid)
-    roles.value = await roleApi.list(cid)
+    myRole.value = await roleApi.my(cid)
+    await reloadRoles()
     await reloadMembers()
     ops.value = (await manageApi.ops(cid, 1, 50)).items
   } catch (e) {
@@ -303,13 +368,45 @@ async function onCreateRole() {
   try {
     await roleApi.create(cid, { ...roleForm, perms: [] })
     roleForm.name = ''
-    roleForm.level = 0
-    roles.value = await roleApi.list(cid)
+    roleForm.level = 1
+    roleForm.is_level_role = false
+    await reloadRoles()
     toast('身份组已创建')
   } catch (e) {
     toast(e instanceof Error ? e.message : '创建失败', 'error')
   } finally {
     roleSaving.value = false
+  }
+}
+
+async function onMoveRole(r: RoleItem, direction: 'up' | 'down') {
+  try {
+    await roleApi.move(cid, r.id, direction)
+    await reloadRoles()
+    toast('排序已调整')
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '操作失败', 'error')
+  }
+}
+
+async function onToggleLevelRole(r: RoleItem, checked: boolean) {
+  try {
+    await roleApi.update(cid, r.id, { is_level_role: checked })
+    await reloadRoles()
+    toast(checked ? '已设为等级身份' : '已取消等级身份')
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '保存失败', 'error')
+  }
+}
+
+async function onChangeThreshold(r: RoleItem, value: number) {
+  if (!Number.isFinite(value) || value < 1) return
+  try {
+    await roleApi.update(cid, r.id, { level: Math.floor(value) })
+    await reloadRoles()
+    toast('门槛等级已更新')
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '保存失败', 'error')
   }
 }
 
@@ -328,7 +425,7 @@ async function onDeleteRole(r: RoleItem) {
   if (!(await confirmDialog('删除身份组', `确定删除身份组「${r.name}」？其成员将回到默认身份。`))) return
   try {
     await roleApi.remove(cid, r.id)
-    roles.value = await roleApi.list(cid)
+    await reloadRoles()
     toast('身份组已删除')
   } catch (e) {
     toast(e instanceof Error ? e.message : '删除失败', 'error')
@@ -426,6 +523,11 @@ async function onDeleteRole(r: RoleItem) {
   border-bottom: 1px solid var(--td-component-border);
   margin-bottom: var(--sp-2);
 }
+.role-form-hint {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-caption);
+  color: var(--td-text-color-placeholder);
+}
 .role-name-input {
   flex: 1;
   min-width: 120px;
@@ -435,6 +537,18 @@ async function onDeleteRole(r: RoleItem) {
 }
 .level-input {
   width: 90px;
+}
+.level-role-check {
+  margin-left: var(--sp-1);
+}
+.role-ops {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+.m-lv {
+  margin-left: var(--sp-1);
 }
 .load-more-members {
   margin-top: var(--sp-2);

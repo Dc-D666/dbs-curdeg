@@ -52,15 +52,21 @@ class UpdateCommunityStatusRequest(BaseModel):
 class CreateRoleRequest(BaseModel):
     name: str = Field(min_length=1, max_length=32)
     color: str = Field(default="#1a73e8", pattern=r"^#[0-9a-fA-F]{6}$")
-    level: int = Field(default=0, ge=0, le=99)  # 100 为频道主保留
+    level: int = Field(default=0, ge=0)  # 等级身份门槛（仅 is_level_role 生效）
     perms: list[str] = Field(default_factory=list)
+    is_level_role: bool = False  # 等级身份：成员活跃等级 ≥ level 自动授予
 
 
 class UpdateRoleRequest(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=32)
     color: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$")
-    level: int | None = Field(default=None, ge=0, le=99)
+    level: int | None = Field(default=None, ge=0)
     perms: list[str] | None = None
+    is_level_role: bool | None = None
+
+
+class MoveRoleRequest(BaseModel):
+    direction: str = Field(pattern="^(up|down)$")  # 上移/下移（排序即权重）
 
 
 class AssignRoleRequest(BaseModel):
@@ -73,8 +79,10 @@ class RoleOut(BaseModel):
     name: str
     color: str
     level: int
+    sort: int
     perms: list
     is_default: bool
+    is_level_role: bool
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -136,6 +144,7 @@ class MemberOut(BaseModel):
     user_id: int
     nickname: str
     member_type: int
+    level: int = 1                       # 活跃等级（互动增长）
     join_time: datetime
     shutup_expire_at: datetime | None
     is_blocked: bool

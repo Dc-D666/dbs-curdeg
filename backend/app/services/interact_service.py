@@ -15,6 +15,7 @@ from app.models.follow import Follow
 from app.models.like import Like
 from app.models.post import Post, POST_STATUS_NORMAL
 from app.models.user import User
+from app.services.level_service import LEVEL_POINTS, add_level
 from app.services.post_service import _require_member
 
 # post_id / comment_id 用 0 表示"无"（哨兵值，保证唯一约束生效，见 like.py 注释）
@@ -38,6 +39,8 @@ def like(db: Session, user: User, post_id: int | None = None, comment_id: int | 
 
     db.add(Like(post_id=post_id, comment_id=comment_id, user_id=user.id))
     _bump_count(db, target, +1)
+    # 活跃等级：点赞 +1（仅新增点赞时，重复点赞不加）
+    add_level(db, community_id, user.id, LEVEL_POINTS["like"])
     try:
         db.commit()
     except IntegrityError:

@@ -9,6 +9,7 @@ from app.models.like import Like
 from app.models.post import Post
 from app.models.user import User
 from app.schemas.post import CommentOut, CreateCommentRequest
+from app.services.level_service import LEVEL_POINTS, add_level
 from app.services.op_log_service import log_op
 from app.services.post_service import _require_member
 
@@ -42,6 +43,8 @@ def create_comment(
     db.add(comment)
     # 原子自增，避免并发 read-modify-write 丢计数
     db.execute(update(Post).where(Post.id == post.id).values(comment_count=Post.comment_count + 1))
+    # 活跃等级：评论 +2
+    add_level(db, post.community_id, user.id, LEVEL_POINTS["comment"])
     db.commit()
     db.refresh(comment)
     return comment_out(db, comment, user.id)

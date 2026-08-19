@@ -5,8 +5,8 @@
   2. 成员有 role_id 且身份组存在 → 以 roles.perms 为准（自定义身份组可裁剪/扩展权限）；
   3. 成员无身份组（role_id 为空）→ 按 member_type 兜底默认组权限（兼容历史数据/测试）。
 
-越级防护（get_member_level）：管理动作只能作用于 level 严格低于操作者的成员；
-频道主 level 100 恒不可被他人管理。
+越级防护（get_member_weight）：管理动作只能作用于排序（sort）严格靠后的成员；
+频道主 sort=0 恒不可被他人管理。
 """
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -44,6 +44,8 @@ PERMS_ADMIN = [
     PERM_DELETE_POST, PERM_DELETE_COMMENT, PERM_SHUTUP, PERM_KICK,
     PERM_MEMBER_MANAGE, PERM_MODERATE,
 ]
+# 超级管理员：全量 - super（频道主专属）；不能解散频道（解散走 member_type==OWNER 检查）
+PERMS_SUPER_ADMIN = [p for p in ALL_PERMS if p != PERM_SUPER]
 PERMS_NORMAL = [PERM_POST_CREATE, PERM_COMMENT_CREATE]
 
 # member_type 无身份组时的兜底（兼容老数据）
@@ -55,13 +57,13 @@ _DEFAULT_PERMS: dict[int, list[str]] = {
     MEMBER_AI: PERMS_NORMAL,
 }
 
-# 默认 level 权重（无身份组时按 member_type 估算，用于越级防护）
-_DEFAULT_LEVEL: dict[int, int] = {
-    MEMBER_OWNER: 100,
-    MEMBER_ADMIN: 50,
-    MEMBER_NORMAL: 10,
-    MEMBER_ROBOT: 10,
-    MEMBER_AI: 10,
+# 默认 sort 权重（无身份组时按 member_type 兜底；sort 越小权重越高，可管理排序在后的组）
+_DEFAULT_SORT: dict[int, int] = {
+    MEMBER_OWNER: 0,
+    MEMBER_ADMIN: 2,
+    MEMBER_NORMAL: 3,
+    MEMBER_ROBOT: 3,
+    MEMBER_AI: 3,
 }
 
 
@@ -88,20 +90,23 @@ def get_member_perms(db: Session, community_id: int, user: User) -> set[str]:
     return set(_DEFAULT_PERMS.get(member.member_type, PERMS_NORMAL))
 
 
-def get_member_level(db: Session, member: Member) -> int:
-    """成员 level 权重：有身份组用 role.level，否则按 member_type 兜底。"""
+def get_member_weight(db: Session, member: Member) -> int:
+    """成员权重 = 身份组 sort（越小越靠前/权重越高，可管理排序在后的组）。
+
+    频道主恒 0（最前）；无身份组按 member_type 兜底（admin=2 对齐普通管理员、normal=3 对齐普通成员）。
+    """
     if member.member_type == MEMBER_OWNER:
-        return _DEFAULT_LEVEL[MEMBER_OWNER]
+        return 0
     if member.role_id:
         role = db.get(Role, member.role_id)
         if role is not None:
-            return role.level
-    return _DEFAULT_LEVEL.get(member.member_type, 10)
+            return role.sort
+    return _DEFAULT_SORT.get(member.member_type, 3)
 
 
 def can_manage(db: Session, operator: Member, target: Member) -> bool:
-    """越级防护：操作者 level 必须严格高于目标（owner 恒 100，不可被管理）。"""
-    return get_member_level(db, operator) > get_member_level(db, target)
+    """越级防护：操作者权重必须严格高于目标（sort 更小）；频道主（0）恒不可被管理。"""
+    return get_member_weight(db, operator) < get_member_weight(db, target)
 
 
 def require_perms(db: Session, community_id: int, user: User, *perms: str) -> Member | None:

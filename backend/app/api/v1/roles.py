@@ -10,7 +10,7 @@ from app.models.community import Community
 from app.models.member import Member
 from app.models.role import Role
 from app.models.user import User
-from app.schemas.community import AssignRoleRequest, CreateRoleRequest, UpdateRoleRequest
+from app.schemas.community import AssignRoleRequest, CreateRoleRequest, MoveRoleRequest, UpdateRoleRequest
 from app.services import role_service
 
 router = APIRouter(prefix="/communities/{community_id}", tags=["roles"])
@@ -21,6 +21,17 @@ def _get_community(db: Session, community_id: int) -> Community:
     if community is None or community.status != 0:
         raise NotFoundError("频道不存在")
     return community
+
+
+@router.get("/roles/my")
+def my_role(
+    community_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """我的身份组信息（可编辑范围判断）。注意：须声明在 /roles/{role_id} 之前。"""
+    _get_community(db, community_id)
+    return ok(data=role_service.my_role(db, community_id, user.id))
 
 
 @router.get("/roles")
@@ -56,6 +67,19 @@ def update_role(
     """更新身份组（role_manage；频道主身份组不可改）。"""
     _get_community(db, community_id)
     return ok(data=role_service.update_role(db, community_id, user, db.get(Role, role_id), payload), message="已保存")
+
+
+@router.post("/roles/{role_id}/move")
+def move_role(
+    community_id: int,
+    role_id: int,
+    payload: MoveRoleRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """上移/下移身份组（排序即权重，role_manage + 排序约束）。"""
+    _get_community(db, community_id)
+    return ok(data=role_service.move_role(db, community_id, user, db.get(Role, role_id), payload.direction), message="已调整")
 
 
 @router.delete("/roles/{role_id}")

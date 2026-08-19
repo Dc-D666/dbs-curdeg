@@ -18,6 +18,7 @@ from app.models.member import MEMBER_ADMIN, MEMBER_OWNER, Member
 from app.models.post import Post, POST_STATUS_DELETED, POST_STATUS_NORMAL
 from app.models.user import User
 from app.schemas.post import CreatePostRequest, PostOut, UpdatePostRequest
+from app.services.level_service import LEVEL_POINTS, add_level
 from app.services.op_log_service import log_op
 
 
@@ -45,6 +46,8 @@ def create_post(
     db.add(post)
     # 原子自增，避免并发 read-modify-write 丢计数
     db.execute(update(Community).where(Community.id == community.id).values(post_count=Community.post_count + 1))
+    # 活跃等级：发帖 +5（等级身份达标自动授予）
+    add_level(db, community.id, user.id, LEVEL_POINTS["post"])
     db.commit()
     db.refresh(post)
     return post_out(db, post, current_user_id=user.id)

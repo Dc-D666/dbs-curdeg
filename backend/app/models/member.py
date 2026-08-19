@@ -24,6 +24,7 @@ class Member(Base):
     role_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     nickname: Mapped[str] = mapped_column(String(64), default="")  # 频道内专属昵称
     member_type: Mapped[int] = mapped_column(Integer, default=MEMBER_NORMAL)
+    level: Mapped[int] = mapped_column(Integer, default=1)  # 频道内活跃等级（互动增长，等级身份自动授予依据）
     join_time: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     join_channel: Mapped[int] = mapped_column(Integer, default=0)  # 0主动申请 1邀请加入
     shutup_expire_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

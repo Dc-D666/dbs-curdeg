@@ -37,6 +37,7 @@ export interface Member {
   user_id: number
   nickname: string
   member_type: number
+  level: number
   join_time: string
   shutup_expire_at: string | null
   is_blocked: boolean
@@ -53,9 +54,18 @@ export interface RoleItem {
   name: string
   color: string
   level: number
+  sort: number
   perms: string[]
   is_default: boolean
+  is_level_role: boolean
   created_at: string
+}
+
+export interface MyRole {
+  role_id: number | null
+  name: string
+  sort: number
+  is_owner: boolean
 }
 
 export interface OpLogItem {
@@ -130,11 +140,17 @@ export const roleApi = {
   list(cid: number) {
     return request<RoleItem[]>({ url: `/communities/${cid}/roles` })
   },
-  create(cid: number, data: { name: string; color?: string; level?: number; perms?: string[] }) {
+  my(cid: number) {
+    return request<MyRole>({ url: `/communities/${cid}/roles/my` })
+  },
+  create(cid: number, data: { name: string; color?: string; level?: number; perms?: string[]; is_level_role?: boolean }) {
     return request<RoleItem>({ url: `/communities/${cid}/roles`, method: 'POST', data })
   },
   update(cid: number, roleId: number, data: Partial<RoleItem>) {
     return request<RoleItem>({ url: `/communities/${cid}/roles/${roleId}`, method: 'PUT', data })
+  },
+  move(cid: number, roleId: number, direction: 'up' | 'down') {
+    return request<RoleItem>({ url: `/communities/${cid}/roles/${roleId}/move`, method: 'POST', data: { direction } })
   },
   remove(cid: number, roleId: number) {
     return request<null>({ url: `/communities/${cid}/roles/${roleId}`, method: 'DELETE' })

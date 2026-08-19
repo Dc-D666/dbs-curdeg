@@ -82,7 +82,7 @@ def _assign_role(client, token: str, cid: int, user_id: int, role_id: int) -> di
 
 @pytest.fixture()
 def ctx(client):
-    """owner + normal（已加入）+ 管理员（赋默认"管理员"身份组）+ 版块 + 帖子。"""
+    """owner + normal（已加入）+ 管理员（赋默认"普通管理员"身份组）+ 版块 + 帖子。"""
     owner = _register(client, "rbacowner", "rbacowner@test.com")
     normal = _register(client, "rbacnormal", "rbacnormal@test.com")
     admin = _register(client, "rbacadmin", "rbacadmin@test.com")
@@ -92,7 +92,7 @@ def ctx(client):
     assert client.post(f"/api/v1/communities/{cid}/join", headers=_auth(admin)).status_code == 200
 
     admin_id = client.get("/api/v1/users/me", headers=_auth(admin)).json()["data"]["id"]
-    admin_role = _get_role_id(client, owner, cid, "管理员")
+    admin_role = _get_role_id(client, owner, cid, "普通管理员")
     _assign_role(client, owner, cid, admin_id, admin_role)
 
     post_id = _create_post(client, owner, cid, bid)
@@ -244,13 +244,13 @@ def test_assign_role_level_guard(ctx):
     """越级分配：管理员不能分配 level >= 自身(50) 的身份组。"""
     client = ctx["client"]
     normal_id = client.get("/api/v1/users/me", headers=_auth(ctx["normal"])).json()["data"]["id"]
-    admin_role = _get_role_id(client, ctx["owner"], ctx["cid"], "管理员")
+    admin_role = _get_role_id(client, ctx["owner"], ctx["cid"], "普通管理员")
     res = client.post(
         f"/api/v1/communities/{ctx['cid']}/members/{normal_id}/role",
         json={"role_id": admin_role}, headers=_auth(ctx["admin"]),
     )
     assert res.status_code == 403
-    assert "等级" in res.json()["message"]
+    assert "排序" in res.json()["message"]
     # 管理员不能修改自己的身份
     assert client.post(
         f"/api/v1/communities/{ctx['cid']}/members/{ctx['admin_id']}/role",
@@ -260,7 +260,7 @@ def test_assign_role_level_guard(ctx):
 
 def test_normal_cannot_assign_role(ctx):
     client = ctx["client"]
-    admin_role = _get_role_id(client, ctx["owner"], ctx["cid"], "管理员")
+    admin_role = _get_role_id(client, ctx["owner"], ctx["cid"], "普通管理员")
     normal_id = client.get("/api/v1/users/me", headers=_auth(ctx["normal"])).json()["data"]["id"]
     res = client.post(
         f"/api/v1/communities/{ctx['cid']}/members/{normal_id}/role",
@@ -313,7 +313,7 @@ def test_default_role_protected(ctx):
     """默认身份组不可删；频道主身份组不可改。"""
     client = ctx["client"]
     cid = ctx["cid"]
-    admin_role = _get_role_id(client, ctx["owner"], cid, "管理员")
+    admin_role = _get_role_id(client, ctx["owner"], cid, "普通管理员")
     assert client.delete(
         f"/api/v1/communities/{cid}/roles/{admin_role}", headers=_auth(ctx["owner"])
     ).status_code == 400
@@ -388,3 +388,126 @@ def test_shutup_expire_auto_unlock(db_session):
     db_session.commit()
     with pytest.raises(PermissionError_):
         post_service._require_member(db_session, c.id, u.id)
+
+
+# ---------- 排序权重：超级管理员 / 移动 ----------
+
+
+def test_super_admin_permission_boundaries(ctx):
+    """超管：可编辑排序在后的普通管理员权限；不能编辑频道主组；不能解散频道；不能把组移到自己前面。"""
+    client = ctx["client"]
+    cid = ctx["cid"]
+    super_role = _get_role_id(client, ctx["owner"], cid, "超级管理员")
+    sa = _register(client, "rbacsuper", "rbacsuper@test.com")
+    assert client.post(f"/api/v1/communities/{cid}/join", headers=_auth(sa)).status_code == 200
+    sa_id = client.get("/api/v1/users/me", headers=_auth(sa)).json()["data"]["id"]
+    _assign_role(client, ctx["owner"], cid, sa_id, super_role)
+
+    admin_role = _get_role_id(client, ctx["owner"], cid, "普通管理员")
+    # 超管能编辑普通管理员的权限
+    res = client.put(
+        f"/api/v1/communities/{cid}/roles/{admin_role}",
+        json={"perms": ["post.create", "comment.create"]},
+        headers=_auth(sa),
+    )
+    assert res.status_code == 200, res.text
+    # 超管不能编辑频道主组
+    owner_role = _get_role_id(client, ctx["owner"], cid, "频道主")
+    assert client.put(
+        f"/api/v1/communities/{cid}/roles/{owner_role}", json={"perms": []}, headers=_auth(sa)
+    ).status_code == 403
+    # 超管不能解散频道
+    assert client.delete(f"/api/v1/communities/{cid}", headers=_auth(sa)).status_code == 403
+    # 超管不能把普通管理员上移到自己前面
+    res = client.post(
+        f"/api/v1/communities/{cid}/roles/{admin_role}/move",
+        json={"direction": "up"}, headers=_auth(sa),
+    )
+    assert res.status_code == 403
+    # 普通管理员（无 role_manage）不能编辑任何身份组
+    assert client.put(
+        f"/api/v1/communities/{cid}/roles/{admin_role}",
+        json={"name": "改名"}, headers=_auth(ctx["admin"]),
+    ).status_code == 403
+
+
+def test_move_role_by_owner(ctx):
+    """频道主可移动身份组排序（上移/下移交换 sort）。"""
+    client = ctx["client"]
+    cid = ctx["cid"]
+    member_role = _get_role_id(client, ctx["owner"], cid, "成员")
+    admin_role = _get_role_id(client, ctx["owner"], cid, "普通管理员")
+
+    # 成员组下移已到最后 → 拒绝
+    assert client.post(
+        f"/api/v1/communities/{cid}/roles/{member_role}/move",
+        json={"direction": "down"}, headers=_auth(ctx["owner"]),
+    ).status_code == 400
+
+    # 普通管理员组上移：与超级管理员交换（owner 恒可）
+    res = client.post(
+        f"/api/v1/communities/{cid}/roles/{admin_role}/move",
+        json={"direction": "up"}, headers=_auth(ctx["owner"]),
+    )
+    assert res.status_code == 200, res.text
+    roles = client.get(f"/api/v1/communities/{cid}/roles", headers=_auth(ctx["owner"])).json()["data"]
+    by_name = {r["name"]: r["sort"] for r in roles}
+    assert by_name["普通管理员"] == 1
+    assert by_name["超级管理员"] == 2
+
+
+# ---------- 活跃等级与等级身份自动授予 ----------
+
+
+def test_level_role_auto_grant_and_revoke(ctx):
+    """等级身份：互动加分达标自动授予；门槛提高后互动触发回收。"""
+    client = ctx["client"]
+    cid = ctx["cid"]
+    rid = client.post(
+        f"/api/v1/communities/{cid}/roles",
+        json={"name": "活跃成员", "level": 6, "perms": ["post.create", "comment.create"], "is_level_role": True},
+        headers=_auth(ctx["owner"]),
+    ).json()["data"]["id"]
+    normal_id = client.get("/api/v1/users/me", headers=_auth(ctx["normal"])).json()["data"]["id"]
+
+    def _member():
+        items = client.get(f"/api/v1/communities/{cid}/members", headers=_auth(ctx["owner"])).json()["data"]["items"]
+        return next(m for m in items if m["user_id"] == normal_id)
+
+    # 默认 level=1，发帖 +5 → 6 达标 → 自动授予
+    res = client.post(
+        f"/api/v1/communities/{cid}/boards/{ctx['bid']}/posts",
+        json={"title": "升级帖", "content": "x"},
+        headers=_auth(ctx["normal"]),
+    )
+    assert res.status_code == 200, res.text
+    post_id = res.json()["data"]["id"]
+    m = _member()
+    assert m["level"] == 6
+    assert m["role_id"] == rid
+
+    # 门槛提高到 100 → 下次互动触发回收
+    assert client.put(
+        f"/api/v1/communities/{cid}/roles/{rid}", json={"level": 100}, headers=_auth(ctx["owner"])
+    ).status_code == 200
+    assert client.post("/api/v1/likes", json={"post_id": post_id}, headers=_auth(ctx["normal"])).status_code == 200
+    m = _member()
+    assert m["level"] == 7
+    assert m["role_id"] is None
+
+    # 手动分配的身份不被等级身份覆盖（普通管理员 sort=2 靠前）
+    admin_role = _get_role_id(client, ctx["owner"], cid, "普通管理员")
+    _assign_role(client, ctx["owner"], cid, normal_id, admin_role)
+    rid2 = client.post(
+        f"/api/v1/communities/{cid}/roles",
+        json={"name": "等级组", "level": 1, "perms": ["post.create"], "is_level_role": True},
+        headers=_auth(ctx["owner"]),
+    ).json()["data"]["id"]
+    assert client.post(
+        f"/api/v1/communities/{cid}/boards/{ctx['bid']}/posts",
+        json={"title": "手动优先", "content": "x"},
+        headers=_auth(ctx["normal"]),
+    ).status_code == 200
+    m = _member()
+    assert m["level"] == 12  # 7 + 发帖 5
+    assert m["role_id"] == admin_role  # 手动身份优先，不被等级身份覆盖
