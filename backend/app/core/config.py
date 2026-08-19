@@ -11,8 +11,8 @@ class Settings(BaseSettings):
     APP_VERSION: str = "0.1.0"
     DEBUG: bool = False
 
-    # 数据库（生产走 docker 网络：mysql:3306；本地 .env 覆盖）
-    MYSQL_HOST: str = "localhost"
+    # 数据库（生产 docker 网络下主机名为 compose 服务名 mysql；本地 .env 覆盖为 127.0.0.1）
+    MYSQL_HOST: str = "mysql"
     MYSQL_PORT: int = 3306
     MYSQL_DATABASE: str = "guild"
     MYSQL_USER: str = "guild"
