@@ -5,8 +5,9 @@
   SMTP_PASSWORD=<授权码>  SMTP_FROM=<发件邮箱>
 """
 import logging
-import smtplib
 import secrets
+import smtplib
+from datetime import date
 from email.header import Header
 from email.mime.text import MIMEText
 
@@ -31,7 +32,7 @@ def _redis() -> redis.Redis:
 def send_email_code(email: str) -> str:
     """生成验证码、落 Redis、发送邮件；返回验证码（便于测试/演示）。"""
     r = _redis()
-    daily_key = f"{DAILY_KEY_PREFIX}{email}:{__import__('datetime').date.today().isoformat()}"
+    daily_key = f"{DAILY_KEY_PREFIX}{email}:{date.today().isoformat()}"
     used = int(r.get(daily_key) or 0)
     if used >= DAILY_LIMIT:
         raise RuntimeError("该邮箱今日发送次数已达上限")

@@ -18,8 +18,8 @@ class Settings(BaseSettings):
     MYSQL_USER: str = "guild"
     MYSQL_PASSWORD: str = "guild"
 
-    # Redis
-    REDIS_HOST: str = "localhost"
+    # Redis（生产 docker 网络下主机名为 compose 服务名 redis；本地 .env 覆盖为隧道端口）
+    REDIS_HOST: str = "redis"
     REDIS_PORT: int = 6379
     REDIS_DB: int = 0
 
