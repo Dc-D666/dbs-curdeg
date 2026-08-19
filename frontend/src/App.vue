@@ -2,13 +2,14 @@
   <div class="app-shell">
     <router-view />
 
-    <nav v-if="showTabbar" class="tabbar">
-      <router-link v-for="t in tabs" :key="t.path" :to="t.path" class="tab-item"
-        :class="{ active: route.path === t.path }">
-        <component :is="t.icon" class="tab-icon" />
-        <span class="tab-label">{{ t.label }}</span>
-      </router-link>
-    </nav>
+    <t-tab-bar v-if="showTabbar" :value="route.path" class="tabbar">
+      <t-tab-bar-item v-for="t in tabs" :key="t.path" :value="t.path" :router-link="{ to: t.path }">
+        <template #icon>
+          <component :is="t.icon" class="tab-icon" />
+        </template>
+        {{ t.label }}
+      </t-tab-bar-item>
+    </t-tab-bar>
   </div>
 </template>
 
@@ -81,48 +82,16 @@ button {
 
 <style scoped>
 .tabbar {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: var(--tabbar-height);
   max-width: 100vw;
-  overflow: hidden;
-  background: var(--bg-card);
-  border-top: 1px solid var(--border);
-  display: flex;
   z-index: 50;
-}
-.tab-item {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  color: var(--text-3);
-  transition: color var(--anim-duration) var(--anim-ease);
-}
-.tab-item.active {
-  color: var(--brand);
 }
 .tab-icon {
   width: 24px;
   height: 24px;
-  flex-shrink: 0;
 }
 .tab-icon :deep(svg) {
   width: 24px;
   height: 24px;
   display: block;
-}
-.tab-label {
-  font-size: 12px;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 </style>

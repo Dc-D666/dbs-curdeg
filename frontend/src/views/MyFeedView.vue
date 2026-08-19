@@ -17,9 +17,9 @@
       <FeedCard v-for="p in items" :key="p.id" :post="p" show-community />
     </div>
 
-    <button v-if="hasMore" class="btn-ghost load-more" :disabled="loading" @click="loadMore()">
+    <t-button v-if="hasMore" variant="outline" block class="load-more" :loading="loading" @click="loadMore()">
       {{ loading ? '加载中…' : '加载更多' }}
-    </button>
+    </t-button>
 
     <p class="go-discover">
       <router-link to="/discover" class="discover-link">去发现更多频道 →</router-link>
@@ -94,8 +94,7 @@ async function loadMore() {
   gap: var(--sp-3);
 }
 .load-more {
-  width: 100%;
-  justify-content: center;
+  margin-top: var(--sp-3);
 }
 .go-discover {
   text-align: center;

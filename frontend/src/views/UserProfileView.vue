@@ -1,16 +1,19 @@
 <template>
   <main class="profile">
     <header class="page-header">
-      <button class="back" @click="$router.back()">← 返回</button>
+      <t-button variant="text" @click="$router.back()">← 返回</t-button>
       <h1 class="page-title">用户主页</h1>
     </header>
 
-    <div v-if="loading" class="state">加载中…</div>
+    <div v-if="loading" class="state">
+      <t-skeleton :row="3" :loading="true" animation="gradient" />
+    </div>
 
     <section v-else-if="user" class="panel">
       <div class="profile-row">
-        <img v-if="user.avatar_url" :src="user.avatar_url" class="avatar-img" alt="头像" />
-        <div v-else class="avatar">{{ initial }}</div>
+        <t-avatar :image="user.avatar_url || undefined" size="64px">
+          <template #icon>{{ initial }}</template>
+        </t-avatar>
         <div class="profile-main">
           <p class="nickname">{{ user.nickname || user.username }}</p>
           <p class="meta">@{{ user.username }} · 注册于 {{ createdDate }}</p>
@@ -64,13 +67,6 @@ onMounted(async () => {
   height: var(--nav-height);
   border-bottom: 1px solid var(--border);
 }
-.back {
-  border: none;
-  background: none;
-  color: var(--text-3);
-  font-size: var(--fs-body);
-  cursor: pointer;
-}
 .page-title {
   margin: 0;
   font-size: var(--fs-title);
@@ -83,36 +79,15 @@ onMounted(async () => {
 }
 .panel {
   margin-top: var(--sp-4);
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
+  background: var(--td-bg-color-container);
+  border: 1px solid var(--td-component-border);
+  border-radius: var(--td-radius-large);
   padding: var(--sp-4);
 }
 .profile-row {
   display: flex;
   align-items: center;
   gap: var(--sp-4);
-}
-.avatar {
-  width: 64px;
-  height: 64px;
-  border-radius: 50%;
-  background: var(--brand-weak);
-  color: var(--brand);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 26px;
-  font-weight: 600;
-  flex-shrink: 0;
-}
-.avatar-img {
-  width: 64px;
-  height: 64px;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 1px solid var(--border);
-  flex-shrink: 0;
 }
 .nickname {
   margin: 0;

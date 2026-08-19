@@ -5,93 +5,110 @@
       <h1 class="page-title">管理后台</h1>
     </header>
 
-    <div class="tabs" role="tablist">
-      <button class="tab" :class="{ active: tab === 'members' }" @click="tab = 'members'">成员管理</button>
-      <button class="tab" :class="{ active: tab === 'roles' }" @click="tab = 'roles'">身份组</button>
-      <button class="tab" :class="{ active: tab === 'ops' }" @click="tab = 'ops'">操作日志</button>
-    </div>
+    <t-tabs v-model="tab" class="tabs">
+      <!-- 成员管理 -->
+      <t-tab-panel value="members" label="成员管理">
+        <div class="panel">
+          <div class="member-row" v-for="m in members" :key="m.id">
+            <t-avatar :image="m.avatar_url || undefined" size="36px">
+              <template #icon>{{ (m.user_nickname || m.nickname).slice(0, 1) }}</template>
+            </t-avatar>
+            <div class="m-info">
+              <div class="m-name">
+                {{ m.user_nickname || m.nickname }}
+                <t-tag v-if="m.role_name" size="small" variant="light" class="m-role">{{ m.role_name }}</t-tag>
+                <t-tag v-else size="small" variant="outline" class="m-role">{{ memberTypeName(m.member_type) }}</t-tag>
+              </div>
+              <div class="m-sub">
+                <span v-if="m.shutup_expire_at" class="m-muted">🔇 禁言至 {{ m.shutup_expire_at.slice(0, 16) }}</span>
+                <span v-if="m.is_blocked" class="m-blocked">🚫 已移出</span>
+                <span v-else class="m-muted">@{{ m.username }}</span>
+              </div>
+            </div>
+            <div v-if="canManage(m)" class="m-actions">
+              <t-select
+                v-model="roleSel[m.user_id]"
+                class="select-sm"
+                :disabled="m.is_blocked"
+                size="small"
+                @change="onAssign(m)"
+              >
+                <t-option :value="0" label="默认身份" />
+                <t-option v-for="r in roles" :key="r.id" :value="r.id" :label="r.name" />
+              </t-select>
+              <t-button variant="outline" size="small" :disabled="m.is_blocked" @click="openShutup(m)">禁言</t-button>
+              <t-button v-if="m.shutup_expire_at" variant="outline" size="small" :disabled="m.is_blocked" @click="onUnshutup(m)">解禁</t-button>
+              <t-button variant="outline" size="small" theme="danger" :disabled="m.is_blocked" @click="onKick(m)">踢出</t-button>
+              <t-button v-if="m.is_blocked" variant="outline" size="small" @click="onUnblock(m)">解除拉黑</t-button>
+              <t-button v-else variant="outline" size="small" theme="danger" @click="onBlock(m)">拉黑</t-button>
+            </div>
+          </div>
+          <t-empty v-if="members.length === 0" description="暂无成员" />
+        </div>
+      </t-tab-panel>
+
+      <!-- 身份组 -->
+      <t-tab-panel value="roles" label="身份组">
+        <div class="panel">
+          <div class="role-form">
+            <t-input v-model.trim="roleForm.name" class="role-name-input" placeholder="身份组名称" maxlength="32" clearable />
+            <t-input v-model="roleForm.color" class="color-input" placeholder="#1a73e8" maxlength="7" />
+            <t-input-number v-model="roleForm.level" class="level-input" :min="0" :max="99" theme="column" />
+            <t-button theme="primary" size="small" :loading="roleSaving" :disabled="!roleForm.name" @click="onCreateRole">
+              {{ roleSaving ? '创建中…' : '新建身份组' }}
+            </t-button>
+          </div>
+          <div class="role-card" v-for="r in roles" :key="r.id">
+            <div class="role-head">
+              <span class="role-dot" :style="{ background: r.color }"></span>
+              <span class="role-name">{{ r.name }}</span>
+              <t-tag size="small" variant="light" theme="primary">Lv.{{ r.level }}</t-tag>
+              <t-tag v-if="r.is_default" size="small" variant="outline">默认</t-tag>
+              <span class="role-id">#{{ r.id }}</span>
+            </div>
+            <div class="perms">
+              <t-checkbox
+                v-for="p in PERM_ITEMS"
+                :key="p.key"
+                :checked="r.perms.includes(p.key)"
+                :disabled="r.name === '频道主'"
+                @change="(v: boolean) => onTogglePerm(r, p.key, v)"
+              >
+                {{ p.label }}
+              </t-checkbox>
+            </div>
+            <t-button v-if="!r.is_default" variant="outline" size="small" theme="danger" @click="onDeleteRole(r)">删除</t-button>
+          </div>
+        </div>
+      </t-tab-panel>
+
+      <!-- 操作日志 -->
+      <t-tab-panel value="ops" label="操作日志">
+        <div class="panel">
+          <div class="op-row" v-for="o in ops" :key="o.id">
+            <span class="op-time">{{ o.created_at.slice(0, 16) }}</span>
+            <t-tag size="small" variant="light" theme="primary" class="op-action">{{ actionLabel(o.action) }}</t-tag>
+            <span class="op-operator">{{ o.operator_nickname }}</span>
+          </div>
+          <t-empty v-if="ops.length === 0" description="暂无操作记录" />
+        </div>
+      </t-tab-panel>
+    </t-tabs>
 
     <p v-if="msg" class="msg">{{ msg }}</p>
 
-    <!-- 成员管理 -->
-    <section v-if="tab === 'members'" class="panel">
-      <div class="member-row" v-for="m in members" :key="m.id">
-        <img v-if="m.avatar_url" :src="m.avatar_url" class="avatar" alt="" />
-        <div class="m-info">
-          <div class="m-name">
-            {{ m.user_nickname || m.nickname }}
-            <span class="m-role" :title="`member_type=${m.member_type}`">
-              {{ m.role_name || memberTypeName(m.member_type) }}
-            </span>
-          </div>
-          <div class="m-sub">
-            <span v-if="m.shutup_expire_at" class="m-muted">🔇 禁言至 {{ m.shutup_expire_at.slice(0, 16) }}</span>
-            <span v-if="m.is_blocked" class="m-blocked">🚫 已移出</span>
-            <span v-else class="m-muted">@{{ m.username }}</span>
-          </div>
-        </div>
-        <div v-if="canManage(m)" class="m-actions">
-          <select
-            v-model="roleSel[m.user_id]"
-            class="input select-sm"
-            :disabled="m.is_blocked"
-            @change="onAssign(m)"
-          >
-            <option :value="null">默认身份</option>
-            <option v-for="r in roles" :key="r.id" :value="r.id">{{ r.name }}</option>
-          </select>
-          <button class="btn-ghost btn-xs" :disabled="m.is_blocked" @click="onShutup(m)">禁言</button>
-          <button v-if="m.shutup_expire_at" class="btn-ghost btn-xs" :disabled="m.is_blocked" @click="onUnshutup(m)">解禁</button>
-          <button class="btn-ghost btn-xs danger" :disabled="m.is_blocked" @click="onKick(m)">踢出</button>
-          <button v-if="m.is_blocked" class="btn-ghost btn-xs" @click="onUnblock(m)">解除拉黑</button>
-          <button v-else class="btn-ghost btn-xs danger" @click="onBlock(m)">拉黑</button>
-        </div>
-      </div>
-      <p v-if="members.length === 0" class="empty">暂无成员</p>
-    </section>
-
-    <!-- 身份组 -->
-    <section v-if="tab === 'roles'" class="panel">
-      <div class="role-form">
-        <input v-model.trim="roleForm.name" class="input role-name-input" placeholder="身份组名称" maxlength="32" />
-        <input v-model="roleForm.color" class="input color-input" placeholder="#1a73e8" maxlength="7" />
-        <input v-model.number="roleForm.level" class="input level-input" type="number" min="0" max="99" placeholder="等级" />
-        <button class="btn-primary btn-sm" :disabled="roleSaving || !roleForm.name" @click="onCreateRole">
-          {{ roleSaving ? '创建中…' : '新建身份组' }}
-        </button>
-      </div>
-      <div class="role-card" v-for="r in roles" :key="r.id">
-        <div class="role-head">
-          <span class="role-dot" :style="{ background: r.color }"></span>
-          <span class="role-name">{{ r.name }}</span>
-          <span class="role-level">Lv.{{ r.level }}</span>
-          <span v-if="r.is_default" class="tag">默认</span>
-          <span class="role-id">#{{ r.id }}</span>
-        </div>
-        <div class="perms">
-          <label v-for="p in PERM_ITEMS" :key="p.key" class="perm">
-            <input
-              type="checkbox"
-              :checked="r.perms.includes(p.key)"
-              :disabled="r.name === '频道主'"
-              @change="onTogglePerm(r, p.key, ($event.target as HTMLInputElement).checked)"
-            />
-            {{ p.label }}
-          </label>
-        </div>
-        <button v-if="!r.is_default" class="btn-ghost btn-xs danger" @click="onDeleteRole(r)">删除</button>
-      </div>
-    </section>
-
-    <!-- 操作日志 -->
-    <section v-if="tab === 'ops'" class="panel">
-      <div class="op-row" v-for="o in ops" :key="o.id">
-        <span class="op-time">{{ o.created_at.slice(0, 16) }}</span>
-        <span class="op-action">{{ actionLabel(o.action) }}</span>
-        <span class="op-operator">{{ o.operator_nickname }}</span>
-      </div>
-      <p v-if="ops.length === 0" class="empty">暂无操作记录</p>
-    </section>
+    <!-- 禁言时长弹窗 -->
+    <t-dialog
+      v-model:visible="shutupDialog"
+      header="禁言成员"
+      :confirm-btn="{ content: '确认禁言', theme: 'primary', loading: shutupSaving }"
+      cancel-btn="取消"
+      @confirm="confirmShutup"
+    >
+      <p class="shutup-tip">将禁言 <b>{{ shutupTarget?.user_nickname || shutupTarget?.nickname }}</b>：</p>
+      <t-input-number v-model="shutupHours" :min="1" :max="720" theme="column" />
+      <p class="shutup-tip">小时（1-720，到期自动解除）</p>
+    </t-dialog>
   </main>
 </template>
 
@@ -101,6 +118,7 @@ import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { communityApi, manageApi, roleApi, type Community, type Member, type OpLogItem, type RoleItem } from '@/api/community'
 import { toast } from '@/utils/toast'
+import { confirmDialog } from '@/utils/confirm'
 
 const route = useRoute()
 const auth = useAuthStore()
@@ -112,9 +130,15 @@ const members = ref<Member[]>([])
 const roles = ref<RoleItem[]>([])
 const ops = ref<OpLogItem[]>([])
 const msg = ref('')
-const roleSel = reactive<Record<number, number | null>>({})
+const roleSel = reactive<Record<number, number>>({})
 const roleSaving = ref(false)
 const roleForm = reactive({ name: '', color: '#1a73e8', level: 0 })
+
+// 禁言弹窗
+const shutupDialog = ref(false)
+const shutupSaving = ref(false)
+const shutupTarget = ref<Member | null>(null)
+const shutupHours = ref(24)
 
 const PERM_ITEMS: Array<{ key: string; label: string }> = [
   { key: 'post.create', label: '发帖' },
@@ -153,7 +177,7 @@ function canManage(m: Member): boolean {
 async function reloadMembers() {
   const data = await communityApi.members(cid, 1, 100)
   members.value = data.items
-  for (const m of data.items) roleSel[m.user_id] = m.role_id ?? null
+  for (const m of data.items) roleSel[m.user_id] = m.role_id ?? 0
 }
 
 onMounted(async () => {
@@ -168,20 +192,31 @@ onMounted(async () => {
   }
 })
 
-async function onShutup(m: Member) {
-  const input = window.prompt(`禁言 ${m.user_nickname || m.nickname} 的时长（小时，1-720）`, '24')
-  if (input === null) return
-  const hours = Number(input)
-  if (!Number.isFinite(hours) || hours < 1 || hours > 720) {
+function openShutup(m: Member) {
+  shutupTarget.value = m
+  shutupHours.value = 24
+  shutupDialog.value = true
+}
+
+async function confirmShutup() {
+  const m = shutupTarget.value
+  const hours = Number(shutupHours.value)
+  if (!m || !Number.isFinite(hours) || hours < 1 || hours > 720) {
     toast('请输入 1-720 的整数小时', 'error')
+    shutupDialog.value = true // 弹窗已自动关闭，重新打开让用户改
     return
   }
+  shutupSaving.value = true
   try {
     await manageApi.shutup(cid, m.user_id, Math.floor(hours))
     toast('已禁言')
+    shutupDialog.value = false
     await reloadMembers()
   } catch (e) {
     toast(e instanceof Error ? e.message : '操作失败', 'error')
+    shutupDialog.value = true
+  } finally {
+    shutupSaving.value = false
   }
 }
 
@@ -196,7 +231,7 @@ async function onUnshutup(m: Member) {
 }
 
 async function onKick(m: Member) {
-  if (!confirm(`确定踢出 ${m.user_nickname || m.nickname}？其将无法再进入该频道发帖。`)) return
+  if (!(await confirmDialog('踢出成员', `确定踢出 ${m.user_nickname || m.nickname}？其将无法再进入该频道发帖。`))) return
   try {
     await manageApi.kick(cid, m.user_id)
     toast('已踢出')
@@ -207,7 +242,7 @@ async function onKick(m: Member) {
 }
 
 async function onBlock(m: Member) {
-  if (!confirm(`确定拉黑 ${m.user_nickname || m.nickname}？`)) return
+  if (!(await confirmDialog('拉黑成员', `确定拉黑 ${m.user_nickname || m.nickname}？`))) return
   try {
     await manageApi.block(cid, m.user_id)
     toast('已拉黑')
@@ -228,7 +263,7 @@ async function onUnblock(m: Member) {
 }
 
 async function onAssign(m: Member) {
-  const roleId = roleSel[m.user_id] ?? null
+  const roleId = roleSel[m.user_id] === 0 ? null : roleSel[m.user_id]
   try {
     await roleApi.assign(cid, m.user_id, roleId)
     toast('身份已更新')
@@ -266,7 +301,7 @@ async function onTogglePerm(r: RoleItem, perm: string, checked: boolean) {
 }
 
 async function onDeleteRole(r: RoleItem) {
-  if (!confirm(`确定删除身份组「${r.name}」？其成员将回到默认身份。`)) return
+  if (!(await confirmDialog('删除身份组', `确定删除身份组「${r.name}」？其成员将回到默认身份。`))) return
   try {
     await roleApi.remove(cid, r.id)
     roles.value = await roleApi.list(cid)
@@ -301,57 +336,27 @@ async function onDeleteRole(r: RoleItem) {
   flex: 1;
 }
 .tabs {
-  display: flex;
-  gap: var(--sp-2);
-  margin: var(--sp-3) 0;
-}
-.tab {
-  height: 34px;
-  padding: 0 var(--sp-4);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-btn);
-  background: var(--bg-card);
-  color: var(--text-2);
-  font-size: var(--fs-body);
-  cursor: pointer;
-}
-.tab.active {
-  border-color: var(--brand);
-  color: var(--brand);
-  background: var(--brand-weak);
+  margin-top: var(--sp-3);
 }
 .panel {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
+  background: var(--td-bg-color-container);
+  border: 1px solid var(--td-component-border);
+  border-radius: var(--td-radius-large);
   padding: var(--sp-4);
 }
 .msg {
-  color: var(--danger);
+  color: var(--td-error-color);
   font-size: var(--fs-caption);
-}
-.empty {
-  color: var(--text-3);
-  font-size: var(--fs-caption);
-  text-align: center;
-  padding: var(--sp-4) 0;
 }
 .member-row {
   display: flex;
   align-items: center;
   gap: var(--sp-3);
   padding: var(--sp-2) 0;
-  border-bottom: 1px dashed var(--border);
+  border-bottom: 1px dashed var(--td-component-border);
 }
 .member-row:last-child {
   border-bottom: none;
-}
-.avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 1px solid var(--border);
 }
 .m-info {
   flex: 1;
@@ -363,19 +368,14 @@ async function onDeleteRole(r: RoleItem) {
 }
 .m-role {
   margin-left: var(--sp-2);
-  font-size: var(--fs-caption);
-  color: var(--brand);
-  background: var(--brand-weak);
-  border-radius: 4px;
-  padding: 1px 6px;
 }
 .m-sub {
   margin-top: 2px;
   font-size: var(--fs-caption);
-  color: var(--text-3);
+  color: var(--td-text-color-placeholder);
 }
 .m-blocked {
-  color: var(--danger);
+  color: var(--td-error-color);
 }
 .m-actions {
   display: flex;
@@ -383,60 +383,8 @@ async function onDeleteRole(r: RoleItem) {
   gap: var(--sp-1);
   flex-wrap: wrap;
 }
-.btn-xs {
-  height: 26px;
-  padding: 0 var(--sp-2);
-  font-size: var(--fs-caption);
-}
 .select-sm {
-  height: 26px;
-  font-size: var(--fs-caption);
-  padding: 0 var(--sp-1);
-  max-width: 96px;
-}
-.btn-ghost {
-  height: 36px;
-  padding: 0 var(--sp-4);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-btn);
-  background: var(--bg-card);
-  color: var(--text-1);
-  font-size: var(--fs-body);
-  display: inline-flex;
-  align-items: center;
-  cursor: pointer;
-}
-.btn-ghost.danger {
-  color: var(--danger);
-  border-color: var(--danger);
-}
-.btn-primary {
-  height: 36px;
-  padding: 0 var(--sp-4);
-  border: none;
-  border-radius: var(--radius-btn);
-  background: var(--brand);
-  color: #fff;
-  font-size: var(--fs-body);
-  cursor: pointer;
-}
-.btn-sm {
-  height: 32px;
-  padding: 0 var(--sp-3);
-  font-size: var(--fs-caption);
-}
-.input {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-btn);
-  padding: 0 var(--sp-2);
-  height: 32px;
-  font-size: var(--fs-caption);
-  outline: none;
-  background: var(--bg-card);
-  color: var(--text-1);
-}
-.input:focus {
-  border-color: var(--brand);
+  width: 110px;
 }
 .role-form {
   display: flex;
@@ -444,7 +392,7 @@ async function onDeleteRole(r: RoleItem) {
   align-items: center;
   flex-wrap: wrap;
   padding-bottom: var(--sp-3);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--td-component-border);
   margin-bottom: var(--sp-2);
 }
 .role-name-input {
@@ -452,14 +400,14 @@ async function onDeleteRole(r: RoleItem) {
   min-width: 120px;
 }
 .color-input {
-  width: 96px;
+  width: 100px;
 }
 .level-input {
-  width: 72px;
+  width: 90px;
 }
 .role-card {
   padding: var(--sp-2) 0;
-  border-bottom: 1px dashed var(--border);
+  border-bottom: 1px dashed var(--td-component-border);
 }
 .role-card:last-child {
   border-bottom: none;
@@ -479,21 +427,10 @@ async function onDeleteRole(r: RoleItem) {
   font-weight: 600;
   font-size: var(--fs-body);
 }
-.role-level {
-  color: var(--text-3);
-  font-size: var(--fs-caption);
-}
 .role-id {
   margin-left: auto;
-  color: var(--text-3);
+  color: var(--td-text-color-placeholder);
   font-size: var(--fs-caption);
-}
-.tag {
-  font-size: var(--fs-caption);
-  color: var(--text-3);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 1px 6px;
 }
 .perms {
   display: flex;
@@ -501,32 +438,27 @@ async function onDeleteRole(r: RoleItem) {
   gap: var(--sp-2);
   margin: var(--sp-2) 0;
 }
-.perm {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: var(--fs-caption);
-  color: var(--text-2);
-  cursor: pointer;
-}
 .op-row {
   display: flex;
+  align-items: center;
   gap: var(--sp-3);
   padding: var(--sp-1) 0;
   font-size: var(--fs-caption);
-  border-bottom: 1px dashed var(--border);
+  border-bottom: 1px dashed var(--td-component-border);
 }
 .op-row:last-child {
   border-bottom: none;
 }
 .op-time {
-  color: var(--text-3);
-}
-.op-action {
-  font-weight: 600;
+  color: var(--td-text-color-placeholder);
 }
 .op-operator {
   margin-left: auto;
-  color: var(--text-2);
+  color: var(--td-text-color-secondary);
+}
+.shutup-tip {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-body);
+  color: var(--td-text-color-secondary);
 }
 </style>

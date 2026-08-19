@@ -2,29 +2,29 @@
   <main class="discover">
     <header class="page-header">
       <h1 class="page-title">发现频道</h1>
-      <button class="btn-primary btn-sm" @click="showCreate = true">创建频道</button>
+      <t-button theme="primary" size="small" @click="showCreate = true">创建频道</t-button>
     </header>
 
     <!-- 搜索 -->
     <section class="search-box">
-      <input
-        v-model.trim="searchQ"
-        class="input search-input"
-        type="search"
+      <t-input
+        v-model="searchQ"
+        class="search-input"
         placeholder="搜索帖子（支持中文关键词）"
         maxlength="64"
-        @keyup.enter="doSearch()"
+        clearable
+        @enter="doSearch()"
       />
-      <button class="btn-primary btn-sm" :disabled="!searchQ || searchLoading" @click="doSearch()">
+      <t-button theme="primary" :disabled="!searchQ || searchLoading" :loading="searchLoading" @click="doSearch()">
         {{ searchLoading ? '搜索中…' : '搜索' }}
-      </button>
+      </t-button>
     </section>
 
     <!-- 搜索结果 -->
     <div v-if="searching" class="search-results">
       <div class="search-meta">
         <span v-if="searchTotal" class="search-count">“{{ lastQ }}” 共 {{ searchTotal }} 条结果</span>
-        <button class="btn-ghost btn-sm" @click="clearSearch()">返回频道列表</button>
+        <t-button variant="text" size="small" @click="clearSearch()">返回频道列表</t-button>
       </div>
       <div v-if="searchLoading" class="state">搜索中…</div>
       <EmptyState v-else-if="searchResults.length === 0" text="没有找到相关帖子" />
@@ -80,36 +80,33 @@
     </div>
 
     <!-- 创建频道弹层 -->
-    <div v-if="showCreate" class="overlay" @click.self="showCreate = false">
-      <div class="dialog">
-        <h3 class="dialog-title">创建频道</h3>
-        <form @submit.prevent="onCreate">
-          <label class="field">
-            <span class="field-label">频道名称</span>
-            <input v-model.trim="form.name" class="input" type="text" maxlength="64" required />
-          </label>
-          <label class="field">
-            <span class="field-label">简介</span>
-            <textarea v-model.trim="form.profile" class="input textarea" rows="3" maxlength="255"></textarea>
-          </label>
-          <label class="field">
-            <span class="field-label">加入方式</span>
-            <select v-model.number="form.join_setting" class="input">
-              <option :value="0">自由加入</option>
-              <option :value="1">审核加入</option>
-              <option :value="2">邀请制</option>
-            </select>
-          </label>
-          <p v-if="error" class="error">{{ error }}</p>
-          <div class="dialog-actions">
-            <button type="button" class="btn-ghost" @click="showCreate = false">取消</button>
-            <button type="submit" class="btn-primary" :disabled="creating">
-              {{ creating ? '创建中…' : '创建' }}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+    <t-dialog
+      v-model:visible="showCreate"
+      header="创建频道"
+      :confirm-btn="{ content: creating ? '创建中…' : '创建', theme: 'primary', loading: creating }"
+      :cancel-btn="'取消'"
+      @confirm="onCreate"
+    >
+      <form class="dialog-form" @submit.prevent="onCreate">
+        <div class="field">
+          <label class="field-label">频道名称</label>
+          <t-input v-model.trim="form.name" type="text" maxlength="64" placeholder="频道名称" clearable />
+        </div>
+        <div class="field">
+          <label class="field-label">简介</label>
+          <t-textarea v-model.trim="form.profile" :autosize="{ minRows: 3, maxRows: 6 }" maxlength="255" />
+        </div>
+        <div class="field">
+          <label class="field-label">加入方式</label>
+          <t-select v-model="form.join_setting">
+            <t-option :value="0" label="自由加入" />
+            <t-option :value="1" label="审核加入" />
+            <t-option :value="2" label="邀请制" />
+          </t-select>
+        </div>
+        <p v-if="error" class="error">{{ error }}</p>
+      </form>
+    </t-dialog>
   </main>
 </template>
 
@@ -150,7 +147,7 @@ onMounted(async () => {
 })
 
 async function doSearch() {
-  const q = searchQ.value
+  const q = searchQ.value.trim()
   if (!q || searchLoading.value) return
   searching.value = true
   searchLoading.value = true
@@ -296,29 +293,7 @@ function goDetail(id: number) {
   font-size: var(--fs-caption);
   color: var(--text-3);
 }
-.overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(31, 35, 41, 0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--sp-4);
-}
-.dialog {
-  width: 100%;
-  max-width: 380px;
-  background: var(--bg-card);
-  border-radius: var(--radius-overlay);
-  box-shadow: var(--shadow-overlay);
-  padding: var(--sp-5) var(--sp-4);
-}
-.dialog-title {
-  margin: 0 0 var(--sp-4);
-  font-size: var(--fs-title);
-  font-weight: 600;
-}
-.dialog form {
+.dialog-form {
   display: flex;
   flex-direction: column;
   gap: var(--sp-4);
@@ -330,66 +305,12 @@ function goDetail(id: number) {
 }
 .field-label {
   font-size: var(--fs-caption);
-  color: var(--text-2);
-}
-.input {
-  height: 40px;
-  padding: 0 var(--sp-3);
-  font-size: var(--fs-body);
-  color: var(--text-1);
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-btn);
-  outline: none;
-  transition: border-color 0.15s;
-}
-.textarea {
-  height: auto;
-  padding: var(--sp-2) var(--sp-3);
-  resize: vertical;
-  font-family: inherit;
-}
-.input:focus {
-  border-color: var(--brand);
+  color: var(--td-text-color-secondary);
 }
 .error {
   margin: 0;
   font-size: var(--fs-caption);
-  color: var(--danger);
-}
-.dialog-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--sp-2);
-  margin-top: var(--sp-2);
-}
-.btn-primary {
-  height: 40px;
-  padding: 0 var(--sp-4);
-  border: none;
-  border-radius: var(--radius-btn);
-  background: var(--brand);
-  color: #fff;
-  font-size: var(--fs-body);
-  cursor: pointer;
-  transition: background 0.15s;
-}
-.btn-primary:hover {
-  background: var(--brand-hover);
-}
-.btn-primary:disabled {
-  background: var(--text-3);
-  cursor: not-allowed;
-}
-.btn-ghost {
-  height: 40px;
-  padding: 0 var(--sp-4);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-btn);
-  background: var(--bg-card);
-  color: var(--text-1);
-  font-size: var(--fs-body);
-  cursor: pointer;
+  color: var(--td-error-color);
 }
 .search-box {
   display: flex;
@@ -399,6 +320,8 @@ function goDetail(id: number) {
 .search-input {
   flex: 1;
   min-width: 0;
+}
+.search-input :deep(.t-input__inner) {
   height: 36px;
 }
 .hot-words {

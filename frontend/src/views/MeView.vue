@@ -8,8 +8,9 @@
     <section class="panel">
       <div class="profile-row">
         <div class="avatar-wrap">
-          <img v-if="auth.user?.avatar_url" :src="auth.user.avatar_url" class="avatar-img" alt="头像" />
-          <div v-else class="avatar">{{ initial }}</div>
+          <t-avatar :image="auth.user?.avatar_url || undefined" size="56px">
+            <template #icon>{{ initial }}</template>
+          </t-avatar>
           <label class="avatar-edit" title="更换头像">
             <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" @change="onAvatarChange" />
             <span>更换</span>
@@ -26,65 +27,65 @@
     <section class="panel">
       <h3 class="panel-title">编辑资料</h3>
       <form class="form" @submit.prevent="onSave">
-        <label class="field">
-          <span class="field-label">昵称</span>
-          <input v-model.trim="form.nickname" class="input" type="text" maxlength="64" />
-        </label>
-        <label class="field">
-          <span class="field-label">简介</span>
-          <textarea v-model.trim="form.bio" class="input textarea" rows="3" maxlength="255"></textarea>
-        </label>
-        <label class="field">
-          <span class="field-label">性别</span>
-          <select v-model.number="form.gender" class="input">
-            <option :value="0">保密</option>
-            <option :value="1">男</option>
-            <option :value="2">女</option>
-          </select>
-        </label>
+        <div class="field">
+          <label class="field-label">昵称</label>
+          <t-input v-model="form.nickname" size="large" maxlength="64" clearable />
+        </div>
+        <div class="field">
+          <label class="field-label">简介</label>
+          <t-textarea v-model="form.bio" :autosize="{ minRows: 3, maxRows: 6 }" maxlength="255" />
+        </div>
+        <div class="field">
+          <label class="field-label">性别</label>
+          <t-select v-model="form.gender" size="large">
+            <t-option :value="0" label="保密" />
+            <t-option :value="1" label="男" />
+            <t-option :value="2" label="女" />
+          </t-select>
+        </div>
         <div class="field-row">
-          <label class="field">
-            <span class="field-label">省份</span>
-            <input v-model.trim="form.province" class="input" type="text" maxlength="32" />
-          </label>
-          <label class="field">
-            <span class="field-label">城市</span>
-            <input v-model.trim="form.city" class="input" type="text" maxlength="32" />
-          </label>
+          <div class="field">
+            <label class="field-label">省份</label>
+            <t-input v-model="form.province" size="large" maxlength="32" clearable />
+          </div>
+          <div class="field">
+            <label class="field-label">城市</label>
+            <t-input v-model="form.city" size="large" maxlength="32" clearable />
+          </div>
         </div>
         <p v-if="msg" class="msg">{{ msg }}</p>
-        <button class="btn-primary" type="submit" :disabled="saving">
+        <t-button theme="primary" size="large" type="submit" block :loading="saving">
           {{ saving ? '保存中…' : '保存' }}
-        </button>
+        </t-button>
       </form>
     </section>
 
     <section class="panel">
       <router-link to="/me/feed" class="feed-link">
         <span>我关注的频道</span>
-        <span class="feed-arrow">→</span>
+        <t-icon name="chevron-right" class="feed-arrow" />
       </router-link>
     </section>
 
     <section class="panel">
       <h3 class="panel-title">修改密码</h3>
       <form class="form" @submit.prevent="onChangePassword">
-        <label class="field">
-          <span class="field-label">原密码</span>
-          <input v-model="pwForm.old_password" class="input" type="password" autocomplete="current-password" />
-        </label>
-        <label class="field">
-          <span class="field-label">新密码（至少 6 位，含字母和数字）</span>
-          <input v-model="pwForm.new_password" class="input" type="password" autocomplete="new-password" />
-        </label>
-        <label class="field">
-          <span class="field-label">确认新密码</span>
-          <input v-model="pwForm.confirm" class="input" type="password" autocomplete="new-password" />
-        </label>
+        <div class="field">
+          <label class="field-label">原密码</label>
+          <t-input v-model="pwForm.old_password" size="large" type="password" autocomplete="current-password" />
+        </div>
+        <div class="field">
+          <label class="field-label">新密码（至少 6 位，含字母和数字）</label>
+          <t-input v-model="pwForm.new_password" size="large" type="password" autocomplete="new-password" />
+        </div>
+        <div class="field">
+          <label class="field-label">确认新密码</label>
+          <t-input v-model="pwForm.confirm" size="large" type="password" autocomplete="new-password" />
+        </div>
         <p v-if="pwMsg" class="msg" :class="{ error: pwError }">{{ pwMsg }}</p>
-        <button class="btn-primary" type="submit" :disabled="pwSaving">
+        <t-button theme="primary" size="large" type="submit" block :loading="pwSaving">
           {{ pwSaving ? '提交中…' : '修改密码' }}
-        </button>
+        </t-button>
       </form>
     </section>
   </main>
@@ -218,9 +219,9 @@ async function onChangePassword() {
 }
 .panel {
   margin-top: var(--sp-4);
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
+  background: var(--td-bg-color-container);
+  border: 1px solid var(--td-component-border);
+  border-radius: var(--td-radius-large);
   padding: var(--sp-4);
 }
 .profile-row {
@@ -238,38 +239,19 @@ async function onChangePassword() {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.avatar {
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  background: var(--brand-weak);
-  color: var(--brand);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 22px;
-  font-weight: 600;
-}
 .avatar-wrap {
   position: relative;
   flex-shrink: 0;
-}
-.avatar-img {
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 1px solid var(--border);
 }
 .avatar-edit {
   position: absolute;
   right: -2px;
   bottom: -2px;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
+  background: var(--td-bg-color-container);
+  border: 1px solid var(--td-component-border);
   border-radius: 10px;
   font-size: 11px;
-  color: var(--text-2);
+  color: var(--td-text-color-secondary);
   padding: 0 4px;
   cursor: pointer;
 }
@@ -284,7 +266,7 @@ async function onChangePassword() {
 .meta {
   margin: var(--sp-1) 0 0;
   font-size: var(--fs-caption);
-  color: var(--text-3);
+  color: var(--td-text-color-placeholder);
 }
 .panel-title {
   margin: 0 0 var(--sp-4);
@@ -311,64 +293,27 @@ async function onChangePassword() {
 }
 .field-label {
   font-size: var(--fs-caption);
-  color: var(--text-2);
-}
-.input {
-  height: 40px;
-  padding: 0 var(--sp-3);
-  font-size: var(--fs-body);
-  color: var(--text-1);
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-btn);
-  outline: none;
-  transition: border-color 0.15s;
-}
-.textarea {
-  height: auto;
-  padding: var(--sp-2) var(--sp-3);
-  resize: vertical;
-  font-family: inherit;
-}
-.input:focus {
-  border-color: var(--brand);
+  color: var(--td-text-color-secondary);
 }
 .msg {
   margin: 0;
   font-size: var(--fs-caption);
-  color: var(--success);
+  color: var(--td-success-color);
 }
 .msg.error {
-  color: var(--danger);
+  color: var(--td-error-color);
 }
 .feed-link {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  color: var(--text-1);
+  color: var(--td-text-color-primary);
   font-size: var(--fs-body);
   text-decoration: none;
   padding: var(--sp-1) 0;
   min-width: 0;
 }
 .feed-arrow {
-  color: var(--text-3);
-}
-.btn-primary {
-  height: 40px;
-  border: none;
-  border-radius: var(--radius-btn);
-  background: var(--brand);
-  color: #fff;
-  font-size: var(--fs-body);
-  cursor: pointer;
-  transition: background 0.15s;
-}
-.btn-primary:hover {
-  background: var(--brand-hover);
-}
-.btn-primary:disabled {
-  background: var(--text-3);
-  cursor: not-allowed;
+  color: var(--td-text-color-placeholder);
 }
 </style>

@@ -2,8 +2,8 @@
   <article class="feed-card" @click="goDetail">
     <div class="fc-head">
       <span class="fc-title">{{ post.title }}</span>
-      <span v-if="post.is_top" class="tag tag-top">置顶</span>
-      <span v-if="post.is_essence" class="tag tag-essence">精华</span>
+      <t-tag v-if="post.is_top" theme="danger" variant="light" size="small">置顶</t-tag>
+      <t-tag v-if="post.is_essence" theme="warning" variant="light" size="small">精华</t-tag>
     </div>
     <p v-if="post.images.length" class="fc-thumbs">
       <img v-for="img in post.images.slice(0, 3)" :key="img" :src="img" alt="" />
@@ -64,20 +64,6 @@ function goDetail() {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.tag {
-  font-size: 12px;
-  border-radius: 4px;
-  padding: 0 6px;
-  flex-shrink: 0;
-}
-.tag-top {
-  color: var(--danger);
-  border: 1px solid var(--danger);
-}
-.tag-essence {
-  color: #8a6d1a;
-  border: 1px solid #8a6d1a;
 }
 .fc-thumbs {
   display: flex;

@@ -6,7 +6,7 @@
         <router-link to="/me" class="nav-link">
           {{ auth.user.nickname || auth.user.username }}
         </router-link>
-        <button class="nav-logout" @click="onLogout">退出</button>
+        <t-button variant="text" size="small" @click="onLogout">退出</t-button>
       </nav>
       <nav v-else class="nav">
         <router-link to="/login" class="nav-link">登录</router-link>
@@ -18,17 +18,17 @@
       <h2 class="hero-title">仿腾讯频道 · 私域社区</h2>
       <p class="hero-desc">频道 → 版块 → 帖子 → 评论，构建你的兴趣社区</p>
       <div class="hero-actions">
-        <router-link to="/discover" class="btn-primary hero-btn">浏览频道</router-link>
+        <t-button theme="primary" size="large" @click="router.push('/discover')">浏览频道</t-button>
       </div>
     </section>
 
     <section class="feed-section">
       <div class="feed-head">
         <h3 class="feed-title">最新帖子</h3>
-        <div class="feed-tabs" role="tablist">
-          <button class="tab" :class="{ active: sort === 'latest' }" @click="switchSort('latest')">最新</button>
-          <button class="tab" :class="{ active: sort === 'hot' }" @click="switchSort('hot')">热门</button>
-        </div>
+        <t-radio-group v-model="sort" variant="default-filled" size="small" @change="switchSort">
+          <t-radio-button value="latest">最新</t-radio-button>
+          <t-radio-button value="hot">热门</t-radio-button>
+        </t-radio-group>
       </div>
 
       <SkeletonFeed v-if="loading && items.length === 0" :count="3" />
@@ -36,9 +36,9 @@
       <div v-else class="feed-list">
         <FeedCard v-for="p in items" :key="p.id" :post="p" show-community />
       </div>
-      <button v-if="hasMore" class="btn-ghost load-more" :disabled="loading" @click="loadMore()">
+      <t-button v-if="hasMore" variant="outline" block class="load-more" :loading="loading" @click="loadMore()">
         {{ loading ? '加载中…' : '加载更多' }}
-      </button>
+      </t-button>
     </section>
   </main>
 </template>
@@ -125,13 +125,6 @@ function onLogout() {
   color: var(--text-1);
   font-size: var(--fs-body);
 }
-.nav-logout {
-  border: none;
-  background: none;
-  color: var(--text-3);
-  font-size: var(--fs-caption);
-  cursor: pointer;
-}
 .hero {
   padding: var(--sp-5) 0;
 }
@@ -148,22 +141,6 @@ function onLogout() {
 .hero-actions {
   margin-top: var(--sp-4);
 }
-.btn-primary {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 38px;
-  padding: 0 var(--sp-5);
-  border-radius: var(--radius-btn);
-  background: var(--brand);
-  color: #fff;
-  font-size: var(--fs-body);
-  cursor: pointer;
-  transition: background var(--anim-duration) var(--anim-ease);
-}
-.btn-primary:hover {
-  background: var(--brand-hover);
-}
 .feed-section {
   margin-top: var(--sp-2);
 }
@@ -178,49 +155,12 @@ function onLogout() {
   font-size: var(--fs-title);
   font-weight: 600;
 }
-.feed-tabs {
-  display: flex;
-  gap: var(--sp-2);
-}
-.tab {
-  height: 30px;
-  padding: 0 var(--sp-3);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-btn);
-  background: var(--bg-card);
-  color: var(--text-2);
-  font-size: var(--fs-caption);
-  cursor: pointer;
-  transition: all var(--anim-duration) var(--anim-ease);
-}
-.tab.active {
-  border-color: var(--brand);
-  color: var(--brand);
-  background: var(--brand-weak);
-}
 .feed-list {
   display: flex;
   flex-direction: column;
   gap: var(--sp-3);
 }
-.state {
-  padding: var(--sp-6) 0;
-  text-align: center;
-  color: var(--text-3);
-}
 .load-more {
   margin-top: var(--sp-3);
-  width: 100%;
-  height: 36px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-btn);
-  background: var(--bg-card);
-  color: var(--text-2);
-  font-size: var(--fs-body);
-  cursor: pointer;
-}
-.load-more:disabled {
-  color: var(--text-3);
-  cursor: not-allowed;
 }
 </style>

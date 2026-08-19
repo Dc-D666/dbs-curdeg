@@ -6,10 +6,10 @@
     </header>
 
     <section class="panel">
-      <label class="field">
-        <span class="field-label">标题</span>
-        <input v-model.trim="form.title" class="input" type="text" maxlength="128" placeholder="一句话说清楚" />
-      </label>
+      <div class="field">
+        <label class="field-label">标题</label>
+        <t-input v-model.trim="form.title" size="large" maxlength="128" placeholder="一句话说清楚" clearable />
+      </div>
 
       <div class="field">
         <span class="field-label">内容</span>
@@ -19,9 +19,9 @@
 
       <p v-if="error" class="error">{{ error }}</p>
 
-      <button class="btn-primary submit" :disabled="submitting || loading" @click="onSubmit">
+      <t-button theme="primary" size="large" class="submit" :loading="submitting || loading" @click="onSubmit">
         {{ submitting ? '保存中…' : editing ? '保存' : '发布' }}
-      </button>
+      </t-button>
     </section>
   </main>
 </template>
@@ -137,9 +137,9 @@ async function onSubmit() {
 }
 .panel {
   margin-top: var(--sp-4);
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
+  background: var(--td-bg-color-container);
+  border: 1px solid var(--td-component-border);
+  border-radius: var(--td-radius-large);
   padding: var(--sp-4);
   display: flex;
   flex-direction: column;
@@ -152,85 +152,19 @@ async function onSubmit() {
 }
 .field-label {
   font-size: var(--fs-caption);
-  color: var(--text-2);
+  color: var(--td-text-color-secondary);
 }
-.input {
-  padding: var(--sp-2) var(--sp-3);
-  font-size: var(--fs-body);
-  color: var(--text-1);
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-btn);
-  outline: none;
-}
-.input:focus {
-  border-color: var(--brand);
-}
-.textarea {
-  min-height: 160px;
-  resize: vertical;
-  line-height: 1.6;
-}
-.image-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-2);
-}
-.image-cell {
-  position: relative;
-  width: 72px;
-  height: 72px;
-  border-radius: var(--radius-btn);
-  overflow: hidden;
-  border: 1px solid var(--border);
-}
-.image-cell img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.image-remove {
-  position: absolute;
-  top: 2px;
-  right: 2px;
-  width: 20px;
-  height: 20px;
-  border: none;
-  border-radius: 50%;
-  background: rgba(0, 0, 0, 0.6);
-  color: #fff;
-  font-size: 14px;
-  line-height: 1;
-  cursor: pointer;
-}
-.add-cell {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-style: dashed;
-  color: var(--text-3);
-  font-size: 24px;
-  cursor: pointer;
+.field-hint {
+  margin: 0;
+  font-size: var(--fs-caption);
+  color: var(--td-text-color-placeholder);
 }
 .error {
   margin: 0;
   font-size: var(--fs-caption);
-  color: var(--danger);
+  color: var(--td-error-color);
 }
-.btn-primary {
-  height: 40px;
-  border: none;
-  border-radius: var(--radius-btn);
-  background: var(--brand);
-  color: #fff;
-  font-size: var(--fs-body);
-  cursor: pointer;
-}
-.btn-primary:hover {
-  background: var(--brand-hover);
-}
-.btn-primary:disabled {
-  background: var(--text-3);
-  cursor: not-allowed;
+.submit {
+  align-self: stretch;
 }
 </style>

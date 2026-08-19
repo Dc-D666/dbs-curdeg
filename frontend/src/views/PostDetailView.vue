@@ -12,8 +12,8 @@
         <div class="post-head">
           <h2 class="post-title">
             {{ post.title }}
-            <span v-if="post.is_top" class="tag tag-top">置顶</span>
-            <span v-if="post.is_essence" class="tag tag-essence">精华</span>
+            <t-tag v-if="post.is_top" theme="danger" variant="light" size="small">置顶</t-tag>
+            <t-tag v-if="post.is_essence" theme="warning" variant="light" size="small">精华</t-tag>
           </h2>
           <div class="post-meta">
             <router-link :to="`/users/${post.author_id}`" class="author">{{ post.author_nickname }}</router-link>
@@ -58,24 +58,25 @@
         </div>
 
         <div class="post-actions">
-          <button class="btn-ghost" :class="{ liked: post.is_liked }" @click="toggleLike">
+          <t-button variant="outline" :class="{ 't-active': post.is_liked }" @click="toggleLike">
             {{ post.is_liked ? '已赞' : '点赞' }} {{ post.like_count }}
-          </button>
-          <button class="btn-ghost" :class="{ followed: post.is_followed }" @click="toggleFollow">
+          </t-button>
+          <t-button variant="outline" :class="{ 't-active': post.is_followed }" @click="toggleFollow">
             {{ post.is_followed ? '已关注' : '关注频道' }}
-          </button>
+          </t-button>
           <span class="action-note">{{ post.comment_count }} 评论</span>
         </div>
 
         <div v-if="canManage" class="manage-row">
-          <router-link
+          <t-button
             v-if="post.author_id === auth.user?.id"
-            :to="`/c/${post.community_id}/boards/${post.board_id}/post/new?edit=${post.id}`"
-            class="btn-ghost btn-sm"
-          >编辑</router-link>
-          <button class="btn-ghost btn-sm" @click="onToggleTop">{{ post.is_top ? '取消置顶' : '置顶' }}</button>
-          <button class="btn-ghost btn-sm" @click="onToggleEssence">{{ post.is_essence ? '取消精华' : '设精华' }}</button>
-          <button class="btn-ghost btn-sm danger" @click="onDeletePost">删除帖子</button>
+            variant="outline"
+            size="small"
+            @click="router.push(`/c/${post.community_id}/boards/${post.board_id}/post/new?edit=${post.id}`)"
+          >编辑</t-button>
+          <t-button variant="outline" size="small" @click="onToggleTop">{{ post.is_top ? '取消置顶' : '置顶' }}</t-button>
+          <t-button variant="outline" size="small" @click="onToggleEssence">{{ post.is_essence ? '取消精华' : '设精华' }}</t-button>
+          <t-button variant="outline" size="small" theme="danger" @click="onDeletePost">删除帖子</t-button>
         </div>
       </section>
 
@@ -84,17 +85,16 @@
 
         <div v-if="replyTarget" class="reply-banner">
           回复 {{ replyTarget.nickname }}
-          <button class="reply-cancel" @click="replyTarget = null">取消</button>
+          <t-button variant="text" size="small" class="reply-cancel" @click="replyTarget = null">取消</t-button>
         </div>
         <div class="comment-input-row">
-          <input
+          <t-input
             v-model="commentInput"
-            class="input"
             :placeholder="replyTarget ? `回复 ${replyTarget.nickname}…` : '写下你的评论…'"
             maxlength="2000"
-            @keyup.enter="submitComment"
+            @enter="submitComment"
           />
-          <button class="btn-primary btn-sm" :disabled="sending" @click="submitComment">发送</button>
+          <t-button theme="primary" size="small" :loading="sending" @click="submitComment">发送</t-button>
         </div>
 
         <p v-if="commentsLoading && comments.length === 0" class="state">加载中…</p>
@@ -105,17 +105,17 @@
             <div class="comment-head">
               <router-link :to="`/users/${c.author_id}`" class="author">{{ c.author_nickname }}</router-link>
               <span class="comment-time">{{ c.created_at.slice(5, 16) }}</span>
-              <button v-if="canDeleteComment(c)" class="comment-del" @click="deleteComment(c.id)">删除</button>
+              <t-button v-if="canDeleteComment(c)" variant="text" size="small" theme="danger" class="comment-del" @click="deleteComment(c.id)">删除</t-button>
             </div>
             <p class="comment-content">{{ c.content }}</p>
             <div class="comment-ops">
-              <button class="op-btn" :class="{ liked: c.is_liked }" @click="toggleCommentLike(c)">
+              <t-button variant="text" size="small" :class="{ 't-active': c.is_liked }" @click="toggleCommentLike(c)">
                 {{ c.is_liked ? '已赞' : '赞' }} {{ c.like_count }}
-              </button>
-              <button class="op-btn" @click="setReplyTarget(c)">回复</button>
-              <button class="op-btn" @click="toggleReplies(c)">
+              </t-button>
+              <t-button variant="text" size="small" @click="setReplyTarget(c)">回复</t-button>
+              <t-button variant="text" size="small" @click="toggleReplies(c)">
                 {{ replyMap.get(c.id)?.expanded ? '收起' : `楼中楼${replyMap.get(c.id)?.total ? ' ' + replyMap.get(c.id)?.total : ''}` }}
-              </button>
+              </t-button>
             </div>
 
             <div v-if="replyMap.get(c.id)?.expanded" class="replies">
@@ -123,24 +123,27 @@
                 <span class="reply-author">{{ r.author_nickname }}</span>
                 <span v-if="r.reply_to_nickname" class="reply-to">回复 {{ r.reply_to_nickname }}</span>
                 <span class="reply-content">{{ r.content }}</span>
-                <button v-if="canDeleteComment(r)" class="comment-del" @click="deleteComment(r.id)">删除</button>
+                <t-button v-if="canDeleteComment(r)" variant="text" size="small" theme="danger" class="comment-del" @click="deleteComment(r.id)">删除</t-button>
                 <span class="reply-time">{{ r.created_at.slice(5, 16) }}</span>
               </div>
-              <button
+              <t-button
                 v-if="(replyMap.get(c.id)?.items.length ?? 0) < (replyMap.get(c.id)?.total ?? 0)"
-                class="op-btn"
+                variant="text"
+                size="small"
                 @click="loadMoreReplies(c)"
-              >加载更多回复</button>
+              >加载更多回复</t-button>
             </div>
           </li>
         </ul>
 
-        <button
+        <t-button
           v-if="comments.length < commentTotal"
-          class="btn-ghost load-more"
-          :disabled="commentsLoading"
+          variant="outline"
+          block
+          class="load-more"
+          :loading="commentsLoading"
           @click="loadComments(commentPage + 1)"
-        >{{ commentsLoading ? '加载中…' : '加载更多评论' }}</button>
+        >{{ commentsLoading ? '加载中…' : '加载更多评论' }}</t-button>
       </section>
 
       <div v-if="previewIndex !== null && post.images[previewIndex]" class="preview-mask" @click="previewIndex = null">
@@ -161,6 +164,7 @@ import { postApi, type CommentItem, type PostItem } from '@/api/post'
 import { tokenStore } from '@/api/http'
 import { useAuthStore } from '@/stores/auth'
 import { toast } from '@/utils/toast'
+import { confirmDialog } from '@/utils/confirm'
 
 const route = useRoute()
 const router = useRouter()
@@ -410,7 +414,7 @@ function canDeleteComment(c: CommentItem): boolean {
 }
 
 async function deleteComment(commentId: number) {
-  if (!confirm('确定删除该评论？')) return
+  if (!(await confirmDialog('删除评论', '确定删除该评论？'))) return
   try {
     await postApi.deleteComment(commentId)
     if (post.value) post.value.comment_count = Math.max(0, post.value.comment_count - 1)
@@ -431,7 +435,7 @@ async function onToggleEssence() {
 }
 
 async function onDeletePost() {
-  if (!post.value || !confirm('确定删除该帖子？')) return
+  if (!post.value || !(await confirmDialog('删除帖子', '确定删除该帖子？'))) return
   try {
     await postApi.remove(post.value.id)
     router.push(`/c/${post.value.community_id}`)
@@ -579,59 +583,12 @@ async function onDeletePost() {
   border-top: 1px solid var(--border);
   padding-top: var(--sp-3);
 }
-.btn-ghost {
-  height: 36px;
-  padding: 0 var(--sp-3);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-btn);
-  background: var(--bg-card);
-  color: var(--text-1);
-  font-size: var(--fs-body);
-  cursor: pointer;
+.t-active {
+  color: var(--td-brand-color);
+  border-color: var(--td-brand-color);
 }
-.btn-ghost.liked {
-  color: var(--brand);
-  border-color: var(--brand);
-}
-.btn-ghost.followed {
-  color: var(--brand);
-  border-color: var(--brand);
-}
-.btn-ghost.danger {
-  color: var(--danger);
-  border-color: var(--danger);
-}
-.btn-sm {
-  height: 30px;
-  font-size: var(--fs-caption);
-}
-.btn-primary {
-  height: 36px;
-  padding: 0 var(--sp-3);
-  border: none;
-  border-radius: var(--radius-btn);
-  background: var(--brand);
-  color: #fff;
-  font-size: var(--fs-body);
-  cursor: pointer;
-}
-.btn-primary:disabled {
-  background: var(--text-3);
-  cursor: not-allowed;
-}
-.tag {
-  font-size: var(--fs-caption);
-  border-radius: 4px;
-  padding: 1px 6px;
-  margin-left: var(--sp-1);
-}
-.tag-top {
-  color: var(--danger);
-  border: 1px solid var(--danger);
-}
-.tag-essence {
-  color: #b8860b;
-  border: 1px solid #b8860b;
+.t-active :deep(.t-button__text) {
+  color: var(--td-brand-color);
 }
 .comment-panel .panel-title {
   margin: 0 0 var(--sp-3);
@@ -657,20 +614,6 @@ async function onDeletePost() {
   display: flex;
   gap: var(--sp-2);
 }
-.comment-input-row .input {
-  flex: 1;
-  height: 36px;
-  padding: 0 var(--sp-3);
-  font-size: var(--fs-body);
-  color: var(--text-1);
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-btn);
-  outline: none;
-}
-.comment-input-row .input:focus {
-  border-color: var(--brand);
-}
 .comment-list {
   margin: var(--sp-3) 0 0;
   padding: 0;
@@ -694,11 +637,6 @@ async function onDeletePost() {
 }
 .comment-del {
   margin-left: auto;
-  border: none;
-  background: none;
-  color: var(--danger);
-  font-size: var(--fs-caption);
-  cursor: pointer;
 }
 .comment-content {
   margin: var(--sp-1) 0 0;
@@ -710,16 +648,6 @@ async function onDeletePost() {
   margin-top: var(--sp-1);
   display: flex;
   gap: var(--sp-3);
-}
-.op-btn {
-  border: none;
-  background: none;
-  color: var(--text-3);
-  font-size: var(--fs-caption);
-  cursor: pointer;
-}
-.op-btn.liked {
-  color: var(--brand);
 }
 .replies {
   margin: var(--sp-2) 0 0 var(--sp-4);
@@ -746,8 +674,6 @@ async function onDeletePost() {
 }
 .load-more {
   margin-top: var(--sp-3);
-  width: 100%;
-  justify-content: center;
 }
 .preview-mask {
   position: fixed;

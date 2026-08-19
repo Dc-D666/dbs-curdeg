@@ -5,35 +5,36 @@
       <p class="auth-sub">使用用户名或邮箱登录 SDUdiscord</p>
 
       <form class="auth-form" @submit.prevent="onSubmit">
-        <label class="field">
-          <span class="field-label">用户名 / 邮箱</span>
-          <input
-            v-model.trim="form.account"
-            class="input"
-            type="text"
+        <div class="field">
+          <label class="field-label">用户名 / 邮箱</label>
+          <t-input
+            v-model="form.account"
+            size="large"
             placeholder="用户名或邮箱"
             autocomplete="username"
+            clearable
             required
           />
-        </label>
+        </div>
 
-        <label class="field">
-          <span class="field-label">密码</span>
-          <input
+        <div class="field">
+          <label class="field-label">密码</label>
+          <t-input
             v-model="form.password"
-            class="input"
+            size="large"
             type="password"
             placeholder="密码"
             autocomplete="current-password"
+            clearable
             required
           />
-        </label>
+        </div>
 
         <p v-if="error" class="error">{{ error }}</p>
 
-        <button class="btn-primary" type="submit" :disabled="loading">
+        <t-button theme="primary" size="large" type="submit" block :loading="loading">
           {{ loading ? '登录中…' : '登录' }}
-        </button>
+        </t-button>
       </form>
 
       <p class="auth-switch">
@@ -87,14 +88,16 @@ async function onSubmit() {
   align-items: flex-start;
   justify-content: center;
   padding: var(--sp-6) var(--sp-4);
+  background: var(--td-bg-color-page);
 }
 .auth-card {
   width: 100%;
   max-width: 380px;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
+  background: var(--td-bg-color-container);
+  border: 1px solid var(--td-component-border);
+  border-radius: var(--td-radius-large);
   padding: var(--sp-5) var(--sp-4) var(--sp-4);
+  box-shadow: var(--td-shadow-2);
 }
 .auth-title {
   margin: 0;
@@ -104,7 +107,7 @@ async function onSubmit() {
 .auth-sub {
   margin: var(--sp-1) 0 var(--sp-5);
   font-size: var(--fs-caption);
-  color: var(--text-3);
+  color: var(--td-text-color-placeholder);
 }
 .auth-form {
   display: flex;
@@ -118,51 +121,17 @@ async function onSubmit() {
 }
 .field-label {
   font-size: var(--fs-caption);
-  color: var(--text-2);
-}
-.input {
-  height: 40px;
-  padding: 0 var(--sp-3);
-  font-size: var(--fs-body);
-  color: var(--text-1);
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-btn);
-  outline: none;
-  transition: border-color 0.15s;
-}
-.input:focus {
-  border-color: var(--brand);
-}
-.input::placeholder {
-  color: var(--text-3);
+  color: var(--td-text-color-secondary);
 }
 .error {
   margin: 0;
   font-size: var(--fs-caption);
-  color: var(--danger);
-}
-.btn-primary {
-  height: 40px;
-  border: none;
-  border-radius: var(--radius-btn);
-  background: var(--brand);
-  color: #fff;
-  font-size: var(--fs-body);
-  cursor: pointer;
-  transition: background 0.15s;
-}
-.btn-primary:hover {
-  background: var(--brand-hover);
-}
-.btn-primary:disabled {
-  background: var(--text-3);
-  cursor: not-allowed;
+  color: var(--td-error-color);
 }
 .auth-switch {
   margin: var(--sp-5) 0 0;
   text-align: center;
   font-size: var(--fs-caption);
-  color: var(--text-3);
+  color: var(--td-text-color-placeholder);
 }
 </style>

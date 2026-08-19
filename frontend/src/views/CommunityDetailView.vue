@@ -22,44 +22,36 @@
         </div>
         <div class="actions">
           <template v-if="community.is_member">
-            <button v-if="community.my_member_type !== 0" class="btn-ghost" @click="onLeave">退出频道</button>
+            <t-button v-if="community.my_member_type !== 0" variant="outline" @click="onLeave">退出频道</t-button>
           </template>
-          <button v-else class="btn-primary" :disabled="joining" @click="onJoin">
+          <t-button v-else theme="primary" :loading="joining" @click="onJoin">
             {{ joining ? '处理中…' : '加入频道' }}
-          </button>
+          </t-button>
         </div>
       </section>
 
       <section class="panel">
-        <div class="board-tabs" role="tablist">
-          <button
-            v-for="b in community.boards"
-            :key="b.id"
-            class="tab"
-            :class="{ active: activeBoard === b.id }"
-            @click="activeBoard = b.id"
-          >
+        <t-radio-group v-model="activeBoard" variant="default-filled" size="small" class="board-tabs">
+          <t-radio-button v-for="b in community.boards" :key="b.id" :value="b.id">
             {{ b.name }}
-          </button>
-          <span v-if="community.boards.length === 0" class="no-board">暂无版块</span>
-        </div>
+          </t-radio-button>
+        </t-radio-group>
+        <p v-if="community.boards.length === 0" class="no-board">暂无版块</p>
         <div v-if="activeBoardInfo" class="board-desc">{{ activeBoardInfo.description || '暂无版块描述' }}</div>
-        <div v-else-if="community.boards.length === 0" class="empty-block">
-          <p class="state">版块还未创建</p>
-        </div>
       </section>
 
       <section v-if="activeBoardInfo" class="panel feed-panel">
         <div class="feed-toolbar">
-          <div class="feed-tabs" role="tablist">
-            <button class="tab" :class="{ active: feedSort === 'latest' }" @click="switchSort('latest')">最新</button>
-            <button class="tab" :class="{ active: feedSort === 'hot' }" @click="switchSort('hot')">热门</button>
-          </div>
-          <router-link
+          <t-radio-group v-model="feedSort" variant="default-filled" size="small">
+            <t-radio-button value="latest">最新</t-radio-button>
+            <t-radio-button value="hot">热门</t-radio-button>
+          </t-radio-group>
+          <t-button
             v-if="community.is_member"
-            :to="`/c/${cid}/boards/${activeBoard}/post/new`"
-            class="btn-primary btn-sm"
-          >发帖</router-link>
+            theme="primary"
+            size="small"
+            @click="router.push(`/c/${cid}/boards/${activeBoard}/post/new`)"
+          >发帖</t-button>
         </div>
 
         <SkeletonFeed v-if="feedLoading && feedItems.length === 0" :count="2" />
@@ -67,20 +59,20 @@
         <div v-else class="feed-list">
           <FeedCard v-for="p in feedItems" :key="p.id" :post="p" />
         </div>
-        <button v-if="feedHasMore" class="btn-ghost load-more" :disabled="feedLoading" @click="loadFeed()">
+        <t-button v-if="feedHasMore" variant="outline" block class="load-more" :loading="feedLoading" @click="loadFeed()">
           {{ feedLoading ? '加载中…' : '加载更多' }}
-        </button>
+        </t-button>
       </section>
 
       <section v-if="community.my_member_type === 0 || community.my_member_type === 1" class="panel owner-panel">
         <div class="panel-title-row">
           <h3 class="panel-title">频道管理</h3>
-          <router-link :to="`/c/${cid}/admin`" class="btn-ghost btn-sm">管理后台</router-link>
+          <t-button variant="outline" size="small" @click="router.push(`/c/${cid}/admin`)">管理后台</t-button>
         </div>
 
         <div class="owner-row">
           <span class="owner-label">头像 / 封面</span>
-          <label class="btn-ghost btn-sm">
+          <label class="btn-ghost btn-sm upload-label">
             上传图片
             <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" @change="onCoverUpload" hidden />
           </label>
@@ -89,23 +81,23 @@
 
         <div class="owner-row">
           <span class="owner-label">频道状态</span>
-          <select v-model.number="statusForm.status" class="input status-select">
-            <option :value="0">正常</option>
-            <option :value="1">关闭</option>
-          </select>
-          <button class="btn-ghost btn-sm" @click="onStatusSave">保存</button>
+          <t-select v-model="statusForm.status" class="status-select">
+            <t-option :value="0" label="正常" />
+            <t-option :value="1" label="关闭" />
+          </t-select>
+          <t-button variant="outline" size="small" @click="onStatusSave">保存</t-button>
         </div>
 
         <div class="owner-row">
           <span class="owner-label">创建版块</span>
-          <input v-model.trim="boardForm.name" class="input board-input" placeholder="版块名称" maxlength="64" />
-          <input v-model.trim="boardForm.description" class="input board-input" placeholder="简介（可选）" maxlength="255" />
-          <button class="btn-ghost btn-sm" :disabled="boardCreating" @click="onCreateBoard">创建</button>
+          <t-input v-model.trim="boardForm.name" class="board-input" placeholder="版块名称" maxlength="64" clearable />
+          <t-input v-model.trim="boardForm.description" class="board-input" placeholder="简介（可选）" maxlength="255" clearable />
+          <t-button variant="outline" size="small" :loading="boardCreating" @click="onCreateBoard">创建</t-button>
         </div>
 
         <div class="owner-row">
           <span class="owner-label">成员列表</span>
-          <button class="btn-ghost btn-sm" @click="toggleMembers">{{ membersOpen ? '收起' : `${community.member_count} 人` }}</button>
+          <t-button variant="outline" size="small" @click="toggleMembers">{{ membersOpen ? '收起' : `${community.member_count} 人` }}</t-button>
         </div>
         <div v-if="membersOpen" class="manage-list">
           <div v-for="m in members" :key="m.id" class="manage-item">
@@ -117,21 +109,21 @@
 
         <div v-if="community.join_setting === 1" class="owner-row">
           <span class="owner-label">加入审核</span>
-          <button class="btn-ghost btn-sm" @click="toggleRequests">{{ requestsOpen ? '收起' : `${requests.length} 条待审` }}</button>
+          <t-button variant="outline" size="small" @click="toggleRequests">{{ requestsOpen ? '收起' : `${requests.length} 条待审` }}</t-button>
         </div>
         <div v-if="requestsOpen" class="manage-list">
           <div v-for="r in requests" :key="r.id" class="manage-item">
             <span class="manage-name">{{ r.user_nickname || r.username }}</span>
             <span class="manage-time">{{ r.created_at.slice(5, 16) }}</span>
-            <button class="btn-ghost btn-sm" @click="handleRequest(r, true)">通过</button>
-            <button class="btn-ghost btn-sm danger" @click="handleRequest(r, false)">驳回</button>
+            <t-button variant="outline" size="small" @click="handleRequest(r, true)">通过</t-button>
+            <t-button variant="outline" size="small" theme="danger" @click="handleRequest(r, false)">驳回</t-button>
           </div>
           <p v-if="requests.length === 0" class="manage-empty">暂无待审申请</p>
         </div>
 
         <div class="owner-row">
           <span class="owner-label">解散频道</span>
-          <button class="btn-ghost btn-sm danger" @click="onDissolve">解散</button>
+          <t-button variant="outline" size="small" theme="danger" @click="onDissolve">解散</t-button>
         </div>
 
         <p v-if="ownerMsg" class="msg">{{ ownerMsg }}</p>
@@ -151,6 +143,7 @@ import SkeletonFeed from '@/components/SkeletonFeed.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import { request, tokenStore } from '@/api/http'
 import { toast } from '@/utils/toast'
+import { confirmDialog } from '@/utils/confirm'
 
 const route = useRoute()
 const router = useRouter()
@@ -212,6 +205,10 @@ function switchSort(sort: 'latest' | 'hot') {
   loadFeed(true)
 }
 
+watch(feedSort, (s) => {
+  loadFeed(true)
+})
+
 watch(activeBoard, (bid) => {
   if (bid) loadFeed(true)
 })
@@ -246,7 +243,7 @@ async function onJoin() {
 }
 
 async function onLeave() {
-  if (!confirm('确定退出该频道？')) return
+  if (!(await confirmDialog('退出频道', '确定退出该频道？'))) return
   try {
     await communityApi.leave(cid)
     community.value = await communityApi.get(cid)
@@ -348,7 +345,7 @@ function memberTypeName(t: number): string {
 }
 
 async function onDissolve() {
-  if (!confirm('确定解散该频道？此操作不可撤销！')) return
+  if (!(await confirmDialog('解散频道', '确定解散该频道？此操作不可撤销！'))) return
   try {
     await communityApi.dissolve(cid)
     router.push('/discover')
@@ -451,22 +448,6 @@ async function onDissolve() {
   gap: var(--sp-2);
   flex-wrap: wrap;
 }
-.tab {
-  height: 34px;
-  padding: 0 var(--sp-4);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-btn);
-  background: var(--bg-card);
-  color: var(--text-2);
-  font-size: var(--fs-body);
-  cursor: pointer;
-  transition: all 0.15s;
-}
-.tab.active {
-  border-color: var(--brand);
-  color: var(--brand);
-  background: var(--brand-weak);
-}
 .no-board {
   color: var(--text-3);
   font-size: var(--fs-caption);
@@ -478,42 +459,6 @@ async function onDissolve() {
 }
 .empty-block {
   margin-top: var(--sp-3);
-}
-.btn-primary {
-  height: 36px;
-  padding: 0 var(--sp-4);
-  border: none;
-  border-radius: var(--radius-btn);
-  background: var(--brand);
-  color: #fff;
-  font-size: var(--fs-body);
-  cursor: pointer;
-  transition: background 0.15s;
-}
-.btn-primary:hover {
-  background: var(--brand-hover);
-}
-.btn-primary:disabled {
-  background: var(--text-3);
-  cursor: not-allowed;
-}
-.btn-ghost {
-  height: 36px;
-  padding: 0 var(--sp-4);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-btn);
-  background: var(--bg-card);
-  color: var(--text-1);
-  font-size: var(--fs-body);
-  text-decoration: none;
-  display: inline-flex;
-  align-items: center;
-  cursor: pointer;
-}
-.btn-sm {
-  height: 32px;
-  padding: 0 var(--sp-3);
-  font-size: var(--fs-caption);
 }
 .owner-panel .panel-title {
   margin: 0;
@@ -531,6 +476,7 @@ async function onDissolve() {
   align-items: center;
   gap: var(--sp-3);
   padding: var(--sp-2) 0;
+  flex-wrap: wrap;
 }
 .owner-label {
   width: 72px;
@@ -542,9 +488,7 @@ async function onDissolve() {
   color: var(--text-3);
 }
 .status-select {
-  height: 32px;
-  padding: 0 var(--sp-2);
-  font-size: var(--fs-caption);
+  width: 120px;
 }
 .msg {
   margin: var(--sp-2) 0 0;
@@ -553,16 +497,23 @@ async function onDissolve() {
 }
 .board-input {
   flex: 1;
-  min-width: 0;
-  height: 32px;
-  padding: 0 var(--sp-2);
-  font-size: var(--fs-caption);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-btn);
-  outline: none;
+  min-width: 120px;
 }
-.board-input:focus {
-  border-color: var(--brand);
+.upload-label {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 var(--sp-3);
+  border: 1px solid var(--td-component-border);
+  border-radius: var(--td-radius-default);
+  background: var(--td-bg-color-container);
+  color: var(--td-text-color-primary);
+  font-size: var(--fs-caption);
+  cursor: pointer;
+}
+.upload-label:hover {
+  border-color: var(--td-brand-color);
+  color: var(--td-brand-color);
 }
 .manage-list {
   margin: var(--sp-1) 0 var(--sp-2) 96px;
@@ -592,19 +543,11 @@ async function onDissolve() {
   color: var(--text-3);
   font-size: var(--fs-caption);
 }
-.btn-ghost.danger {
-  color: var(--danger);
-  border-color: var(--danger);
-}
 .feed-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--sp-3);
-}
-.feed-tabs {
-  display: flex;
-  gap: var(--sp-2);
 }
 .feed-list {
   margin: var(--sp-3) 0 0;
@@ -612,54 +555,7 @@ async function onDissolve() {
   flex-direction: column;
   gap: var(--sp-3);
 }
-.feed-item {
-  padding: var(--sp-3) 0;
-  border-bottom: 1px solid var(--border);
-  cursor: pointer;
-}
-.feed-item:last-child {
-  border-bottom: none;
-}
-.feed-head {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-}
-.feed-title {
-  font-size: var(--fs-body);
-  font-weight: 600;
-  color: var(--text-1);
-}
-.tag-top {
-  color: var(--danger);
-  border-color: var(--danger);
-}
-.tag-essence {
-  color: #b8860b;
-  border-color: #b8860b;
-}
-.feed-excerpt {
-  margin: var(--sp-1) 0 0;
-  font-size: var(--fs-caption);
-  color: var(--text-2);
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-.feed-meta {
-  margin-top: var(--sp-1);
-  display: flex;
-  gap: var(--sp-3);
-  font-size: var(--fs-caption);
-  color: var(--text-3);
-}
-.feed-time {
-  margin-left: auto;
-}
 .load-more {
   margin-top: var(--sp-3);
-  width: 100%;
-  justify-content: center;
 }
 </style>
