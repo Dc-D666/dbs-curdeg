@@ -62,8 +62,8 @@
           >发帖</router-link>
         </div>
 
-        <p v-if="feedLoading && feedItems.length === 0" class="state">加载中…</p>
-        <p v-else-if="feedItems.length === 0" class="state">暂无帖子，来发第一帖吧</p>
+        <SkeletonFeed v-if="feedLoading && feedItems.length === 0" :count="2" />
+        <EmptyState v-else-if="feedItems.length === 0" text="暂无帖子" />
         <div v-else class="feed-list">
           <FeedCard v-for="p in feedItems" :key="p.id" :post="p" />
         </div>
@@ -144,7 +144,10 @@ import { useRoute, useRouter } from 'vue-router'
 import { communityApi, type Community, type JoinRequestItem, type Member } from '@/api/community'
 import { postApi, type PostItem } from '@/api/post'
 import FeedCard from '@/components/FeedCard.vue'
+import SkeletonFeed from '@/components/SkeletonFeed.vue'
+import EmptyState from '@/components/EmptyState.vue'
 import { request, tokenStore } from '@/api/http'
+import { toast } from '@/utils/toast'
 
 const route = useRoute()
 const router = useRouter()
@@ -194,7 +197,7 @@ async function loadFeed(reset = false) {
     feedCursor.value = data.next_cursor
     feedHasMore.value = data.has_more
   } catch (e) {
-    alert(e instanceof Error ? e.message : '加载失败')
+    toast(e instanceof Error ? e.message : '加载失败', 'error')
   } finally {
     feedLoading.value = false
   }
@@ -233,7 +236,7 @@ async function onJoin() {
     await communityApi.join(cid)
     community.value = await communityApi.get(cid)
   } catch (e) {
-    alert(e instanceof Error ? e.message : '操作失败')
+    toast(e instanceof Error ? e.message : '操作失败', 'error')
   } finally {
     joining.value = false
   }
@@ -245,7 +248,7 @@ async function onLeave() {
     await communityApi.leave(cid)
     community.value = await communityApi.get(cid)
   } catch (e) {
-    alert(e instanceof Error ? e.message : '操作失败')
+    toast(e instanceof Error ? e.message : '操作失败', 'error')
   }
 }
 
@@ -305,7 +308,7 @@ async function toggleMembers() {
       const data = await communityApi.members(cid, 1, 50)
       members.value = data.items
     } catch (e) {
-      alert(e instanceof Error ? e.message : '加载成员失败')
+      toast(e instanceof Error ? e.message : '加载成员失败', 'error')
     }
   }
 }
@@ -322,7 +325,7 @@ async function loadRequests() {
     const data = await communityApi.joinRequests(cid, 1, 50)
     requests.value = data.items
   } catch (e) {
-    alert(e instanceof Error ? e.message : '加载申请失败')
+    toast(e instanceof Error ? e.message : '加载申请失败', 'error')
   }
 }
 
@@ -333,7 +336,7 @@ async function handleRequest(r: JoinRequestItem, approve: boolean) {
     community.value = await communityApi.get(cid)
     ownerMsg.value = approve ? '已通过申请' : '已驳回申请'
   } catch (e) {
-    alert(e instanceof Error ? e.message : '操作失败')
+    toast(e instanceof Error ? e.message : '操作失败', 'error')
   }
 }
 
@@ -347,7 +350,7 @@ async function onDissolve() {
     await communityApi.dissolve(cid)
     router.push('/discover')
   } catch (e) {
-    alert(e instanceof Error ? e.message : '解散失败')
+    toast(e instanceof Error ? e.message : '解散失败', 'error')
   }
 }
 </script>

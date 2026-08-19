@@ -12,6 +12,7 @@
     <div class="fc-meta">
       <span v-if="showCommunity" class="fc-community">{{ post.community_name }}</span>
       <router-link :to="`/users/${post.author_id}`" class="fc-author" @click.stop>
+        <UserAvatar :name="post.author_nickname" :src="post.author_avatar" :size="18" />
         {{ post.author_nickname }}
       </router-link>
       <span class="fc-stat">{{ post.like_count }} 赞</span>
@@ -24,6 +25,7 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
 import type { PostItem } from '@/api/post'
+import UserAvatar from '@/components/UserAvatar.vue'
 
 const props = withDefaults(
   defineProps<{ post: PostItem; showCommunity?: boolean }>(),
@@ -111,6 +113,9 @@ function goDetail() {
 }
 .fc-author {
   color: var(--text-3);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 .fc-author:hover {
   color: var(--brand);

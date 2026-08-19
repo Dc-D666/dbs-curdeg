@@ -5,8 +5,13 @@
       <h1 class="page-title">我关注的频道</h1>
     </header>
 
-    <p v-if="loading && items.length === 0" class="state">加载中…</p>
-    <p v-else-if="items.length === 0" class="state">还没有关注的频道，去发现页逛逛吧</p>
+    <SkeletonFeed v-if="loading && items.length === 0" :count="2" />
+    <EmptyState
+      v-else-if="items.length === 0"
+      text="还没有关注的频道"
+      action-text="去发现频道"
+      to="/discover"
+    />
 
     <div v-else class="feed-list">
       <FeedCard v-for="p in items" :key="p.id" :post="p" show-community />
@@ -25,7 +30,10 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import FeedCard from '@/components/FeedCard.vue'
+import SkeletonFeed from '@/components/SkeletonFeed.vue'
+import EmptyState from '@/components/EmptyState.vue'
 import { postApi, type PostItem } from '@/api/post'
+import { toast } from '@/utils/toast'
 
 const items = ref<PostItem[]>([])
 const cursor = ref<string | null>(null)
@@ -44,7 +52,7 @@ async function loadMore() {
     cursor.value = data.next_cursor
     hasMore.value = data.has_more
   } catch (e) {
-    alert(e instanceof Error ? e.message : '加载失败')
+    toast(e instanceof Error ? e.message : '加载失败', 'error')
   } finally {
     loading.value = false
   }

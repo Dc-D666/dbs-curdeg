@@ -70,7 +70,7 @@
         </div>
 
         <p v-if="commentsLoading && comments.length === 0" class="state">加载中…</p>
-        <p v-else-if="comments.length === 0" class="state">暂无评论</p>
+        <EmptyState v-else-if="comments.length === 0" text="暂无评论" />
 
         <ul v-else class="comment-list">
           <li v-for="c in comments" :key="c.id" class="comment-item">
@@ -128,9 +128,11 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { communityApi } from '@/api/community'
+import EmptyState from '@/components/EmptyState.vue'
 import { postApi, type CommentItem, type PostItem } from '@/api/post'
 import { tokenStore } from '@/api/http'
 import { useAuthStore } from '@/stores/auth'
+import { toast } from '@/utils/toast'
 
 const route = useRoute()
 const router = useRouter()
@@ -194,7 +196,7 @@ async function loadComments(page: number) {
     commentPage.value = page
     commentTotal.value = data.total
   } catch (e) {
-    alert(e instanceof Error ? e.message : '加载评论失败')
+    toast(e instanceof Error ? e.message : '加载评论失败', 'error')
   } finally {
     commentsLoading.value = false
   }
@@ -220,7 +222,7 @@ async function toggleLike() {
       p.like_count = r.count
     }
   } catch (e) {
-    alert(e instanceof Error ? e.message : '操作失败')
+    toast(e instanceof Error ? e.message : '操作失败', 'error')
   }
 }
 
@@ -236,7 +238,7 @@ async function toggleFollow() {
       p.is_followed = true
     }
   } catch (e) {
-    alert(e instanceof Error ? e.message : '操作失败')
+    toast(e instanceof Error ? e.message : '操作失败', 'error')
   }
 }
 
@@ -264,7 +266,7 @@ async function submitComment() {
     commentInput.value = ''
     replyTarget.value = null
   } catch (e) {
-    alert(e instanceof Error ? e.message : '发送失败')
+    toast(e instanceof Error ? e.message : '发送失败', 'error')
   } finally {
     sending.value = false
   }
@@ -315,7 +317,7 @@ async function loadMoreReplies(c: CommentItem) {
     st.page += 1
     st.total = data.total
   } catch (e) {
-    alert(e instanceof Error ? e.message : '加载失败')
+    toast(e instanceof Error ? e.message : '加载失败', 'error')
   } finally {
     st.loading = false
   }
@@ -334,7 +336,7 @@ async function toggleCommentLike(c: CommentItem) {
       c.like_count = r.count
     }
   } catch (e) {
-    alert(e instanceof Error ? e.message : '操作失败')
+    toast(e instanceof Error ? e.message : '操作失败', 'error')
   }
 }
 
@@ -350,7 +352,7 @@ async function deleteComment(commentId: number) {
     if (post.value) post.value.comment_count = Math.max(0, post.value.comment_count - 1)
     await loadComments(1)
   } catch (e) {
-    alert(e instanceof Error ? e.message : '删除失败')
+    toast(e instanceof Error ? e.message : '删除失败', 'error')
   }
 }
 
@@ -370,7 +372,7 @@ async function onDeletePost() {
     await postApi.remove(post.value.id)
     router.push(`/c/${post.value.community_id}`)
   } catch (e) {
-    alert(e instanceof Error ? e.message : '删除失败')
+    toast(e instanceof Error ? e.message : '删除失败', 'error')
   }
 }
 </script>
