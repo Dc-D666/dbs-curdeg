@@ -1,0 +1,26 @@
+# ===== 密钥与环境变量（永不入库） =====
+backend/.env
+frontend/.env
+deploy/.env
+*.local
+
+# ===== 本地调研捕获（含 token，禁止提交） =====
+captured_token.txt
+mcp_capture_*.json
+cli_*.json
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# ===== Node =====
+node_modules/
+dist/
+
+# ===== IDE / OS =====
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
