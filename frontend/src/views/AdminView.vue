@@ -61,7 +61,13 @@
         <div class="panel">
           <div class="role-form">
             <t-input v-model.trim="roleForm.name" class="role-name-input" placeholder="身份组名称" maxlength="32" clearable />
-            <t-color-picker v-model="roleForm.color" :color-modes="['monochrome']" :enable-alpha="false" class="color-picker" />
+            <t-color-picker
+              v-model="roleForm.color"
+              :color-modes="['monochrome']"
+              :enable-alpha="false"
+              format="HEX"
+              class="color-picker"
+            />
             <t-checkbox v-model="roleForm.is_level_role" class="level-role-check">等级身份</t-checkbox>
             <t-input-number
               v-if="roleForm.is_level_role"
@@ -363,12 +369,27 @@ async function onAssign(m: Member) {
   }
 }
 
+/** 颜色归一化：调色盘可能输出 #RRGGBB / #RRGGBBAA / rgb(r,g,b) / rgba(r,g,b,a)，统一为 6 位 hex */
+function normalizeColor(c: string): string {
+  const v = (c || '').trim()
+  if (!v) return '#1a73e8'
+  const rgb = v.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i)
+  if (rgb) {
+    return '#' + [rgb[1], rgb[2], rgb[3]].map((x) => Number(x).toString(16).padStart(2, '0')).join('')
+  }
+  return v.replace(/^#([0-9a-fA-F]{6})[0-9a-fA-F]{2}$/, '#$1')
+}
+
 async function onCreateRole() {
   roleSaving.value = true
   try {
-    // 调色盘可能输出 8 位 hex（#RRGGBBAA）：归一化为 6 位
-    const color = (roleForm.color || '#1a73e8').replace(/^#([0-9a-fA-F]{6})[0-9a-fA-F]{2}$/, '#$1')
-    await roleApi.create(cid, { name: roleForm.name, color, level: roleForm.level, is_level_role: roleForm.is_level_role, perms: [] })
+    await roleApi.create(cid, {
+      name: roleForm.name,
+      color: normalizeColor(roleForm.color),
+      level: roleForm.level,
+      is_level_role: roleForm.is_level_role,
+      perms: [],
+    })
     roleForm.name = ''
     roleForm.level = 1
     roleForm.is_level_role = false

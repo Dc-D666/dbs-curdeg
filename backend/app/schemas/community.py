@@ -1,7 +1,8 @@
 """频道/版块/成员/身份组相关 Pydantic 模型。"""
+import re
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 # ---------- 请求 ----------
 
@@ -51,18 +52,38 @@ class UpdateCommunityStatusRequest(BaseModel):
 
 class CreateRoleRequest(BaseModel):
     name: str = Field(min_length=1, max_length=32)
-    color: str = Field(default="#1a73e8", pattern=r"^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$")  # 6 或 8 位 hex
+    color: str = Field(default="#1a73e8")
     level: int = Field(default=0, ge=0)  # 等级身份门槛（仅 is_level_role 生效）
     perms: list[str] = Field(default_factory=list)
     is_level_role: bool = False  # 等级身份：成员活跃等级 ≥ level 自动授予
 
+    @field_validator("color")
+    @classmethod
+    def _normalize_color(cls, v: str) -> str:
+        """宽容颜色格式：rgb()/rgba()/#RRGGBBAA 统一归一化为 #RRGGBB。"""
+        v = v.strip()
+        m = re.match(r"^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)", v, re.IGNORECASE)
+        if m:
+            return "#" + "".join(f"{int(x) & 255:02x}" for x in m.groups())
+        m = re.fullmatch(r"#([0-9a-fA-F]{6})([0-9a-fA-F]{2})?", v)
+        if m:
+            return "#" + m.group(1).lower()
+        raise ValueError("颜色格式不正确（支持 #RRGGBB 或 rgb(r,g,b)）")
+
 
 class UpdateRoleRequest(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=32)
-    color: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$")
+    color: str | None = Field(default=None)
     level: int | None = Field(default=None, ge=0)
     perms: list[str] | None = None
     is_level_role: bool | None = None
+
+    @field_validator("color")
+    @classmethod
+    def _normalize_color(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        return CreateRoleRequest._normalize_color(v)
 
 
 class MoveRoleRequest(BaseModel):
