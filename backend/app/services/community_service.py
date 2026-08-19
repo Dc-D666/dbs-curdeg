@@ -29,9 +29,8 @@ from app.schemas.community import (
     UpdateBoardRequest,
     UpdateCommunityRequest,
 )
+from app.services.notify_service import notify
 from app.services.op_log_service import log_op
-
-
 def _gen_number() -> str:
     """频道号：6 位字母数字，撞车重试。"""
     for _ in range(5):
@@ -303,6 +302,13 @@ def handle_join_request(
         "join_request", req.id, {"user_id": req.user_id},
     )
     db.commit()
+    # 通知申请人：审核结果
+    notify(
+        db, req.user_id, "review_result",
+        "加入频道申请已通过" if approve else "加入频道申请未通过",
+        summary=f"你加入《{community.name}》的申请已{'通过' if approve else '被拒绝'}",
+        ref_id=community.id, actor_id=user.id, community_id=community.id,
+    )
 
 
 def list_members(db: Session, community: Community, page: int, page_size: int) -> dict:

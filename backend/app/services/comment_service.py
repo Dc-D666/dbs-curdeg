@@ -10,6 +10,7 @@ from app.models.post import Post
 from app.models.user import User
 from app.schemas.post import CommentOut, CreateCommentRequest
 from app.services.level_service import LEVEL_POINTS, add_level
+from app.services.notify_service import notify
 from app.services.op_log_service import log_op
 from app.services.post_service import _require_member
 
@@ -47,6 +48,18 @@ def create_comment(
     add_level(db, post.community_id, user.id, LEVEL_POINTS["comment"])
     db.commit()
     db.refresh(comment)
+    # 通知：帖子作者（新评论）；楼中楼回复额外通知被回复者（与作者不同人时）
+    preview = comment.content[:100]
+    if post.author_id != user.id:
+        notify(
+            db, post.author_id, "comment", "你的帖子收到了新评论",
+            summary=preview, ref_id=post.id, actor_id=user.id, community_id=post.community_id,
+        )
+    if parent and parent.author_id != user.id and parent.author_id != post.author_id:
+        notify(
+            db, parent.author_id, "comment", "你的评论收到了回复",
+            summary=preview, ref_id=post.id, actor_id=user.id, community_id=post.community_id,
+        )
     return comment_out(db, comment, user.id)
 
 

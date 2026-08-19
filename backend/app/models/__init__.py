@@ -17,8 +17,12 @@ from app.models.follow import Follow
 from app.models.topic import Topic
 from app.models.op_log import OpLog
 from app.models.search_record import SearchRecord
+from app.models.notification import Notification
+from app.models.feed_strategy import FeedStrategy
+from app.models.short_link import ShortLink
 
 __all__ = [
     "User", "Community", "Board", "Role", "Member", "JoinRequest", "Post",
     "Comment", "Like", "Follow", "Topic", "OpLog", "SearchRecord",
+    "Notification", "FeedStrategy", "ShortLink",
 ]

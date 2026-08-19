@@ -5,7 +5,12 @@
     <nav v-if="showTabbar" class="tabbar">
       <router-link v-for="t in tabs" :key="t.path" :to="t.path" class="tab-item"
         :class="{ active: route.path === t.path }">
-        <component :is="t.icon" class="tab-icon" />
+        <span class="tab-icon-wrap">
+          <component :is="t.icon" class="tab-icon" />
+          <span v-if="t.badge && notif.unread > 0" class="tab-badge">
+            {{ notif.unread > 99 ? '99+' : notif.unread }}
+          </span>
+        </span>
         <span class="tab-label">{{ t.label }}</span>
       </router-link>
     </nav>
@@ -13,17 +18,20 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { HomeIcon, BrowseIcon, UserIcon } from 'tdesign-icons-vue-next'
-import { onMounted } from 'vue'
+import { HomeIcon, BrowseIcon, UserIcon, NotificationIcon } from 'tdesign-icons-vue-next'
 import { request } from '@/api/http'
+import { useNotificationStore } from '@/stores/notification'
+import { useWebSocket } from '@/composables/useWebSocket'
 
 const route = useRoute()
+const notif = useNotificationStore()
 
 const tabs = [
   { path: '/', label: '首页', icon: HomeIcon },
   { path: '/discover', label: '发现', icon: BrowseIcon },
+  { path: '/notifications', label: '通知', icon: NotificationIcon, badge: true },
   { path: '/me', label: '我的', icon: UserIcon },
 ]
 
@@ -33,6 +41,8 @@ const showTabbar = computed(() =>
 )
 
 onMounted(async () => {
+  // WebSocket 通知（登录后自动连接，未读角标实时更新）
+  useWebSocket()
   try {
     const data = await request<{ message: string }>({ url: '/ping' })
     console.log('[SDUdiscord] 后端连通:', data.message)
@@ -115,6 +125,26 @@ button {
   width: 24px;
   height: 24px;
   flex-shrink: 0;
+}
+.tab-icon-wrap {
+  position: relative;
+  display: inline-flex;
+}
+.tab-badge {
+  position: absolute;
+  top: -6px;
+  right: -12px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
+  white-space: nowrap;
+  box-sizing: border-box;
 }
 .tab-icon :deep(svg) {
   width: 24px;

@@ -3,15 +3,24 @@
 模块路由：
   /api/v1/auth   账号体系（注册/登录/JWT）
   /api/v1/users  用户资料
-  （后续阶段追加 community/content/interact/ai/notification）
+  /ws             WebSocket 实时通知（阶段 5）
+  （后续阶段追加 ai/notification）
 """
-from fastapi import FastAPI, HTTPException, Request
+import asyncio
+
+from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy.orm import Session
 
-from app.api.v1 import auth, boards, comments, communities, interact, manage, members, posts, roles, search, topics, uploads, users
+from app.api.v1 import auth, boards, comments, communities, interact, manage, members, notifications, posts, roles, search, topics, uploads, users
 from app.core.config import settings
+from app.core.security import decode_token
+from app.db import get_db
+from app.models.user import User
+from app.ws import events
+from app.ws.manager import manager
 
 app = FastAPI(
     title="SDUdiscord API",
@@ -90,6 +99,61 @@ app.include_router(topics.router, prefix=API_V1)
 app.include_router(roles.router, prefix=API_V1)
 app.include_router(manage.router, prefix=API_V1)
 app.include_router(search.router, prefix=API_V1)
+app.include_router(notifications.router, prefix=API_V1)
+
+
+@app.on_event("startup")
+async def _capture_ws_loop() -> None:
+    """捕获 ASGI 主事件循环，供同步端点 run_coroutine_threadsafe 投递 WS 推送。"""
+    events.set_ws_loop(asyncio.get_running_loop())
+
+
+@app.websocket("/ws")
+async def websocket_endpoint(ws: WebSocket, db: Session = Depends(get_db)) -> None:
+    """WebSocket 通知（协议见 详细开发方案.md §5.3）。
+
+    首帧 {type: auth, token} 认证，10s 超时未认证断开（4401）；
+    心跳：收到 {type: ping} 回 {type: pong}；断线自动清理连接。
+    """
+    user_id: int | None = None
+    await ws.accept()
+    # 首帧认证：10s 超时
+    try:
+        first = await asyncio.wait_for(ws.receive_json(), timeout=10)
+    except Exception:
+        try:
+            await ws.close(code=4401, reason="auth timeout")
+        except Exception:
+            pass
+        return
+    if not isinstance(first, dict) or first.get("type") != events.EVENT_AUTH:
+        await ws.close(code=4401, reason="auth required")
+        return
+    token = first.get("token")
+    uid = decode_token(token, expected_type="access") if isinstance(token, str) else None
+    if uid is None:
+        await ws.close(code=4401, reason="invalid token")
+        return
+    user = db.get(User, uid)
+    if user is None or user.status != 0:
+        await ws.close(code=4401, reason="user not found")
+        return
+    user_id = uid
+
+    await manager.connect(user_id, ws)
+    await ws.send_json({"type": events.EVENT_AUTHED})
+    try:
+        while True:
+            msg = await ws.receive_json()
+            if isinstance(msg, dict) and msg.get("type") == events.EVENT_PING:
+                await ws.send_json({"type": events.EVENT_PONG})
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        pass
+    finally:
+        if user_id is not None:
+            await manager.disconnect(user_id, ws)
 
 
 @app.get("/healthz")

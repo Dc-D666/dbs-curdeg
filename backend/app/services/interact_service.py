@@ -16,6 +16,7 @@ from app.models.like import Like
 from app.models.post import Post, POST_STATUS_NORMAL
 from app.models.user import User
 from app.services.level_service import LEVEL_POINTS, add_level
+from app.services.notify_service import notify
 from app.services.post_service import _require_member
 
 # post_id / comment_id 用 0 表示"无"（哨兵值，保证唯一约束生效，见 like.py 注释）
@@ -41,11 +42,23 @@ def like(db: Session, user: User, post_id: int | None = None, comment_id: int | 
     _bump_count(db, target, +1)
     # 活跃等级：点赞 +1（仅新增点赞时，重复点赞不加）
     add_level(db, community_id, user.id, LEVEL_POINTS["like"])
+    created = False
     try:
         db.commit()
+        created = True
     except IntegrityError:
         db.rollback()  # 并发重复点赞：唯一约束兜底，不重复计数
     db.refresh(target)
+    # 通知被赞者（自己赞自己不通知；ref_id 统一指向帖子，前端可跳转）
+    if created and getattr(target, "author_id", None) != user.id:
+        if isinstance(target, Post):
+            summary, ref = target.title, target.id
+        else:  # Comment
+            summary, ref = (target.content or "评论内容")[:80], target.post_id
+        notify(
+            db, target.author_id, "like", "有人赞了你的内容",
+            summary=summary, ref_id=ref, actor_id=user.id, community_id=community_id,
+        )
     return {"liked": True, "count": target.like_count}
 
 
@@ -87,6 +100,14 @@ def follow(db: Session, user: User, community_id: int) -> dict:
         db.rollback()
         if getattr(e.orig, "args", [None])[0] != 1062:  # 仅容忍唯一约束冲突，其余（如 FK）上抛
             raise
+        return {"followed": True}
+    # 通知频道主（自己关注自己的频道不通知）
+    if community.owner_id != user.id:
+        notify(
+            db, community.owner_id, "follow", "有新的频道关注者",
+            summary=f"关注了频道《{community.name}》", ref_id=community.id,
+            actor_id=user.id, community_id=community.id,
+        )
     return {"followed": True}
 
 

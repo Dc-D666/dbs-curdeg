@@ -19,6 +19,7 @@ from app.models.post import Post, POST_STATUS_DELETED, POST_STATUS_NORMAL
 from app.models.user import User
 from app.schemas.post import CreatePostRequest, PostOut, UpdatePostRequest
 from app.services.level_service import LEVEL_POINTS, add_level
+from app.services.notify_service import notify
 from app.services.op_log_service import log_op
 
 
@@ -50,6 +51,18 @@ def create_post(
     add_level(db, community.id, user.id, LEVEL_POINTS["post"])
     db.commit()
     db.refresh(post)
+    # 通知被 @ 的成员（自己除外）
+    at_ids = {
+        seg["at_user"]["id"]
+        for seg in rich
+        if isinstance(seg, dict) and seg.get("type") == 2 and isinstance(seg.get("at_user"), dict)
+    }
+    for uid in at_ids - {user.id}:
+        notify(
+            db, uid, "mention", "有人在帖子中提到了你",
+            summary=(post.title or "新帖子")[:80], ref_id=post.id,
+            actor_id=user.id, community_id=community.id,
+        )
     return post_out(db, post, current_user_id=user.id)
 
 
@@ -101,6 +114,12 @@ def set_top(db: Session, community: Community, post: Post, user: User, is_top: b
     log_op(db, community.id, user.id, "set_top", "post", post.id, {"is_top": is_top})
     db.commit()
     db.refresh(post)
+    if post.author_id != user.id:
+        notify(
+            db, post.author_id, "system", "你的帖子被置顶" if is_top else "你的帖子已取消置顶",
+            summary=(post.title or "")[:80], ref_id=post.id,
+            actor_id=user.id, community_id=community.id,
+        )
     return post_out(db, post, current_user_id=user.id)
 
 
@@ -111,6 +130,12 @@ def set_essence(db: Session, community: Community, post: Post, user: User, is_es
     log_op(db, community.id, user.id, "set_essence", "post", post.id, {"is_essence": is_essence})
     db.commit()
     db.refresh(post)
+    if post.author_id != user.id:
+        notify(
+            db, post.author_id, "system", "你的帖子被加精" if is_essence else "你的帖子已取消精华",
+            summary=(post.title or "")[:80], ref_id=post.id,
+            actor_id=user.id, community_id=community.id,
+        )
     return post_out(db, post, current_user_id=user.id)
 
 

@@ -20,9 +20,11 @@ from app.core.permissions import (
     require_perms,
 )
 from app.core.response import NotFoundError, PermissionError_
+from app.models.community import Community
 from app.models.member import MEMBER_OWNER, Member
 from app.models.user import User
 from app.schemas.community import MemberOut
+from app.services.notify_service import notify
 from app.services.op_log_service import list_ops, log_op
 
 
@@ -55,6 +57,19 @@ def _member_out(db: Session, member: Member) -> MemberOut:
     return out
 
 
+def _notify_target_system(
+    db: Session, community_id: int, operator: User, target_user_id: int, title: str
+) -> None:
+    """给被处置成员发系统通知（附频道名，可跳转频道页）。"""
+    community = db.get(Community, community_id)
+    cname = community.name if community else ""
+    notify(
+        db, target_user_id, "system", title,
+        summary=f"频道《{cname}》", ref_id=community_id,
+        actor_id=operator.id, community_id=community_id,
+    )
+
+
 def shutup(db: Session, community_id: int, user: User, target_user_id: int, hours: int) -> MemberOut:
     """禁言（shutup 权限）：shutup_expire_at = now + hours。"""
     operator = require_perms(db, community_id, user, PERM_SHUTUP)
@@ -64,6 +79,7 @@ def shutup(db: Session, community_id: int, user: User, target_user_id: int, hour
     log_op(db, community_id, user.id, "shutup", "member", target.user_id, {"hours": hours})
     db.commit()
     db.refresh(target)
+    _notify_target_system(db, community_id, user, target.user_id, f"你已被禁言 {hours} 小时")
     return _member_out(db, target)
 
 
@@ -76,6 +92,7 @@ def unshutup(db: Session, community_id: int, user: User, target_user_id: int) ->
     log_op(db, community_id, user.id, "unshutup", "member", target.user_id)
     db.commit()
     db.refresh(target)
+    _notify_target_system(db, community_id, user, target.user_id, "你的禁言已解除")
     return _member_out(db, target)
 
 
@@ -89,6 +106,7 @@ def kick(db: Session, community_id: int, user: User, target_user_id: int) -> Mem
     log_op(db, community_id, user.id, "kick", "member", target.user_id)
     db.commit()
     db.refresh(target)
+    _notify_target_system(db, community_id, user, target.user_id, "你已被移出频道")
     return _member_out(db, target)
 
 
@@ -102,6 +120,7 @@ def block(db: Session, community_id: int, user: User, target_user_id: int) -> Me
     log_op(db, community_id, user.id, "block", "member", target.user_id)
     db.commit()
     db.refresh(target)
+    _notify_target_system(db, community_id, user, target.user_id, "你已被拉黑")
     return _member_out(db, target)
 
 
@@ -114,6 +133,7 @@ def unblock(db: Session, community_id: int, user: User, target_user_id: int) -> 
     log_op(db, community_id, user.id, "unblock", "member", target.user_id)
     db.commit()
     db.refresh(target)
+    _notify_target_system(db, community_id, user, target.user_id, "你已被解除拉黑")
     return _member_out(db, target)
 
 
