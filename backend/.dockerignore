@@ -1,0 +1,11 @@
+# 构建上下文精简（镜像里只 COPY 指定目录，这些文件不进镜像也不传 daemon）
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.env
+.env.*
+tests/
+.git/
+.gitignore
+Dockerfile
+.dockerignore

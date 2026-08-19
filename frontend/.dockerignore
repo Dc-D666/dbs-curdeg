@@ -1,0 +1,9 @@
+# 构建上下文精简：Dockerfile 用 COPY . .，node_modules/dist 不传 daemon
+node_modules/
+dist/
+.env
+.env.*
+.git/
+.gitignore
+Dockerfile
+.dockerignore

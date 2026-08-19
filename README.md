@@ -2,7 +2,7 @@
 
 模仿腾讯频道（QQ 频道）私域平台的大学生课设：**Web + Android 双端，共用一套 FastAPI API**。
 
-- **后端**：Python 3.12 + FastAPI + SQLAlchemy + MySQL 8 + Redis 7（WebSocket 通知、AI 模块）
+- **后端**：Python 3.12 + FastAPI + SQLAlchemy + MySQL 5.7 + Redis 7（WebSocket 通知、AI 模块）
 - **前端**：Vue3 + Vite + TypeScript（移动优先 H5 + PC 管理后台）
 - **Android**：Kotlin + Jetpack Compose（独立 App，另仓/本仓 android/ 目录）
 - **部署**：服务器每 3 分钟自动拉取 GitHub 最新代码并重建 —— **push 到 main 即自动上线**（最长 3 分钟生效）

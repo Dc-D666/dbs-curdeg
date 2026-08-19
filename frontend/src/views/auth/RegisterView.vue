@@ -127,6 +127,23 @@ async function sendCode() {
 
 async function onSubmit() {
   if (loading.value) return
+  // 本地校验（与后端规则一致，避免提交后才报笼统的"参数错误"）
+  if (!/^[a-zA-Z0-9_]{3,32}$/.test(form.username)) {
+    error.value = '用户名需为 3-32 位字母、数字或下划线'
+    return
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
+    error.value = '请填写正确的邮箱'
+    return
+  }
+  if (!/^\d{6}$/.test(form.code)) {
+    error.value = '验证码为 6 位数字'
+    return
+  }
+  if (form.password.length < 6 || !/[a-zA-Z]/.test(form.password) || !/\d/.test(form.password)) {
+    error.value = '密码至少 6 位，且需同时包含字母和数字'
+    return
+  }
   loading.value = true
   error.value = ''
   try {

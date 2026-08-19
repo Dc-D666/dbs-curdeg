@@ -40,21 +40,39 @@ async def http_exception_handler(request: Request, exc: HTTPException):
     )
 
 
+# 字段级校验失败的友好提示（按 body 字段名映射；pydantic 默认英文消息不可直接展示）
+_FIELD_HINTS = {
+    "username": "用户名需为 3-32 位字母、数字或下划线",
+    "email": "邮箱格式不正确",
+    "code": "验证码为 6 位数字",
+    "password": "密码至少 6 位，且需同时包含字母和数字",
+    "account": "账号需为 3-64 位字符",
+    "refresh_token": "refresh_token 不能为空",
+    "old_password": "原密码不能为空",
+    "new_password": "新密码至少 6 位，且需同时包含字母和数字",
+}
+
+
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    """参数校验失败统一为 400 + 2001。"""
+    """参数校验失败统一为 400 + 2001，message 给出首个可读的错误原因。"""
     errors = []
+    message = "参数错误"
     for err in exc.errors():
+        loc = [str(x) for x in err.get("loc", [])]
+        field = loc[-1] if loc and loc[0] == "body" else None
+        if field and field in _FIELD_HINTS and message == "参数错误":
+            message = _FIELD_HINTS[field]
         errors.append(
             {
-                "loc": [str(x) for x in err.get("loc", [])],
+                "loc": loc,
                 "msg": str(err.get("msg", "")),
                 "type": str(err.get("type", "")),
             }
         )
     return JSONResponse(
         status_code=400,
-        content={"code": 2001, "message": "参数错误", "data": {"errors": errors}},
+        content={"code": 2001, "message": message, "data": {"errors": errors}},
     )
 
 
