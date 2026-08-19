@@ -34,9 +34,12 @@ services:
     restart: always
     ports:
       - "80:80"
+      - "443:443"
     depends_on: [api]
     volumes:
       - uploads:/data/uploads:ro
+      - ./certbot/www:/var/www/certbot:ro # certbot 校验目录（签发/续期证书用）
+      - ./certs:/etc/nginx/cert:ro        # HTTPS 证书目录（签发后自动生效）
     networks: [app]
 
 networks:
