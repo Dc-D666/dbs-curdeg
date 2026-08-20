@@ -39,12 +39,16 @@ import kotlinx.coroutines.launch
 @Composable
 fun MeScreen(onLoggedOut: () -> Unit) {
     var user by remember { mutableStateOf<com.curdeg.channel.data.UserOut?>(null) }
+    var error by remember { mutableStateOf(false) }
+    var retryKey by remember { mutableStateOf(0) }
     val scope = rememberCoroutineScope()
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(retryKey) {
+        error = false
         try {
             user = ApiClient.service.me().requireData()
         } catch (_: Exception) {
+            error = true
         }
     }
 
@@ -58,9 +62,15 @@ fun MeScreen(onLoggedOut: () -> Unit) {
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Spacer(Modifier.height(24.dp))
-            when (val u = user) {
-                null -> CircularProgressIndicator()
+            when {
+                error -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("加载失败", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.outline)
+                    Spacer(Modifier.height(12.dp))
+                    Button(onClick = { retryKey++ }) { Text("重试") }
+                }
+                user == null -> CircularProgressIndicator()
                 else -> {
+                    val u = user!!
                     AsyncImage(
                         model = u.avatarUrl,
                         contentDescription = null,

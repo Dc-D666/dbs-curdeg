@@ -1,4 +1,8 @@
 """AI 帮写（阶段 6，POST /ai/assist SSE 流式）：按频道风格生成/润色/起标题。"""
+import asyncio
+
+from fastapi import Request
+
 from app.ai import llm_gateway
 
 SYSTEM_PROMPT = (
@@ -31,14 +35,20 @@ def build_messages(payload) -> list[dict]:
     ]
 
 
-def assist_stream(payload) -> iter:
-    """SSE 文本块迭代器。
+async def assist_stream(payload, request: Request) -> iter:
+    """SSE 文本块迭代器（异步生成器，支持客户端断开检查）。
 
     说明：GLM-4.7-Flash 是推理模型，流式响应 content 恒为空（思考过程在
     reasoning_content），因此这里用 chat 一次性取回完整文本，再按小块切分
     模拟流式（前端打字机效果不变，SSE 协议不变）。
+
+    生成期间定期检查客户端是否断开，断开则提前终止，避免无效占用的 LLM 与
+    线程继续运行。
     """
-    text = llm_gateway.chat(build_messages(payload), max_tokens=2048, temperature=0.7)
+    msgs = build_messages(payload)
+    text = await asyncio.to_thread(llm_gateway.chat, msgs, "", 2048, 0.7)
     step = 8
     for i in range(0, len(text), step):
+        if await request.is_disconnected():
+            return
         yield text[i:i + step]

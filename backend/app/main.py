@@ -156,13 +156,22 @@ async def websocket_endpoint(ws: WebSocket, db: Session = Depends(get_db)) -> No
     await ws.send_json({"type": events.EVENT_AUTHED})
     try:
         while True:
-            msg = await ws.receive_json()
+            msg = await asyncio.wait_for(ws.receive_json(), timeout=60)
             if isinstance(msg, dict) and msg.get("type") == events.EVENT_PING:
                 await ws.send_json({"type": events.EVENT_PONG})
     except WebSocketDisconnect:
         pass
+    except asyncio.TimeoutError:
+        # 60s 无任何消息 → 坏/半开连接，主动断开（finally 统一清理）
+        try:
+            await ws.close(code=4400, reason="heartbeat timeout")
+        except Exception:
+            pass
     except Exception:
-        pass
+        try:
+            await ws.close(code=4400, reason="connection error")
+        except Exception:
+            pass
     finally:
         if user_id is not None:
             await manager.disconnect(user_id, ws)

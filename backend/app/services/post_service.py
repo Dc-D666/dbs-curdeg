@@ -113,6 +113,8 @@ def delete_post(db: Session, community: Community, post: Post, user: User) -> No
     if not is_author:
         log_op(db, community.id, user.id, "delete_post", "post", post.id, {"author_id": post.author_id})
     db.commit()
+    # 同步移除热度 zset（软删后不再占位）
+    heat_service.remove(db, post.id, community.id)
 
 
 def set_top(db: Session, community: Community, post: Post, user: User, is_top: bool) -> PostOut:
@@ -122,6 +124,8 @@ def set_top(db: Session, community: Community, post: Post, user: User, is_top: b
     log_op(db, community.id, user.id, "set_top", "post", post.id, {"is_top": is_top})
     db.commit()
     db.refresh(post)
+    # 置顶影响热度分（top_weight 加分），同步热度缓存
+    heat_service.bump(db, post, community.id)
     if post.author_id != user.id:
         notify(
             db, post.author_id, "system", "你的帖子被置顶" if is_top else "你的帖子已取消置顶",
@@ -178,9 +182,7 @@ def feed(
 
     if sort == "hot":
         page = int(cursor) if cursor and cursor.isdigit() else 1
-        hot_posts, next_cursor, has_more = hot_feed(db, community.id, page, page_size)
-        if board_id is not None:
-            hot_posts = [p for p in hot_posts if p.board_id == board_id]
+        hot_posts, next_cursor, has_more = hot_feed(db, community.id, page, page_size, board_id)
         return {
             "items": post_outs(db, hot_posts, current_user_id),
             "next_cursor": next_cursor,

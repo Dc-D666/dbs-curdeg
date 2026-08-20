@@ -7,7 +7,13 @@ import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
-/** 登录态：access / refresh token 持久化（DataStore）。 */
+/**
+ * 登录态：access / refresh token 持久化（DataStore）。
+ *
+ * 安全提示：token 为明文存储（课设可接受）。生产环境应改用
+ * androidx.security / EncryptedSharedPreferences 加密存储，并配合
+ * AndroidManifest 中 android:allowBackup="false"，避免 token 随云备份泄露。
+ */
 object TokenStore {
     private val Context.dataStore by preferencesDataStore(name = "auth")
 

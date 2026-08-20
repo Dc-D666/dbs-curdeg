@@ -29,6 +29,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,10 +44,12 @@ import com.curdeg.channel.data.CreateCommentRequest
 import com.curdeg.channel.data.LikeRequest
 import com.curdeg.channel.data.PostOut
 import com.curdeg.channel.navigation.Routes
+import kotlinx.coroutines.launch
 
 /** 帖子详情：富文本/图片渲染 + 评论列表 + 点赞。 */
 @Composable
 fun PostDetailScreen(nav: NavHostController, postId: Long) {
+    val scope = rememberCoroutineScope()
     var post by remember { mutableStateOf<PostOut?>(null) }
     var comments by remember { mutableStateOf<List<CommentOut>>(emptyList()) }
     var input by remember { mutableStateOf("") }
@@ -104,10 +107,12 @@ fun PostDetailScreen(nav: NavHostController, postId: Long) {
                             Spacer(Modifier.height(10.dp))
                             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 OutlinedButton(onClick = {
-                                    try {
-                                        val res = ApiClient.service.like(LikeRequest(p.id)).requireData()
-                                        post = p.copy(likeCount = res.count, isLiked = res.liked)
-                                    } catch (_: Exception) {
+                                    scope.launch {
+                                        try {
+                                            val res = ApiClient.service.like(LikeRequest(p.id)).requireData()
+                                            post = p.copy(likeCount = res.count, isLiked = res.liked)
+                                        } catch (_: Exception) {
+                                        }
                                     }
                                 }) { Text(if (p.isLiked) "已赞 ${p.likeCount}" else "点赞 ${p.likeCount}") }
                                 Text("${p.commentCount} 评论", Modifier.align(Alignment.CenterVertically), style = MaterialTheme.typography.bodySmall)
@@ -134,13 +139,15 @@ fun PostDetailScreen(nav: NavHostController, postId: Long) {
                         enabled = input.isNotBlank() && !sending,
                         onClick = {
                             sending = true
-                            try {
-                                ApiClient.service.createComment(p.id, CreateCommentRequest(input.trim()))
-                                comments = comments + CommentOut(0, input.trim(), 0, "我", "", 0)
-                                input = ""
-                            } catch (_: Exception) {
-                            } finally {
-                                sending = false
+                            scope.launch {
+                                try {
+                                    ApiClient.service.createComment(p.id, CreateCommentRequest(input.trim()))
+                                    comments = comments + CommentOut(System.currentTimeMillis(), input.trim(), 0, "我", "", 0)
+                                    input = ""
+                                } catch (_: Exception) {
+                                } finally {
+                                    sending = false
+                                }
                             }
                         },
                     ) { Text("发送") }

@@ -7,7 +7,7 @@ ref_id 约定（前端据此跳转）：帖子相关事件 → post_id；频道�
 """
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Boolean, DateTime, String, func
+from sqlalchemy import BigInteger, Boolean, DateTime, Index, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -30,5 +30,7 @@ class Notification(Base):
 
     __table_args__ = (
         # 未读列表高频查询：按用户 + 未读 + 时间倒序
+        # 与迁移 a1b2c3d4e5f6 中的 ix_notifications_user_read(user_id, is_read, id) 保持一致
+        Index("ix_notifications_user_read", "user_id", "is_read", "id"),
         {"mysql_engine": "InnoDB"},
     )

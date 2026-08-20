@@ -18,6 +18,7 @@ import time
 from datetime import datetime
 
 import redis
+from functools import lru_cache
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -45,11 +46,18 @@ DEFAULTS: dict = {
 ALL_SCOPE = "all"
 
 
+_redis_client: redis.Redis | None = None
+
+
 def _redis() -> redis.Redis:
-    return redis.Redis(
-        host=settings.REDIS_HOST, port=settings.REDIS_PORT, db=settings.REDIS_DB,
-        decode_responses=True,
-    )
+    """复用模块级连接（避免每次调用新建连接）。"""
+    global _redis_client
+    if _redis_client is None:
+        _redis_client = redis.Redis(
+            host=settings.REDIS_HOST, port=settings.REDIS_PORT, db=settings.REDIS_DB,
+            decode_responses=True,
+        )
+    return _redis_client
 
 
 def _zkey(scope: int | str) -> str:
@@ -68,9 +76,21 @@ def get_strategy(db: Session, community_id: int | None) -> FeedStrategy:
         ).scalar_one_or_none()
     if s is None:
         s = FeedStrategy(community_id=community_id or 0)
-    for k, v in DEFAULTS.items():  # 瞬时对象列默认不生效，显式兜底
+    _apply_defaults(s)
+    return s
+
+
+def _apply_defaults(s: FeedStrategy) -> None:
+    """瞬时对象列默认不生效，显式兜底（模型 default 仅 INSERT 时生效）。"""
+    for k, v in DEFAULTS.items():
         if getattr(s, k) is None:
             setattr(s, k, v)
+
+
+def _default_strategy() -> FeedStrategy:
+    """全站热度流使用的默认权重策略对象（字段已兜底，可安全计算）。"""
+    s = FeedStrategy(community_id=0)
+    _apply_defaults(s)
     return s
 
 
@@ -166,10 +186,20 @@ def bump(db: Session, post: Post, community_id: int) -> None:
             return
         s = get_strategy(db, community_id)
         r.zadd(key, {str(post.id): hot_score(post, s)})
-        # 全站缓存同步更新（用默认权重）
+        # 全站缓存同步更新（用默认权重，字段已兜底可安全计算）
         all_key = _zkey(ALL_SCOPE)
         if r.exists(all_key):
-            r.zadd(all_key, {str(post.id): hot_score(post, FeedStrategy(community_id=0))})
+            r.zadd(all_key, {str(post.id): hot_score(post, _default_strategy())})
+    except redis.RedisError:
+        pass
+
+
+def remove(db: Session, post_id: int, community_id: int) -> None:
+    """删除/下架帖子时从热度 zset 移除，避免占用缓存 slot 导致 offset 分页错位。"""
+    try:
+        r = _redis()
+        r.zrem(_zkey(community_id), str(post_id))
+        r.zrem(_zkey(ALL_SCOPE), str(post_id))
     except redis.RedisError:
         pass
 
@@ -177,14 +207,16 @@ def bump(db: Session, post: Post, community_id: int) -> None:
 # ---------- 热度分页 ----------
 
 
-def hot_feed(db: Session, community_id: int | None, page: int, page_size: int) -> dict:
-    """热度帖子分页：zset 顺序 → SQL 取回 → offset 分页。返回 (posts, next_cursor, has_more)。"""
+def hot_feed(db: Session, community_id: int | None, page: int, page_size: int, board_id: int | None = None) -> dict:
+    """热度帖子分页：zset 顺序 → SQL 取回（可按版块过滤）→ offset 分页。返回 (posts, next_cursor, has_more)。"""
+    page = max(1, int(page))
     ids = get_hot_ids(db, community_id)
     if not ids:
         return [], None, False
-    posts = db.execute(
-        select(Post).where(Post.id.in_(ids), Post.status == POST_STATUS_NORMAL)
-    ).scalars().all()
+    stmt = select(Post).where(Post.id.in_(ids), Post.status == POST_STATUS_NORMAL)
+    if board_id is not None:
+        stmt = stmt.where(Post.board_id == board_id)  # 过滤下沉到分页前，避免 offset 错位
+    posts = db.execute(stmt).scalars().all()
     order = {pid: i for i, pid in enumerate(ids)}
     posts.sort(key=lambda p: order.get(p.id, len(order)))
     start = (page - 1) * page_size

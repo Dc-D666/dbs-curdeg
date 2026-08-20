@@ -37,12 +37,18 @@ def _require_target(db: Session, community_id: int, user_id: int) -> Member:
     return target
 
 
-def _guard_target(db: Session, operator: Member, target: Member) -> None:
-    """目标保护：不能操作自己/频道主/同级或更高级成员。"""
-    if operator.id == target.id:
-        raise PermissionError_("不能对自己执行此操作")
+def _guard_target(db: Session, operator: Member | None, target: Member) -> None:
+    """目标保护：不能操作自己/频道主/同级或更高级成员。
+
+    operator 为 None 表示系统管理员（user_type==1，非频道成员）。
+    系统管理员拥有全量权限，不参与频道成员权重排序，直接放行（仍保留"不能操作频道主"）。
+    """
     if target.member_type == MEMBER_OWNER:
         raise PermissionError_("不能对频道主执行此操作")
+    if operator is None:  # 系统管理员：非成员，无需越级判断
+        return
+    if operator.id == target.id:
+        raise PermissionError_("不能对自己执行此操作")
     if not can_manage(db, operator, target):
         raise PermissionError_("不能管理同级别或更高级别的成员")
 

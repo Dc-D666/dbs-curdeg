@@ -24,5 +24,5 @@ class ShortLink(Base):
     target_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     creator_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
     visit_count: Mapped[int] = mapped_column(Integer, default=0)
-    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

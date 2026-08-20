@@ -70,7 +70,12 @@ def notify(
     actor_id: int | None = None,
     community_id: int | None = None,
 ) -> Notification | None:
-    """创建一条通知并推送（接收者开关关闭 / 自己触发自己 / 接收者不存在时跳过）。"""
+    """创建一条通知并推送（接收者开关关闭 / 自己触发自己 / 接收者不存在时跳过）。
+
+    注意：本函数会提交当前 session 事务（内部执行 db.commit() + db.refresh()），
+    因为多个调用方在 notify() 之后不再单独 commit（get_db 请求级会话也不自动提交），
+    而通知行依赖此处 commit 才得以持久化。请勿在调用方事务中途依赖本函数的分支提交。
+    """
     if actor_id == user_id:
         return None
     user = db.get(User, user_id)
@@ -115,7 +120,7 @@ def list_notifications(
     total = db.execute(stmt.with_only_columns(func.count(Notification.id))).scalar_one()
     items = db.execute(stmt.offset((page - 1) * page_size).limit(page_size)).scalars().all()
     return {
-        "items": [_decorate(db, n) for n in items],
+        "items": _decorate(db, items),
         "total": total,
         "page": page,
         "page_size": page_size,
@@ -160,18 +165,40 @@ def mark_all_read(db: Session, user_id: int) -> int:
 # ---------- 内部 ----------
 
 
-def _decorate(db: Session, n: Notification) -> NotificationOut:
-    """输出增强：触发者昵称/头像、频道名。"""
-    out = NotificationOut.model_validate(n)
-    if n.actor_id:
-        actor = db.get(User, n.actor_id)
+def _decorate(db: Session, items: list[Notification]) -> list[NotificationOut]:
+    """批量输出增强：一次性取 actor/community 映射，避免 N+1 查询。"""
+    actor_ids = {n.actor_id for n in items if n.actor_id}
+    community_ids = {n.community_id for n in items if n.community_id}
+
+    from app.models.user import User as U
+
+    actors: dict[int, U] = {}
+    if actor_ids:
+        actors = {
+            u.id: u
+            for u in db.execute(select(U).where(U.id.in_(actor_ids))).scalars()
+        }
+
+    from app.models.community import Community
+
+    communities: dict[int, Community] = {}
+    if community_ids:
+        communities = {
+            c.id: c
+            for c in db.execute(
+                select(Community).where(Community.id.in_(community_ids))
+            ).scalars()
+        }
+
+    results: list[NotificationOut] = []
+    for n in items:
+        out = NotificationOut.model_validate(n)
+        actor = actors.get(n.actor_id) if n.actor_id else None
         if actor:
             out.actor_nickname = actor.nickname or actor.username
             out.actor_avatar = actor.avatar_url
-    if n.community_id:
-        from app.models.community import Community
-
-        c = db.get(Community, n.community_id)
+        c = communities.get(n.community_id) if n.community_id else None
         if c:
             out.community_name = c.name
-    return out
+        results.append(out)
+    return results

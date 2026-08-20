@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.ai import assist, rag, review
 from app.core.deps import get_current_user
+from app.core.ratelimit import rate_limit
 from app.core.response import ok
 from app.db import get_db
 from app.models.review import Review
@@ -27,27 +28,28 @@ class QARequest(BaseModel):
 
 
 def _sse_stream(gen) -> StreamingResponse:
-    """把文本块迭代器包装成 SSE 流（data: {json} 格式）。"""
+    """把（异步）文本块迭代器包装成 SSE 流（data: {json} 格式）。"""
     import json
 
-    def wrapper():
-        for chunk in gen:
+    async def wrapper():
+        async for chunk in gen:
             yield f"data: {json.dumps({'delta': chunk}, ensure_ascii=False)}\n\n"
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(wrapper(), media_type="text/event-stream")
 
 
-@router.post("/assist")
-def ai_assist(
+@router.post("/assist", dependencies=[Depends(rate_limit("ai_assist", limit=20, window=60))])
+async def ai_assist(
     payload: AssistRequest,
+    request: Request,
     user: User = Depends(get_current_user),
 ):
     """AI 帮写/润色/起标题（SSE 流式，前端打字机效果）。"""
-    return _sse_stream(assist.assist_stream(payload))
+    return _sse_stream(assist.assist_stream(payload, request))
 
 
-@router.post("/qa")
+@router.post("/qa", dependencies=[Depends(rate_limit("ai_qa", limit=20, window=60))])
 def ai_qa(
     payload: QARequest,
     user: User = Depends(get_current_user),
@@ -77,7 +79,7 @@ def my_reviews(
     })
 
 
-@router.post("/reviews/{review_id}/appeal")
+@router.post("/reviews/{review_id}/appeal", dependencies=[Depends(rate_limit("ai_appeal", limit=20, window=60))])
 def appeal_review(
     review_id: int,
     user: User = Depends(get_current_user),

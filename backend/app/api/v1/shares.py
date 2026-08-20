@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user
+from app.core.ratelimit import get_client_ip, rate_limit
 from app.core.response import NotFoundError, ok
 from app.db import get_db
 from app.models.short_link import TARGET_COMMUNITY, TARGET_POST, TARGET_USER
@@ -36,10 +37,14 @@ def create_share(
 
 
 @public_router.get("/s/{code}")
-def resolve_share(code: str, request: Request, db: Session = Depends(get_db)):
+def resolve_share(
+    code: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    _=Depends(rate_limit("share_resolve", limit=60, window=60)),
+):
     """短链跳转：302 到前端页面（帖子/频道/用户）。"""
-    # 取真实客户端 IP（nginx 透传 X-Forwarded-For）
-    xff = request.headers.get("x-forwarded-for", "")
-    client_ip = xff.split(",")[0].strip() if xff else (request.client.host if request.client else None)
+    # 取真实客户端 IP（可信代理追加的 XFF 最右值，无法被客户端伪造）
+    client_ip = get_client_ip(request)
     path = share_service.resolve_share(db, code, client_ip)
     return RedirectResponse(url=path, status_code=302)

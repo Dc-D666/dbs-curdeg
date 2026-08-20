@@ -12,8 +12,8 @@ from app.core.response import NotFoundError, ParamError
 from app.models.comment import Comment
 from app.models.community import Community
 from app.models.like import Like
-from app.models.post import Post
-from app.models.review import REVIEW_MANUAL, REVIEW_PASSED, REVIEW_REJECTED, Review
+from app.models.post import Post, POST_STATUS_BANNED
+from app.models.review import CONTENT_POST, REVIEW_MANUAL, REVIEW_PASSED, REVIEW_REJECTED, Review
 from app.models.user import User
 from app.services.notify_service import notify
 
@@ -82,7 +82,19 @@ def list_reviews(db: Session, status: int | None, page: int, page_size: int) -> 
         stmt = stmt.where(Review.status == status)
     total = db.execute(stmt.with_only_columns(func.count(Review.id))).scalar_one()
     items = db.execute(stmt.offset((page - 1) * page_size).limit(page_size)).scalars().all()
-    return {"items": [_out(db, r) for r in items], "total": total, "page": page, "page_size": page_size}
+    # 批量预取关联帖子标题，避免每行一次 db.get（N+1）
+    post_ids = {r.content_id for r in items if r.content_type == CONTENT_POST}
+    titles = (
+        {
+            p.id: p.title
+            for p in db.execute(select(Post).where(Post.id.in_(post_ids))).scalars().all()
+        }
+        if post_ids else {}
+    )
+    return {
+        "items": [_out(r, titles) for r in items],
+        "total": total, "page": page, "page_size": page_size,
+    }
 
 
 def handle_review(db: Session, reviewer: User, review_id: int, approve: bool) -> Review:
@@ -96,13 +108,14 @@ def handle_review(db: Session, reviewer: User, review_id: int, approve: bool) ->
     review.reviewer_id = reviewer.id
     review.review_method = 2  # 人工审核
     review.reviewed_at = datetime.now()
-    post = db.get(Post, review.content_id)
+    post = db.get(Post, review.content_id) if review.content_type == CONTENT_POST else None
 
     if approve:
         review.status = REVIEW_PASSED
-        review.result = "人工审核通过，帖子已恢复"
-        if post is not None and post.status != 0:
+        # 仅恢复因违规下架的帖子（BANNED）；作者主动删除（DELETED）的不复活
+        if post is not None and post.status == POST_STATUS_BANNED:
             post.status = 0
+        review.result = "人工审核通过，帖子已恢复"
         notify(
             db, review.user_id, "system", "你的帖子已通过人工复审",
             summary="内容已恢复可见", ref_id=review.content_id, community_id=post.community_id if post else None,
@@ -119,10 +132,9 @@ def handle_review(db: Session, reviewer: User, review_id: int, approve: bool) ->
     return review
 
 
-def _out(db: Session, r: Review) -> dict:
+def _out(r: Review, titles: dict) -> dict:
     from app.api.v1.ai import _review_out
 
     out = _review_out(r)
-    post = db.get(Post, r.content_id)
-    out["post_title"] = post.title if post else ""
+    out["post_title"] = titles.get(r.content_id, "") if r.content_type == CONTENT_POST else ""
     return out

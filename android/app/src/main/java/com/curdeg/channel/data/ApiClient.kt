@@ -1,7 +1,5 @@
 package com.curdeg.channel.data
 
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -57,7 +55,4 @@ object ApiClient {
 
     /** 取当前 token（供拦截器用）。 */
     fun currentToken(): String? = tokenProvider?.invoke()
-
-    /** 从 Flow 同步取一次（应用启动后首次请求前）。 */
-    fun tokenBlocking(): String? = runBlocking { TokenStore.accessToken.first() }
 }

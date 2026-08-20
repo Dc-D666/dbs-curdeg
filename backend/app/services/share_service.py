@@ -8,9 +8,11 @@
 import asyncio
 import logging
 import secrets
+from datetime import datetime
 
 import redis
-from sqlalchemy import select
+from sqlalchemy import delete, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -42,11 +44,18 @@ _TARGET_PATH = {
 }
 
 
+_redis_client: redis.Redis | None = None
+
+
 def _redis() -> redis.Redis:
-    return redis.Redis(
-        host=settings.REDIS_HOST, port=settings.REDIS_PORT, db=settings.REDIS_DB,
-        decode_responses=True,
-    )
+    """复用模块级连接（避免每次调用新建连接）。"""
+    global _redis_client
+    if _redis_client is None:
+        _redis_client = redis.Redis(
+            host=settings.REDIS_HOST, port=settings.REDIS_PORT, db=settings.REDIS_DB,
+            decode_responses=True,
+        )
+    return _redis_client
 
 
 def _gen_code() -> str:
@@ -88,20 +97,25 @@ def create_share(
                 expires_at=expires_at,
             )
             db.add(link)
-            db.commit()
-            return {"code": code, "url": f"/s/{code}"}
+            try:
+                db.commit()
+                return {"code": code, "url": f"/s/{code}"}
+            except IntegrityError:
+                # 并发撞库：唯一约束冲突则回滚重试
+                db.rollback()
+                continue
     raise RuntimeError("短链生成失败，请重试")  # 撞库 5 次（概率可忽略）
 
 
 def resolve_share(db: Session, code: str, client_ip: str | None = None) -> str:
-    """解析短链：返回前端跳转路径；不存在/过期 → 404；计数（Redis 防刷 + 批量落库）。"""
+    """解析短链：返回前端跳转路径；不存在/过期/目标失效 → 404；计数（Redis 防刷 + 批量落库）。"""
     link = db.execute(select(ShortLink).where(ShortLink.code == code)).scalar_one_or_none()
     if link is None:
         raise NotFoundError("短链不存在")
-    from datetime import datetime
-
-    if link.expires_at and link.expires_at < datetime.now():
+    if link.expires_at is not None and link.expires_at < datetime.now():
         raise NotFoundError("短链已过期")
+    # 跳转前校验目标仍存在且可用（避免 302 到已删除/下架内容）
+    _check_target(db, link.target_type, link.target_id)
     _count_visit(db, link, client_ip)
     path = _TARGET_PATH.get(link.target_type)
     if path is None:
@@ -126,15 +140,11 @@ def _count_visit(db: Session, link: ShortLink, client_ip: str | None) -> None:
 
 def cleanup_expired(db: Session) -> int:
     """删除过期短链（每日后台任务调用）。"""
-    from datetime import datetime
-
     expired = db.execute(
         select(ShortLink.id).where(ShortLink.expires_at.is_not(None), ShortLink.expires_at < datetime.now())
     ).scalars().all()
     if not expired:
         return 0
-    from sqlalchemy import delete
-
     db.execute(delete(ShortLink).where(ShortLink.id.in_(expired)))
     db.commit()
     return len(expired)

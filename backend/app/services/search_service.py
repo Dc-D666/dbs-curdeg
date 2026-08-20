@@ -10,6 +10,7 @@
 """
 import html
 from datetime import datetime, timedelta
+from functools import lru_cache
 
 from sqlalchemy import or_, select, text
 from sqlalchemy.orm import Session
@@ -153,6 +154,23 @@ def _like_posts(db: Session, q: str, community_id: int | None) -> list[Post]:
     return list(db.execute(stmt).scalars().all())
 
 
+def _embed_query(q: str) -> list[float] | None:
+    """query embedding，带 LRU 缓存，避免同词反复调外部 API。"""
+    from app.ai import llm_gateway
+
+    try:
+        return llm_gateway.embed(q)
+    except Exception:
+        return None
+
+
+@lru_cache(maxsize=128)
+def _cached_embed(q: str) -> tuple | None:
+    """缓存层：仅缓存非空关键词的 embedding 结果。"""
+    emb = _embed_query(q)
+    return (emb,) if emb is not None else None
+
+
 def _semantic_recall(db: Session, q: str, community_id: int | None) -> list[int]:
     """语义召回（阶段 7）：query embedding → 已构建 embedding 的帖子余弦 TopK。
 
@@ -160,13 +178,12 @@ def _semantic_recall(db: Session, q: str, community_id: int | None) -> list[int]
     需要先通过问答/其他路径构建（posts.embedding 列）。GLM 不可用或相似度
     低于阈值时返回空（不影响关键词路径）。
     """
-    from app.ai import llm_gateway
     from app.ai.rag import _cosine
 
-    try:
-        q_emb = llm_gateway.embed(q)
-    except Exception:
-        return []
+    cached = _cached_embed(q)
+    if cached is None:
+        return []  # embedding 不可用，跳过语义召回
+    q_emb = cached[0]
     stmt = (
         select(Post)
         .where(Post.status == POST_STATUS_NORMAL, Post.embedding.is_not(None))

@@ -32,7 +32,11 @@ class ConnectionManager:
                 self._connections.pop(user_id, None)
 
     async def send_to_user(self, user_id: int, message: dict[str, Any]) -> bool:
-        """推送给该用户全部在线连接；返回是否有连接成功收到。"""
+        """推送给该用户全部在线连接；返回是否有连接成功收到。
+
+        发送失败视为连接已死（半开/断连连接），主动将其从 _connections 移除，
+        避免依赖 receive 循环清理造成的连接泄漏。
+        """
         async with self._lock:
             conns = list(self._connections.get(user_id, ()))
         sent = False
@@ -41,8 +45,8 @@ class ConnectionManager:
                 await ws.send_json(message)
                 sent = True
             except Exception:
-                # 发送失败（连接已死）：不在此处处理，receive 循环会触发清理
-                pass
+                # 发送失败：该连接不可用，立即清理（移除对应 user 下的该连接）
+                await self.disconnect(user_id, ws)
         return sent
 
     def online_count(self) -> int:

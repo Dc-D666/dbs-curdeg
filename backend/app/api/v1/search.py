@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user_optional
+from app.core.ratelimit import rate_limit
 from app.core.response import ok
 from app.db import get_db
 from app.models.user import User
@@ -19,6 +20,7 @@ def search_posts(
     page_size: int = Query(20, ge=1, le=50),
     user: User | None = Depends(get_current_user_optional),
     db: Session = Depends(get_db),
+    _=Depends(rate_limit("search_posts", limit=60, window=60)),
 ):
     """关键词搜索帖子（游客可用），标题/摘要带 <em class="hl"> 高亮。"""
     return ok(
@@ -33,6 +35,7 @@ def search_posts(
 @router.get("/hot")
 def hot_keywords(
     db: Session = Depends(get_db),
+    _=Depends(rate_limit("search_hot", limit=120, window=60)),
 ):
     """热门搜索词（近 7 天 TOP10）。"""
     return ok(data=search_service.hot_keywords(db))

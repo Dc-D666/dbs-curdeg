@@ -16,7 +16,8 @@ from app.models.post import Post, POST_STATUS_NORMAL
 logger = logging.getLogger(__name__)
 
 EMBED_TEXT_LIMIT = 2000   # 入向量文本截断
-CANDIDATE_LIMIT = 10      # 懒构建候选帖子数（首问时逐篇调 embedding API）
+CANDIDATE_LIMIT = 30      # 懒构建候选帖子数（首问时逐篇调 embedding API）
+MIN_SIM = 0.2             # 最小相似度阈值：低于此值的候选不进入 TOP_K 上下文
 TOP_K = 5
 
 
@@ -73,7 +74,8 @@ def qa(db: Session, question: str, community_id: int | None = None) -> dict:
         if emb:
             scored.append((_cosine(q_emb, emb), p))
     scored.sort(key=lambda x: x[0], reverse=True)
-    top = scored[:TOP_K]
+    # 低于 MIN_SIM 阈值的候选视为不相关，不进入 TOP_K 上下文（防止噪声引入）
+    top = [(s, p) for s, p in scored if s >= MIN_SIM][:TOP_K]
     db.commit()  # 持久化新构建的 embedding
 
     if not top:
