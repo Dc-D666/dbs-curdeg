@@ -18,48 +18,42 @@
       更新时间：{{ buildTime }}
     </p>
 
-    <section class="hero">
-      <h2 class="hero-title">仿腾讯频道 · 私域社区</h2>
-      <p class="hero-desc">频道 → 版块 → 帖子 → 评论，构建你的兴趣社区</p>
-      <div class="hero-actions">
-        <t-button theme="primary" size="large" @click="router.push('/discover')">浏览频道</t-button>
-      </div>
+    <!-- 我的频道：横滑快捷入口（登录且有关注时展示） -->
+    <section v-if="myChannels.length" class="chips">
+      <router-link v-for="c in myChannels" :key="c.id" :to="`/c/${c.id}`" class="chip" :title="c.name">
+        <UserAvatar :src="c.avatar_url" :name="c.name" :size="36" />
+        <span class="chip-name">{{ c.name }}</span>
+      </router-link>
+      <router-link to="/discover" class="chip chip-more">
+        <span class="chip-more-icon"><BrowseIcon /></span>
+        <span class="chip-name">发现更多</span>
+      </router-link>
     </section>
 
-    <section class="feed-section">
-      <div class="feed-head">
-        <h3 class="feed-title">最新帖子</h3>
-        <t-radio-group v-model="sort" variant="default-filled" size="small" @change="switchSort">
-          <t-radio-button value="latest">最新</t-radio-button>
-          <t-radio-button value="hot">热门</t-radio-button>
-        </t-radio-group>
-      </div>
-
-      <SkeletonFeed v-if="loading && items.length === 0" :count="3" />
-      <div v-else-if="loadError && items.length === 0" class="feed-error">
-        <p class="feed-error-text">{{ loadError }}</p>
-        <t-button variant="outline" size="small" @click="retryLoad">重试</t-button>
-      </div>
-      <EmptyState v-else-if="items.length === 0" text="还没有帖子" action-text="浏览频道" to="/discover" />
-      <div v-else class="feed-list">
-        <FeedCard v-for="p in items" :key="p.id" :post="p" show-community />
-      </div>
-      <t-button v-if="hasMore" variant="outline" block class="load-more" :loading="loading" @click="loadMore()">
-        {{ loading ? '加载中…' : '加载更多' }}
-      </t-button>
-      <p v-else-if="items.length > 0 && !loading" class="feed-end">已经到底啦，没有更多帖子了</p>
-    </section>
+    <!-- 内容导航/筛选（lazy：切换时才挂载并加载） -->
+    <t-tabs v-model="activeTab" class="home-tabs" lazy @change="onTabChange">
+      <t-tab-panel value="all" label="全部">
+        <FeedStreamList v-if="activeTab === 'all'" view="all" />
+      </t-tab-panel>
+      <t-tab-panel value="hot" label="热门">
+        <FeedStreamList v-if="activeTab === 'hot'" view="hot" />
+      </t-tab-panel>
+      <t-tab-panel value="mine" label="我关注的">
+        <FeedStreamList v-if="activeTab === 'mine'" view="mine" />
+      </t-tab-panel>
+    </t-tabs>
   </main>
 </template>
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import FeedCard from '@/components/FeedCard.vue'
-import SkeletonFeed from '@/components/SkeletonFeed.vue'
-import EmptyState from '@/components/EmptyState.vue'
-import { postApi, type PostItem } from '@/api/post'
+import { BrowseIcon } from 'tdesign-icons-vue-next'
+import FeedStreamList from '@/components/FeedStreamList.vue'
+import UserAvatar from '@/components/UserAvatar.vue'
+import { communityApi, type Community } from '@/api/community'
 import { useAuthStore } from '@/stores/auth'
+import { tokenStore } from '@/api/http'
 import { toast } from '@/utils/toast'
 import { formatBeijing } from '@/utils/time'
 
@@ -70,56 +64,42 @@ const router = useRouter()
 // 服务器 cron 每次 push 都会重编前端，因此该时间可用于确认部署是否生效。
 const buildTime = ref(formatBeijing(__BUILD_TIME__))
 
-const items = ref<PostItem[]>([])
-const sort = ref<'latest' | 'hot'>('latest')
-const cursor = ref<string | null>(null)
-const hasMore = ref(false)
-const loading = ref(false)
-const loadError = ref('')
+// 内容 Tab：全部(=最新) / 热门 / 我关注的
+const activeTab = ref<'all' | 'hot' | 'mine'>('all')
+
+// 我加入的频道（owned/managed/joined 合并去重），用于首页快捷入口
+const myChannels = ref<Community[]>([])
+const channelsLoaded = ref(false)
 
 onMounted(() => {
   auth.fetchMe()
-  loadMore()
+  initMyChannels()
 })
 
-async function loadMore() {
-  if (loading.value) return
-  loading.value = true
-  loadError.value = ''
-  try {
-    const data = await postApi.globalFeed(sort.value, cursor.value)
-    const seen = new Set(items.value.map((p) => p.id))
-    items.value = [...items.value, ...data.items.filter((p) => !seen.has(p.id))]
-    cursor.value = data.next_cursor
-    hasMore.value = data.has_more
-  } catch (e) {
-    console.error('加载帖子流失败', e)
-    if (items.value.length === 0) {
-      loadError.value = e instanceof Error ? e.message : '加载失败，请稍后重试'
-    } else {
-      toast(e instanceof Error ? e.message : '加载失败', 'error')
-    }
-  } finally {
-    loading.value = false
+function onTabChange(val: string | number) {
+  if (val === 'mine' && !tokenStore.access) {
+    toast('请先登录查看关注动态', 'warning')
+    router.push('/login?redirect=' + encodeURIComponent(router.currentRoute.value.fullPath))
+    return
   }
+  activeTab.value = val as 'all' | 'hot' | 'mine'
 }
 
-function retryLoad() {
-  items.value = []
-  cursor.value = null
-  hasMore.value = false
-  loadError.value = ''
-  loadMore()
-}
-
-function switchSort(s: 'latest' | 'hot') {
-  if (sort.value === s) return
-  sort.value = s
-  items.value = []
-  cursor.value = null
-  hasMore.value = false
-  loadError.value = ''
-  loadMore()
+async function initMyChannels() {
+  if (channelsLoaded.value) return
+  channelsLoaded.value = true
+  if (!tokenStore.access) return
+  try {
+    const m = await communityApi.mine()
+    const seen = new Set<number>()
+    myChannels.value = [...m.owned, ...m.managed, ...m.joined].filter((c) => {
+      if (seen.has(c.id)) return false
+      seen.add(c.id)
+      return true
+    })
+  } catch (e) {
+    console.error('加载我的频道失败', e)
+  }
 }
 
 function onLogout() {
@@ -163,61 +143,67 @@ function onLogout() {
   color: var(--text-1);
   font-size: var(--fs-body);
 }
-.hero {
-  padding: var(--sp-5) 0;
+
+/* 我的频道横滑条 */
+.chips {
+  margin-top: var(--sp-3);
+  display: flex;
+  gap: var(--sp-3);
+  overflow-x: auto;
+  padding-bottom: var(--sp-1);
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
 }
-.hero-title {
-  margin: 0;
-  font-size: 22px;
-  font-weight: 700;
+.chips::-webkit-scrollbar {
+  display: none;
 }
-.hero-desc {
-  margin: var(--sp-2) 0 0;
-  color: var(--text-2);
-  font-size: var(--fs-body);
+.chip {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-decoration: none;
+  max-width: 64px;
 }
-.hero-actions {
-  margin-top: var(--sp-4);
+.chip-name {
+  max-width: 64px;
+  font-size: 11px;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.feed-section {
+.chip-more {
+  justify-content: center;
+}
+.chip-more-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-3);
+}
+.chip-more-icon :deep(svg) {
+  width: 18px;
+  height: 18px;
+}
+
+/* 内容 Tab */
+.home-tabs {
   margin-top: var(--sp-2);
 }
-.feed-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: var(--sp-3);
+.home-tabs :deep(.t-tabs__nav) {
+  margin-bottom: var(--sp-2);
 }
-.feed-title {
-  margin: 0;
-  font-size: var(--fs-title);
-  font-weight: 600;
-}
-.feed-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
-}
-.load-more {
-  margin-top: var(--sp-3);
-}
-.feed-end {
-  margin: var(--sp-4) 0 0;
-  text-align: center;
-  font-size: var(--fs-caption);
-  color: var(--text-3);
-}
-.feed-error {
-  padding: var(--sp-6) 0;
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--sp-3);
-}
-.feed-error-text {
-  margin: 0;
-  color: var(--text-3);
+.home-tabs :deep(.t-tabs__nav-item) {
   font-size: var(--fs-body);
+}
+.home-tabs :deep(.t-tabs__panel) {
+  padding: 0;
 }
 </style>

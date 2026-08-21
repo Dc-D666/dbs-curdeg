@@ -10,7 +10,12 @@
     </p>
     <p class="fc-excerpt">{{ post.source_markdown }}</p>
     <div class="fc-meta">
-      <span v-if="showCommunity" class="fc-community">{{ post.community_name }}</span>
+      <router-link
+        v-if="showCommunity"
+        :to="`/c/${post.community_id}`"
+        class="fc-community"
+        @click.stop
+      >{{ post.community_name }}</router-link>
       <router-link :to="`/users/${post.author_id}`" class="fc-author" @click.stop>
         <UserAvatar :name="post.author_nickname" :src="post.author_avatar" :size="18" />
         {{ post.author_nickname }}
