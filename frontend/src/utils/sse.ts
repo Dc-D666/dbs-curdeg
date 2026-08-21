@@ -5,7 +5,7 @@ export interface SseEvent {
   type?: string
   delta?: string
   message?: string
-  stage?: 'search' | 'embed'
+  stage?: 'search' | 'embed' | 'answer'
   done?: number
   total?: number
   references?: Array<{ id: number; title: string }>

@@ -95,6 +95,8 @@ async function ask() {
               bot.status = '正在检索帖子…'
             } else if (event.stage === 'embed') {
               bot.status = `正在为帖子构建语义向量 ${event.done ?? 0}/${event.total ?? 0}…`
+            } else if (event.stage === 'answer') {
+              bot.status = '正在生成回答…'
             }
             return
           }

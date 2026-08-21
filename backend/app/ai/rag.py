@@ -112,6 +112,7 @@ async def qa_stream(db: Session, question: str, community_id: int | None = None)
     - {"type": "error", "message": str}         向量服务不可用
     - {"type": "progress", "stage": "search", "total": n}   已检索到候选帖子数
     - {"type": "progress", "stage": "embed", "done": i, "total": n}  已构建第 i/n 篇向量
+    - {"type": "progress", "stage": "answer"}   开始生成回答（embedding 结束的空窗提示）
     - {"type": "answer", "delta": str}           回答文本块（打字机效果）
     - {"type": "refs", "references": [...]}      引用列表
     """
@@ -145,6 +146,9 @@ async def qa_stream(db: Session, question: str, community_id: int | None = None)
         yield {"type": "answer", "delta": "暂无可参考的帖子内容，换个问题试试。"}
         yield {"type": "refs", "references": []}
         return
+
+    # embedding 阶段结束、LLM 生成前的空窗提示（否则前端会一直停在"N/N"直到答案出现）
+    yield {"type": "progress", "stage": "answer"}
 
     context = "\n".join(
         f"[{i + 1}]《{p.title}》(id={p.id}): {(p.source_markdown or '')[:300]}"
