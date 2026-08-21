@@ -208,9 +208,6 @@ async function onLogout() {
   background: var(--bg-secondary);
 }
 .row-icon {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -220,13 +217,13 @@ async function onLogout() {
   width: 18px;
   height: 18px;
 }
-.icon-blue { background: var(--brand-weak); }
-.icon-green { background: #e6f7ec; }
-.icon-purple { background: #f3edfe; }
-.icon-orange { background: #fff4e6; }
-.icon-cyan { background: #e4f7f8; }
-.icon-red { background: #ffebe9; }
-.icon-indigo { background: #ecefff; }
+.icon-blue { color: var(--brand); }
+.icon-green { color: #00a870; }
+.icon-purple { color: #7a3ff2; }
+.icon-orange { color: #e37318; }
+.icon-cyan { color: #0891b2; }
+.icon-red { color: #d54941; }
+.icon-indigo { color: #5a67f2; }
 .row-label {
   font-size: var(--fs-body);
   font-weight: 500;
