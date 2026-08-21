@@ -64,7 +64,7 @@ def register(db: Session, payload: RegisterRequest) -> TokenOut:
     return _token_out(user)
 
 
-def login(db: Session, payload: LoginRequest) -> TokenOut:
+def login(db: Session, payload: LoginRequest, client_ip: str = "") -> TokenOut:
     user = db.execute(
         select(User).where(or_(User.username == payload.account, User.email == payload.account))
     ).scalar_one_or_none()
@@ -73,6 +73,8 @@ def login(db: Session, payload: LoginRequest) -> TokenOut:
     if user.status != 0:
         raise AuthError("账号不存在或已被封禁")
     user.last_login_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    if client_ip:
+        user.last_login_ip = client_ip[:45]
     db.commit()
     return _token_out(user)
 
@@ -108,6 +110,32 @@ def change_password(db: Session, user: User, old_password: str, new_password: st
     if not verify_password(old_password, user.password_hash):
         raise ParamError("原密码错误")
     user.password_hash = hash_password(new_password)
+    db.commit()
+
+
+def send_reset_code(db: Session, email: str) -> None:
+    """忘记密码：发送重置验证码（邮箱需已注册，防探测不返回 200 差异）。"""
+    user = db.execute(select(User).where(User.email == email)).scalar_one_or_none()
+    if user is None:
+        # 与"已发送"一致返回，避免枚举已注册邮箱
+        return
+    email_service.send_reset_code(email)
+
+
+def reset_password(db: Session, email: str, code: str, new_password: str) -> None:
+    """重置密码：校验重置验证码 → 更新密码。"""
+    if not email_service.verify_reset_code(email, code):
+        raise ParamError("验证码错误或已过期")
+    user = db.execute(select(User).where(User.email == email)).scalar_one_or_none()
+    if user is None or user.status != 0:
+        raise ParamError("账号不存在或不可用")
+    user.password_hash = hash_password(new_password)
+    db.commit()
+
+
+def deactivate(db: Session, user: User) -> None:
+    """用户注销（软注销）：status=2，清空登录凭据相关的通知继续保留。"""
+    user.status = 2
     db.commit()
 
 

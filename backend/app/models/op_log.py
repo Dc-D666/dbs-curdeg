@@ -17,4 +17,6 @@ class OpLog(Base):
     target_type: Mapped[str] = mapped_column(String(32), default="")  # member/post/role/join_request
     target_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     detail: Mapped[dict] = mapped_column(JSON, nullable=True)  # {user_id, role_id, hours, ...}
+    request_params: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # 请求参数（P0）
+    response_result: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # 响应结果（P0）
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

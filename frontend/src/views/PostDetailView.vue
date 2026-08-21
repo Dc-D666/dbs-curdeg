@@ -63,11 +63,29 @@
           <t-button variant="outline" :class="{ 't-active': post.is_liked }" @click="toggleLike">
             {{ post.is_liked ? '已赞' : '点赞' }} {{ post.like_count }}
           </t-button>
+          <t-button variant="outline" :class="{ 't-active': post.is_favorited }" @click="toggleFavorite">
+            {{ post.is_favorited ? '已收藏' : '收藏' }} {{ post.favorite_count }}
+          </t-button>
           <t-button variant="outline" :class="{ 't-active': post.is_followed }" @click="toggleFollow">
             {{ post.is_followed ? '已关注' : '关注频道' }}
           </t-button>
-          <t-button variant="outline" @click="sharePost">分享</t-button>
-          <span class="action-note">{{ post.comment_count }} 评论</span>
+          <t-button variant="outline" @click="sharePost">分享{{ post.share_count ? ' ' + post.share_count : '' }}</t-button>
+          <t-button variant="outline" theme="danger" @click="openReport">举报</t-button>
+          <span class="action-note">{{ post.comment_count }} 评论 · {{ post.view_count }} 浏览</span>
+        </div>
+
+        <div class="post-extra">
+          <t-button v-if="!summary" variant="text" size="small" :loading="summarizing" @click="genSummary">✨ AI 摘要</t-button>
+          <p v-else class="ai-summary"><b>AI 摘要：</b>{{ summary }}</p>
+        </div>
+
+        <div v-if="attachments.length" class="attachments">
+          <div v-for="att in attachments" :key="att.id" class="attachment">
+            <img v-if="att.media_type === 1" :src="att.url" class="att-img" alt="" @click="previewIndex = imagesPreview(att)" />
+            <video v-else-if="att.media_type === 2" :src="att.url" class="att-video" controls />
+            <a v-else :href="att.url" target="_blank" rel="noopener" class="att-file">📎 {{ attUrlName(att.url) }}</a>
+            <t-button v-if="canManage && post.author_id === auth.user?.id" variant="text" size="small" theme="danger" class="att-del" @click="removeAttachment(att.id)">删除</t-button>
+          </div>
         </div>
 
         <div v-if="canManage" class="manage-row">
@@ -155,6 +173,29 @@
     </template>
 
     <div v-else class="state">帖子不存在</div>
+
+    <!-- 举报弹窗 -->
+    <t-dialog
+      v-model:visible="reportDialog"
+      header="举报内容"
+      :confirm-btn="{ content: '提交举报', theme: 'danger', loading: reportSending }"
+      cancel-btn="取消"
+      @confirm="submitReport"
+    >
+      <t-select v-model="reportReason" class="report-select">
+        <t-option value="违规" label="违规内容" />
+        <t-option value="侵权" label="侵权" />
+        <t-option value="垃圾信息" label="垃圾信息" />
+        <t-option value="其他" label="其他" />
+      </t-select>
+      <t-textarea
+        v-model="reportDetail"
+        :autosize="{ minRows: 3, maxRows: 6 }"
+        maxlength="500"
+        placeholder="补充说明（选填）"
+        class="report-detail"
+      />
+    </t-dialog>
   </main>
 </template>
 
@@ -164,7 +205,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeftIcon } from 'tdesign-icons-vue-next'
 import { communityApi } from '@/api/community'
 import EmptyState from '@/components/EmptyState.vue'
-import { postApi, type CommentItem, type PostItem } from '@/api/post'
+import { postApi, type AttachmentItem, type CommentItem, type PostItem } from '@/api/post'
 import { tokenStore } from '@/api/http'
 import { request } from '@/api/http'
 import { useAuthStore } from '@/stores/auth'
@@ -181,6 +222,15 @@ const post = ref<PostItem | null>(null)
 const loading = ref(true)
 const myMemberType = ref<number | null>(null)
 const previewIndex = ref<number | null>(null)
+
+// 收藏 / 举报 / AI 摘要 / 附件（P0）
+const attachments = ref<AttachmentItem[]>([])
+const summary = ref('')
+const summarizing = ref(false)
+const reportDialog = ref(false)
+const reportSending = ref(false)
+const reportReason = ref('违规')
+const reportDetail = ref('')
 
 // 评论
 const comments = ref<CommentItem[]>([])
@@ -253,6 +303,7 @@ onMounted(async () => {
     post.value = await postApi.get(pid)
     const me = tokenStore.access ? await communityApi.get(post.value.community_id).catch(() => null) : null
     myMemberType.value = me?.my_member_type ?? null
+    postApi.attachments(pid).then((list) => (attachments.value = list)).catch(() => {})
   } catch (e) {
     post.value = null
   } finally {
@@ -336,6 +387,88 @@ async function sharePost() {
   } catch (e) {
     toast(e instanceof Error ? e.message : '生成短链失败', 'error')
   }
+}
+
+/** 收藏 / 取消收藏（P0）。 */
+async function toggleFavorite() {
+  if (!post.value || !requireLogin()) return
+  const p = post.value
+  try {
+    if (p.is_favorited) {
+      const r = await postApi.unfavorite(p.id)
+      p.is_favorited = false
+      p.favorite_count = r.count
+    } else {
+      const r = await postApi.favorite(p.id)
+      p.is_favorited = true
+      p.favorite_count = r.count
+    }
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '操作失败', 'error')
+  }
+}
+
+/** 打开举报弹窗。 */
+function openReport() {
+  if (!post.value || !requireLogin()) return
+  reportDetail.value = ''
+  reportReason.value = '违规'
+  reportDialog.value = true
+}
+
+async function submitReport() {
+  if (!post.value || reportSending.value) return
+  reportSending.value = true
+  try {
+    await postApi.report({
+      target_type: 1,
+      target_id: post.value.id,
+      reason_type: reportReason.value,
+      detail: reportDetail.value,
+    })
+    toast('举报已提交，我们会尽快处理', 'success')
+    reportDialog.value = false
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '提交失败', 'error')
+  } finally {
+    reportSending.value = false
+  }
+}
+
+/** AI 摘要（P0）。 */
+async function genSummary() {
+  if (!post.value || !requireLogin()) return
+  summarizing.value = true
+  try {
+    const r = await postApi.aiSummary(post.value.id)
+    summary.value = r.summary
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '生成摘要失败', 'error')
+  } finally {
+    summarizing.value = false
+  }
+}
+
+async function removeAttachment(attachmentId: number) {
+  if (!(await confirmDialog('删除附件', '确定删除该附件？'))) return
+  try {
+    await postApi.deleteAttachment(attachmentId)
+    attachments.value = attachments.value.filter((a) => a.id !== attachmentId)
+    toast('附件已删除')
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '删除失败', 'error')
+  }
+}
+
+function imagesPreview(att: AttachmentItem): number | null {
+  // 附件图片点击预览：若在 post.images 中存在则复用索引
+  const idx = post.value?.images.indexOf(att.url) ?? -1
+  return idx >= 0 ? idx : null
+}
+
+function attUrlName(url: string): string {
+  const seg = url.split('/')
+  return seg[seg.length - 1] || '附件'
 }
 
 async function submitComment() {
@@ -605,6 +738,66 @@ async function onDeletePost() {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
+}
+.post-extra {
+  margin-top: var(--sp-2);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: 24px;
+}
+.ai-summary {
+  margin: 0;
+  padding: 8px 12px;
+  background: var(--brand-weak);
+  border-radius: var(--radius-btn);
+  font-size: var(--fs-caption);
+  line-height: 1.6;
+  color: var(--text-2);
+}
+.attachments {
+  margin-top: var(--sp-3);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+.attachment {
+  position: relative;
+  display: inline-flex;
+}
+.att-img {
+  max-width: 180px;
+  max-height: 180px;
+  border-radius: var(--radius-btn);
+  cursor: zoom-in;
+}
+.att-video {
+  max-width: 260px;
+  border-radius: var(--radius-btn);
+  background: #000;
+}
+.att-file {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-btn);
+  background: var(--bg-secondary);
+  color: var(--brand);
+  font-size: var(--fs-caption);
+  text-decoration: none;
+}
+.att-del {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+}
+.report-select {
+  width: 100%;
+  margin-bottom: var(--sp-3);
+}
+.report-detail {
+  width: 100%;
 }
 .action-note {
   margin-left: auto;

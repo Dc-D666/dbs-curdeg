@@ -20,12 +20,20 @@
           <p class="nickname">{{ user.nickname || user.username }}</p>
           <p class="meta">@{{ user.username }} · 注册于 {{ createdDate }}</p>
         </div>
+        <t-button
+          v-if="auth.user && auth.user.id !== uid"
+          variant="outline"
+          :class="{ 't-active': following }"
+          :loading="followBusy"
+          @click="toggleFollow"
+        >{{ following ? '已关注' : '关注' }}</t-button>
       </div>
       <p v-if="user.bio" class="bio">{{ user.bio }}</p>
       <p v-else class="bio empty">这个人很懒，什么都没写</p>
       <p v-if="user.province || user.city" class="location">
         📍 {{ user.province }} {{ user.city }}
       </p>
+      <p class="follow-stats">关注 <b>{{ followCount }}</b> 人</p>
     </section>
 
     <div v-else class="state">用户不存在</div>
@@ -37,11 +45,18 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ArrowLeftIcon } from 'tdesign-icons-vue-next'
 import { userApi, type PublicUser } from '@/api/user'
+import { useAuthStore } from '@/stores/auth'
+import { tokenStore } from '@/api/http'
+import { toast } from '@/utils/toast'
 
 const route = useRoute()
 const uid = Number(route.params.id)
+const auth = useAuthStore()
 const user = ref<PublicUser | null>(null)
 const loading = ref(true)
+const following = ref(false)
+const followBusy = ref(false)
+const followCount = ref(0)
 
 const initial = computed(() => (user.value?.nickname || user.value?.username || 'U').slice(0, 1).toUpperCase())
 const createdDate = computed(() => (user.value?.created_at || '').slice(0, 10))
@@ -54,7 +69,35 @@ onMounted(async () => {
   } finally {
     loading.value = false
   }
+  if (tokenStore.access && auth.user?.id !== uid) {
+    userApi.followStatus(uid).then((r) => (following.value = r.following)).catch(() => {})
+  }
 })
+
+async function toggleFollow() {
+  if (!tokenStore.access) {
+    window.location.href = `/login?redirect=${encodeURIComponent(route.fullPath)}`
+    return
+  }
+  if (followBusy.value) return
+  followBusy.value = true
+  try {
+    if (following.value) {
+      const r = await userApi.unfollow(uid)
+      following.value = false
+      followCount.value = r.count
+    } else {
+      const r = await userApi.follow(uid)
+      following.value = true
+      followCount.value = r.count
+      toast('已关注', 'success')
+    }
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '操作失败', 'error')
+  } finally {
+    followBusy.value = false
+  }
+}
 </script>
 
 <style scoped>
@@ -120,5 +163,14 @@ onMounted(async () => {
   margin: var(--sp-2) 0 0;
   font-size: var(--fs-caption);
   color: var(--text-3);
+}
+.follow-stats {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--fs-caption);
+  color: var(--text-3);
+}
+.t-active {
+  color: var(--td-brand-color);
+  border-color: var(--td-brand-color);
 }
 </style>

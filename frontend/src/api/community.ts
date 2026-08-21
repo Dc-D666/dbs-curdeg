@@ -1,5 +1,5 @@
 /** 频道/版块/成员 API。 */
-import { request, type Page } from './http'
+import { request, tokenStore, type Page } from './http'
 
 export interface Board {
   id: number
@@ -88,6 +88,19 @@ export interface JoinRequestItem {
   user_nickname: string
 }
 
+export interface TopicItem {
+  id: number
+  community_id: number
+  name: string
+  description: string
+  cover_url: string
+  rules: string
+  post_count: number
+  heat_value: number
+  status: number
+  created_at: string | null
+}
+
 export const communityApi = {
   list(page = 1, pageSize = 20) {
     return request<Page<Community>>({ url: '/communities', params: { page, page_size: pageSize } })
@@ -130,6 +143,27 @@ export const communityApi = {
       url: `/communities/${cid}/join-requests/${requestId}`,
       method: 'POST',
       data: { approve },
+    })
+  },
+  // 话题（P0）
+  topics(cid: number, sort: 'hot' | 'latest' = 'hot') {
+    return request<TopicItem[]>({ url: `/communities/${cid}/topics`, params: { sort } })
+  },
+  createTopic(cid: number, data: { name: string; description?: string; cover_url?: string; rules?: string }) {
+    return request<TopicItem>({ url: `/communities/${cid}/topics`, method: 'POST', data })
+  },
+  updateTopic(cid: number, topicId: number, data: Partial<{ name: string; description: string; cover_url: string; rules: string }>) {
+    return request<TopicItem>({ url: `/communities/${cid}/topics/${topicId}`, method: 'PUT', data })
+  },
+  deleteTopic(cid: number, topicId: number) {
+    return request<null>({ url: `/communities/${cid}/topics/${topicId}`, method: 'DELETE' })
+  },
+  // 频道 AI 助手（P0）
+  ensureAiAssistant(cid: number, nickname = '频道助手') {
+    return request<{ member_id: number; user_id: number; nickname: string; avatar_url: string }>({
+      url: `/communities/${cid}/ai-assistant`,
+      method: 'POST',
+      data: { nickname },
     })
   },
 }
@@ -184,5 +218,12 @@ export const manageApi = {
   },
   ops(cid: number, page = 1, pageSize = 20) {
     return request<Page<OpLogItem>>({ url: `/communities/${cid}/ops`, params: { page, page_size: pageSize } })
+  },
+  exportOps(cid: number) {
+    // 导出 CSV：走原生请求拿文件下载
+    const token = tokenStore.access
+    return fetch(`/api/v1/communities/${cid}/ops/export`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
   },
 }

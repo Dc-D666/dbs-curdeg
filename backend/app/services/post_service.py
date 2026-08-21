@@ -12,10 +12,12 @@ from app.core.permissions import PERM_DELETE_POST, PERM_ESSENCE, PERM_TOP, requi
 from app.core.response import NotFoundError, ParamError, PermissionError_
 from app.models.board import Board
 from app.models.community import Community
+from app.models.favorite import Favorite
 from app.models.follow import Follow
 from app.models.like import Like
 from app.models.member import MEMBER_ADMIN, MEMBER_OWNER, Member
 from app.models.post import Post, POST_STATUS_DELETED, POST_STATUS_NORMAL
+from app.models.topic import Topic
 from app.models.user import User
 from app.schemas.post import CreatePostRequest, PostOut, UpdatePostRequest
 from app.services import heat_service
@@ -37,11 +39,25 @@ def create_post(
     _check_board_post_perm(db, community, board, user, member)
     rich, plain = _normalize_content(payload)
     _validate_at_users(db, community.id, rich)
+    # 本地敏感词即时拦截（文档⑪）：命中直接拒绝，不进入 AI 队列
+    from app.services import sensitive_word_service
+
+    if sensitive_word_service.ensure_switch_on(db) and sensitive_word_service.contains_sensitive(db, plain):
+        hit = sensitive_word_service.check_text(db, plain)
+        raise ParamError(f"内容包含敏感词，已被拦截（命中：{'、'.join(hit[:3])}）")
+    if payload.topic_id:
+        topic = db.get(Topic, payload.topic_id)
+        if topic is None or topic.community_id != community.id or topic.status != 0:
+            raise ParamError("关联话题不存在")
+        topic.post_count += 1
+        topic.heat_value += 1
     post = Post(
         community_id=community.id,
         board_id=board.id,
         author_id=user.id,
         title=payload.title,
+        post_type=payload.post_type,
+        topic_id=payload.topic_id,
         rich_content=rich,
         source_markdown=plain,
         images=payload.images,
@@ -91,6 +107,14 @@ def update_post(
         post.title = data["title"]
     if "images" in data:
         post.images = data["images"]
+    if "post_type" in data:
+        post.post_type = data["post_type"]
+    if "topic_id" in data:
+        if data["topic_id"] is not None:
+            topic = db.get(Topic, data["topic_id"])
+            if topic is None or topic.community_id != community.id or topic.status != 0:
+                raise ParamError("关联话题不存在")
+        post.topic_id = data["topic_id"]
     db.commit()
     db.refresh(post)
     return post_out(db, post, current_user_id=user.id)
@@ -110,6 +134,12 @@ def delete_post(db: Session, community: Community, post: Post, user: User) -> No
         .where(Community.id == community.id)
         .values(post_count=func.greatest(0, Community.post_count - 1))
     )
+    if post.topic_id:
+        db.execute(
+            update(Topic)
+            .where(Topic.id == post.topic_id)
+            .values(post_count=func.greatest(0, Topic.post_count - 1))
+        )
     if not is_author:
         log_op(db, community.id, user.id, "delete_post", "post", post.id, {"author_id": post.author_id})
     db.commit()
@@ -152,10 +182,13 @@ def set_essence(db: Session, community: Community, post: Post, user: User, is_es
 
 
 def get_post(db: Session, post_id: int, current_user_id: int | None) -> PostOut:
-    """帖子详情（含互动状态）。"""
+    """帖子详情（含互动状态）；浏览量原子 +1（仅详情页计数，feed 不触发）。"""
     post = db.get(Post, post_id)
     if post is None or post.status != POST_STATUS_NORMAL:
         raise NotFoundError("帖子不存在")
+    db.execute(update(Post).where(Post.id == post.id).values(view_count=Post.view_count + 1))
+    db.commit()
+    db.refresh(post)
     return post_out(db, post, current_user_id=current_user_id)
 
 
@@ -327,6 +360,13 @@ def post_outs(db: Session, posts: list[Post], current_user_id: int | None) -> li
                 )
             ).scalars().all()
         )
+        fav_ids = set(
+            db.execute(
+                select(Favorite.post_id).where(
+                    Favorite.post_id.in_(pids), Favorite.user_id == current_user_id
+                )
+            ).scalars().all()
+        )
         followed_cids = set(
             db.execute(
                 select(Follow.community_id).where(
@@ -344,6 +384,7 @@ def post_outs(db: Session, posts: list[Post], current_user_id: int | None) -> li
         for p in posts:
             o = out_map[p.id]
             o.is_liked = p.id in liked_ids
+            o.is_favorited = p.id in fav_ids
             o.is_followed = p.community_id in followed_cids
             o.is_member = p.community_id in member_cids
     return [out_map[p.id] for p in posts]
@@ -374,6 +415,12 @@ def post_out(db: Session, post: Post, current_user_id: int | None) -> PostOut:
             )
         ).scalar_one_or_none()
         out.is_liked = liked is not None
+        fav = db.execute(
+            select(Favorite.id).where(
+                Favorite.post_id == post.id, Favorite.user_id == current_user_id
+            )
+        ).scalar_one_or_none()
+        out.is_favorited = fav is not None
         followed = db.execute(
             select(Follow.id).where(
                 Follow.user_id == current_user_id, Follow.community_id == post.community_id

@@ -149,10 +149,15 @@
       <!-- 操作日志 -->
       <t-tab-panel value="ops" label="操作日志">
         <div class="panel">
+          <div class="ops-toolbar">
+            <span class="op-count">共 {{ ops.length }} 条</span>
+            <t-button variant="outline" size="small" @click="exportOps">导出 CSV</t-button>
+          </div>
           <div class="op-row" v-for="o in ops" :key="o.id">
             <span class="op-time">{{ formatTime(o.created_at) }}</span>
             <t-tag size="small" variant="light" theme="primary" class="op-action">{{ actionLabel(o.action) }}</t-tag>
             <span class="op-operator">{{ o.operator_nickname }}</span>
+            <span v-if="o.detail" class="op-detail" :title="JSON.stringify(o.detail)">{{ JSON.stringify(o.detail) }}</span>
           </div>
           <t-empty v-if="ops.length === 0" description="暂无操作记录" />
         </div>
@@ -185,6 +190,7 @@ import { communityApi, manageApi, roleApi, type Community, type Member, type MyR
 import { toast } from '@/utils/toast'
 import { formatTime } from '@/utils/time'
 import { confirmDialog } from '@/utils/confirm'
+import { tokenStore } from '@/api/http'
 
 const route = useRoute()
 const auth = useAuthStore()
@@ -455,6 +461,28 @@ async function onDeleteRole(r: RoleItem) {
     toast(e instanceof Error ? e.message : '删除失败', 'error')
   }
 }
+
+/** 导出操作日志 CSV（P0）。 */
+async function exportOps() {
+  try {
+    const res = await manageApi.exportOps(cid)
+    if (!res.ok) {
+      const body = await res.json().catch(() => null)
+      toast(body?.message || '导出失败', 'error')
+      return
+    }
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `ops_${cid}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+    toast('已导出操作日志', 'success')
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '导出失败', 'error')
+  }
+}
 </script>
 
 <style scoped>
@@ -627,6 +655,24 @@ async function onDeleteRole(r: RoleItem) {
 .op-operator {
   margin-left: auto;
   color: var(--td-text-color-secondary);
+}
+.ops-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--sp-2);
+}
+.op-count {
+  font-size: var(--fs-caption);
+  color: var(--td-text-color-placeholder);
+}
+.op-detail {
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-caption);
+  color: var(--td-text-color-placeholder);
 }
 .shutup-tip {
   margin: 0 0 var(--sp-2);

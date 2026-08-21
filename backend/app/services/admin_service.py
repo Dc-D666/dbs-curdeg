@@ -1,4 +1,4 @@
-"""运营看板 + 审核管理（阶段 7，文档⑲数据统计与看板管理）。
+"""运营看板 + 审核管理（阶段 7，文档⑲数据统计与看板管理）+ 用户封禁/解封。
 
 stats：实时聚合（课设规模直接 COUNT，不建 daily_stats 汇总表）。
 reviews：转人工复审的记录由系统管理员处理（POST /admin/reviews/{id}/handle）。
@@ -16,6 +16,25 @@ from app.models.post import Post, POST_STATUS_BANNED
 from app.models.review import CONTENT_POST, REVIEW_MANUAL, REVIEW_PASSED, REVIEW_REJECTED, Review
 from app.models.user import User
 from app.services.notify_service import notify
+
+
+def set_user_status(db: Session, user_id: int, status: int) -> User:
+    """封禁(1)/解封(0)/注销(2) 用户：系统管理员操作，写通知。"""
+    if status not in (0, 1, 2):
+        raise ParamError("status 仅支持 0正常 1封禁 2注销")
+    user = db.get(User, user_id)
+    if user is None:
+        raise NotFoundError("用户不存在")
+    if user.user_type == 1:
+        raise ParamError("不能操作系统管理员账号")
+    user.status = status
+    db.commit()
+    db.refresh(user)
+    if status == 1:
+        notify(db, user.id, "system", "你的账号已被封禁", summary="如有疑问请联系平台管理员")
+    elif status == 0:
+        notify(db, user.id, "system", "你的账号已解封", summary="欢迎回来")
+    return user
 
 
 def overview_stats(db: Session) -> dict:

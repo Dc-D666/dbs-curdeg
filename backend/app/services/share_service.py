@@ -8,7 +8,7 @@
 import asyncio
 import logging
 import secrets
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import redis
 from sqlalchemy import delete, select
@@ -99,6 +99,16 @@ def create_share(
             db.add(link)
             try:
                 db.commit()
+                # P0：帖子被分享 → share_count 原子 +1
+                if target_type == TARGET_POST:
+                    from sqlalchemy import update
+
+                    db.execute(
+                        update(Post)
+                        .where(Post.id == target_id)
+                        .values(share_count=Post.share_count + 1)
+                    )
+                    db.commit()
                 return {"code": code, "url": f"/s/{code}"}
             except IntegrityError:
                 # 并发撞库：唯一约束冲突则回滚重试
@@ -136,6 +146,44 @@ def _count_visit(db: Session, link: ShortLink, client_ip: str | None) -> None:
             r.delete(VISITS_KEY.format(code=link.code))
     except redis.RedisError:
         logger.warning("短链计数 Redis 不可用，跳过计数 code=%s", link.code)
+
+
+def list_shares(
+    db: Session, creator_id: int | None, target_type: int | None, page: int, page_size: int
+) -> dict:
+    """短链记录查询：可按生成人/类型过滤（文档⑭记录查询）。"""
+    stmt = select(ShortLink)
+    if creator_id is not None:
+        stmt = stmt.where(ShortLink.creator_id == creator_id)
+    if target_type is not None:
+        stmt = stmt.where(ShortLink.target_type == target_type)
+    stmt = stmt.order_by(ShortLink.id.desc())
+    total = len(db.execute(stmt.with_only_columns(ShortLink.id)).scalars().all())
+    items = db.execute(stmt.offset((page - 1) * page_size).limit(page_size)).scalars().all()
+    return {
+        "items": [
+            {
+                "code": s.code,
+                "target_type": s.target_type,
+                "target_id": s.target_id,
+                "creator_id": s.creator_id,
+                "visit_count": s.visit_count,
+                "expires_at": s.expires_at.isoformat() if s.expires_at else None,
+                "created_at": s.created_at.isoformat() if s.created_at else None,
+            }
+            for s in items
+        ],
+        "total": total, "page": page, "page_size": page_size,
+    }
+
+
+def invalidate_share(db: Session, code: str) -> None:
+    """短链失效（文档⑭失效）：置过期时间为过去（懒查询即拦）。"""
+    link = db.execute(select(ShortLink).where(ShortLink.code == code)).scalar_one_or_none()
+    if link is None:
+        raise NotFoundError("短链不存在")
+    link.expires_at = datetime.now() - timedelta(seconds=1)
+    db.commit()
 
 
 def cleanup_expired(db: Session) -> int:

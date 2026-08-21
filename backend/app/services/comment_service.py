@@ -17,10 +17,17 @@ from app.services.post_service import _require_member
 
 
 def create_comment(
-    db: Session, post: Post, user: User, payload: CreateCommentRequest
+    db: Session, post: Post, user: User, payload: CreateCommentRequest, ip_region: str = ""
 ) -> CommentOut:
     """发评论：需频道成员且未被禁言；楼中楼只支持一层嵌套（对应原生）。"""
     _require_member(db, post.community_id, user.id)
+
+    # 本地敏感词即时拦截（文档⑪）
+    from app.services import sensitive_word_service
+
+    if sensitive_word_service.ensure_switch_on(db) and sensitive_word_service.contains_sensitive(db, payload.content):
+        hit = sensitive_word_service.check_text(db, payload.content)
+        raise ParamError(f"评论包含敏感词，已被拦截（命中：{'、'.join(hit[:3])}）")
 
     parent = None
     if payload.parent_id:
@@ -41,10 +48,20 @@ def create_comment(
         parent_id=parent.id if parent else None,
         reply_to_user_id=payload.reply_to_user_id,
         content=payload.content,
+        # P0：0普通 1楼中楼回复 2@提及；IP 属地（当前存客户端 IP 溯源）
+        comment_type=2 if payload.reply_to_user_id else (1 if parent else 0),
+        ip_region=ip_region,
     )
     db.add(comment)
     # 原子自增，避免并发 read-modify-write 丢计数
     db.execute(update(Post).where(Post.id == post.id).values(comment_count=Post.comment_count + 1))
+    # 楼中楼回复：父评论 reply_count 原子 +1
+    if parent:
+        db.execute(
+            update(Comment)
+            .where(Comment.id == parent.id)
+            .values(reply_count=Comment.reply_count + 1)
+        )
     # 活跃等级：评论 +2
     add_level(db, post.community_id, user.id, LEVEL_POINTS["comment"])
     db.commit()
@@ -64,6 +81,10 @@ def create_comment(
             db, parent.author_id, "comment", "你的评论收到了回复",
             summary=preview, ref_id=post.id, actor_id=user.id, community_id=post.community_id,
         )
+    # AI 内容审核：评论异步入队快审（开关关闭时静默跳过）
+    from app.ai.review import enqueue_comment_review
+
+    enqueue_comment_review(comment.id)
     return comment_out(db, comment, user.id)
 
 

@@ -29,11 +29,16 @@ export interface PostItem {
   board_id: number
   author_id: number
   title: string
+  post_type: number
+  topic_id: number | null
   rich_content: RichSegment[]
   source_markdown: string
   images: string[]
   like_count: number
   comment_count: number
+  view_count: number
+  favorite_count: number
+  share_count: number
   is_top: boolean
   is_essence: boolean
   status: number
@@ -43,6 +48,7 @@ export interface PostItem {
   community_name: string
   board_name: string
   is_liked: boolean
+  is_favorited: boolean
   is_followed: boolean
   is_member: boolean
 }
@@ -90,10 +96,10 @@ export const postApi = {
   get(id: number) {
     return request<PostItem>({ url: `/posts/${id}` })
   },
-  create(cid: number, bid: number, data: { title: string; content?: string; rich_content?: RichSegment[]; images?: string[] }) {
+  create(cid: number, bid: number, data: { title: string; content?: string; rich_content?: RichSegment[]; images?: string[]; topic_id?: number }) {
     return request<PostItem>({ url: `/communities/${cid}/boards/${bid}/posts`, method: 'POST', data })
   },
-  update(id: number, data: { title?: string; content?: string; rich_content?: RichSegment[]; images?: string[] }) {
+  update(id: number, data: { title?: string; content?: string; rich_content?: RichSegment[]; images?: string[]; topic_id?: number }) {
     return request<PostItem>({ url: `/posts/${id}`, method: 'PUT', data })
   },
   remove(id: number) {
@@ -134,4 +140,56 @@ export const postApi = {
   unfollow(communityId: number) {
     return request<{ followed: boolean }>({ url: '/follows', method: 'DELETE', params: { community_id: communityId } })
   },
+  // 收藏（P0）
+  favorite(postId: number) {
+    return request<{ favorited: boolean; count: number }>({ url: `/posts/${postId}/favorite`, method: 'POST', data: { group_name: '默认' } })
+  },
+  unfavorite(postId: number) {
+    return request<{ favorited: boolean; count: number }>({ url: `/posts/${postId}/favorite`, method: 'DELETE' })
+  },
+  myFavorites(page = 1, pageSize = 20) {
+    return request<Page<FavoriteItem>>({ url: '/me/favorites', params: { page, page_size: pageSize } })
+  },
+  // 附件（P0）
+  attachments(postId: number) {
+    return request<AttachmentItem[]>({ url: `/posts/${postId}/attachments` })
+  },
+  uploadAttachment(postId: number, file: File) {
+    const fd = new FormData()
+    fd.append('file', file)
+    return request<AttachmentItem>({ url: `/posts/${postId}/attachments/upload`, method: 'POST', data: fd })
+  },
+  deleteAttachment(attachmentId: number) {
+    return request<null>({ url: `/attachments/${attachmentId}`, method: 'DELETE' })
+  },
+  // 举报（P0）
+  report(data: { target_type: number; target_id: number; reason_type?: string; detail?: string }) {
+    return request<{ id: number }>({ url: '/reports', method: 'POST', data })
+  },
+  // AI 摘要（P0）
+  aiSummary(postId: number) {
+    return request<{ summary: string }>({ url: '/ai/summary', method: 'POST', data: { post_id: postId } })
+  },
+}
+
+export interface FavoriteItem {
+  favorite_id: number
+  group_name: string
+  created_at: string | null
+  post_id: number
+  post_title: string
+  post_status: number
+}
+
+export interface AttachmentItem {
+  id: number
+  post_id: number
+  media_type: number
+  url: string
+  thumb_url: string
+  width: number
+  height: number
+  file_size: number
+  duration: number
+  sort_order: number
 }

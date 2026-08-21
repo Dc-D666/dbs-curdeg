@@ -52,6 +52,17 @@ def read_all_notifications(
     return ok(data={"marked": notify_service.mark_all_read(db, user.id)}, message="全部已读")
 
 
+@router.delete("/{notification_id}")
+def delete_notification(
+    notification_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """删除一条通知（只能删自己的）。"""
+    notify_service.delete_notification(db, user.id, notification_id)
+    return ok(message="已删除")
+
+
 @router.get("/settings")
 def get_notify_settings(
     user: User = Depends(get_current_user),

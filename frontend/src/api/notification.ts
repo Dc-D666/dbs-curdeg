@@ -33,6 +33,7 @@ export const notificationApi = {
   unreadCount: () => request<{ count: number }>({ url: '/notifications/unread-count' }),
   read: (id: number) => request({ url: `/notifications/${id}/read`, method: 'POST' }),
   readAll: () => request<{ marked: number }>({ url: '/notifications/read-all', method: 'POST' }),
+  remove: (id: number) => request({ url: `/notifications/${id}`, method: 'DELETE' }),
   getSettings: () => request<NotifySettings>({ url: '/notifications/settings' }),
   updateSettings: (patch: Partial<NotifySettings>) =>
     request<NotifySettings>({ url: '/notifications/settings', method: 'PUT', data: patch }),

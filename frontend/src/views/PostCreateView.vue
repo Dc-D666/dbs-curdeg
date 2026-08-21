@@ -22,6 +22,25 @@
           <t-button size="small" variant="outline" :loading="aiBusy === 'polish'" :disabled="!!aiBusy" @click="aiRun('polish')">
             🪄 润色
           </t-button>
+          <t-button size="small" variant="outline" :loading="drawBusy" :disabled="!!aiBusy" @click="aiDraw">
+            🎨 文生图
+          </t-button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="field-label">关联话题</label>
+        <t-select v-model="form.topic_id" size="large" clearable placeholder="选择一个话题（选填）">
+          <t-option v-for="t in topics" :key="t.id" :value="t.id" :label="`#${t.name}（${t.post_count} 帖）`" />
+        </t-select>
+      </div>
+
+      <div v-if="drawImage" class="field">
+        <span class="field-label">AI 生成图片</span>
+        <img :src="drawImage" class="draw-img" alt="" />
+        <div class="draw-ops">
+          <t-button size="small" variant="outline" @click="useDrawImage">插入到帖子</t-button>
+          <t-button size="small" variant="text" @click="drawImage = ''">丢弃</t-button>
         </div>
       </div>
 
@@ -57,8 +76,9 @@ import { onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeftIcon } from 'tdesign-icons-vue-next'
 import RichEditor from '@/components/RichEditor.vue'
+import { communityApi, type TopicItem } from '@/api/community'
 import { postApi, type RichSegment } from '@/api/post'
-import { tokenStore } from '@/api/http'
+import { request, tokenStore } from '@/api/http'
 import { toast } from '@/utils/toast'
 import { streamPost } from '@/utils/sse'
 
@@ -68,13 +88,18 @@ const cid = Number(route.params.id)
 const bid = Number(route.params.bid)
 const editId = Number(route.query.edit) || 0
 
-const form = reactive({ title: '', rich: [] as RichSegment[], images: [] as string[] })
+const form = reactive({ title: '', rich: [] as RichSegment[], images: [] as string[], topic_id: null as number | null })
 const initialImages = ref<string[]>([])
 const error = ref('')
 const submitting = ref(false)
 const editing = ref(editId > 0)
 const loading = ref(false)
 const editorRef = ref<InstanceType<typeof RichEditor> | null>(null)
+
+// 话题 / AI 绘画（P0）
+const topics = ref<TopicItem[]>([])
+const drawBusy = ref(false)
+const drawImage = ref('')
 
 // AI 帮写（阶段 6）
 const aiBusy = ref<'write' | 'polish' | 'title' | ''>('')
@@ -126,7 +151,43 @@ function aiApply() {
   toast('已插入编辑器', 'success')
 }
 
+/** AI 绘画入口（P0）：后端需配置 draw_api_url/key。 */
+async function aiDraw() {
+  if (drawBusy.value) return
+  if (!tokenStore.access) {
+    window.location.href = `/login?redirect=${encodeURIComponent(route.fullPath)}`
+    return
+  }
+  const prompt = window.prompt('输入画面描述（用于文生图）：')
+  if (!prompt) return
+  drawBusy.value = true
+  try {
+    const r = await request<{ url: string; b64_json: string }>({ url: '/ai/draw', method: 'POST', data: { prompt } })
+    if (r.url) {
+      drawImage.value = r.url
+    } else if (r.b64_json) {
+      drawImage.value = `data:image/png;base64,${r.b64_json}`
+    } else {
+      toast('未返回图片', 'error')
+    }
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '生成失败', 'error')
+  } finally {
+    drawBusy.value = false
+  }
+}
+
+function useDrawImage() {
+  if (!drawImage.value || form.images.length >= 9) {
+    toast('图片已达上限', 'error')
+    return
+  }
+  form.images.push(drawImage.value)
+  toast('已加入帖子图片', 'success')
+}
+
 onMounted(async () => {
+  communityApi.topics(cid, 'hot').then((list) => (topics.value = list)).catch(() => {})
   if (!editing.value) return
   loading.value = true
   try {
@@ -134,6 +195,7 @@ onMounted(async () => {
     form.title = post.title
     form.rich = post.rich_content
     form.images = [...post.images]
+    form.topic_id = post.topic_id
     initialImages.value = [...post.images] // 旧帖图片渲染进编辑器
   } catch (e) {
     error.value = e instanceof Error ? e.message : '加载帖子失败'
@@ -172,6 +234,7 @@ async function onSubmit() {
         title: form.title,
         rich_content: form.rich,
         images: form.images,
+        topic_id: form.topic_id ?? undefined,
       })
       toast('已保存', 'success')
       router.push(`/p/${post.id}`)
@@ -180,6 +243,7 @@ async function onSubmit() {
         title: form.title,
         rich_content: form.rich,
         images: form.images,
+        topic_id: form.topic_id ?? undefined,
       })
       router.push(`/p/${post.id}`)
     }
@@ -298,5 +362,15 @@ async function onSubmit() {
 }
 .submit {
   align-self: stretch;
+}
+.draw-img {
+  max-width: 100%;
+  max-height: 300px;
+  border-radius: var(--radius-card);
+  border: 1px solid var(--border);
+}
+.draw-ops {
+  display: flex;
+  gap: var(--sp-2);
 }
 </style>

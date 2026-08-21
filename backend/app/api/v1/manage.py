@@ -1,8 +1,9 @@
-"""管理动作接口（阶段 4）：禁言/解除/踢出/拉黑/解除/操作日志。
+"""管理动作接口（阶段 4 + P0）：禁言/解除/踢出/拉黑/解除/操作日志/导出。
 
 全部走 require_perms：shutup / kick / member_manage / moderate。
 """
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -11,7 +12,7 @@ from app.core.response import NotFoundError, ok
 from app.db import get_db
 from app.models.community import Community
 from app.models.user import User
-from app.services import manage_service
+from app.services import manage_service, op_log_service
 
 router = APIRouter(prefix="/communities/{community_id}", tags=["manage"])
 
@@ -93,9 +94,40 @@ def ops(
     community_id: int,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=50),
+    action: str | None = Query(None, max_length=32),
+    target_type: str | None = Query(None, max_length=32),
+    operator_id: int | None = Query(None, gt=0),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """操作日志列表（moderate 权限，所有管理动作留痕）。"""
+    """操作日志列表（moderate 权限，所有管理动作留痕；支持多条件过滤）。"""
     _get_community(db, community_id)
-    return ok(data=manage_service.ops(db, community_id, user, page, page_size))
+    from app.core.permissions import PERM_MODERATE, require_perms
+
+    require_perms(db, community_id, user, PERM_MODERATE)
+    return ok(data=op_log_service.list_ops(
+        db, community_id, page, page_size,
+        action=action, target_type=target_type, operator_id=operator_id,
+    ))
+
+
+@router.get("/ops/export")
+def export_ops(
+    community_id: int,
+    action: str | None = Query(None, max_length=32),
+    target_type: str | None = Query(None, max_length=32),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """导出操作日志 CSV（moderate 权限，文档⑱日志导出）。"""
+    _get_community(db, community_id)
+    from app.core.permissions import PERM_MODERATE, require_perms
+
+    require_perms(db, community_id, user, PERM_MODERATE)
+    csv_text = op_log_service.export_ops(db, community_id, action=action, target_type=target_type)
+    filename = f"ops_{community_id}.csv"
+    return PlainTextResponse(
+        "\ufeff" + csv_text,  # BOM 让 Excel 正确识别 UTF-8
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

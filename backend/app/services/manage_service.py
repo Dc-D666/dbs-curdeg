@@ -82,7 +82,11 @@ def shutup(db: Session, community_id: int, user: User, target_user_id: int, hour
     target = _require_target(db, community_id, target_user_id)
     _guard_target(db, operator, target)
     target.shutup_expire_at = datetime.now() + timedelta(hours=hours)
-    log_op(db, community_id, user.id, "shutup", "member", target.user_id, {"hours": hours})
+    log_op(
+        db, community_id, user.id, "shutup", "member", target.user_id,
+        detail={"hours": hours},
+        request_params={"user_id": target_user_id, "hours": hours},
+    )
     db.commit()
     db.refresh(target)
     _notify_target_system(db, community_id, user, target.user_id, f"你已被禁言 {hours} 小时")

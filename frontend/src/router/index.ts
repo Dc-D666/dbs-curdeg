@@ -13,6 +13,7 @@ const router = createRouter({
     { path: '/login', name: 'login', component: () => import('@/views/auth/LoginView.vue') },
     { path: '/register', name: 'register', component: () => import('@/views/auth/RegisterView.vue') },
     { path: '/me', name: 'me', component: () => import('@/views/MeView.vue') },
+    { path: '/me/favorites', name: 'my-favorites', component: () => import('@/views/FavoritesView.vue') },
     { path: '/notifications', name: 'notifications', component: () => import('@/views/NotificationView.vue') },
     { path: '/dashboard', name: 'dashboard', component: () => import('@/views/DashboardView.vue') },
     { path: '/me/feed', name: 'my-feed', component: () => import('@/views/MyFeedView.vue') },
@@ -24,7 +25,7 @@ const router = createRouter({
 // 需要登录的页面守卫
 router.beforeEach((to) => {
   const authed = !!tokenStore.access
-  if ((to.name === 'me' || to.name === 'community-admin' || to.name === 'notifications' || to.name === 'dashboard') && !authed) return { name: 'login' }
+  if ((to.name === 'me' || to.name === 'my-favorites' || to.name === 'community-admin' || to.name === 'notifications' || to.name === 'dashboard') && !authed) return { name: 'login' }
   if ((to.name === 'login' || to.name === 'register') && authed) return { name: 'home' }
   return true
 })

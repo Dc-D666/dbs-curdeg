@@ -56,6 +56,12 @@ export const useNotificationStore = defineStore('notification', () => {
     })
   }
 
+  async function removeItem(id: number) {
+    await notificationApi.remove(id)
+    items.value = items.value.filter((i) => i.id !== id)
+    if (total.value > 0) total.value -= 1
+  }
+
   async function loadSettings() {
     settings.value = await notificationApi.getSettings()
   }
@@ -66,6 +72,6 @@ export const useNotificationStore = defineStore('notification', () => {
 
   return {
     unread, items, total, page, loaded, loading, settings,
-    fetchUnread, fetchList, bumpUnread, markRead, markAllRead, loadSettings, saveSettings,
+    fetchUnread, fetchList, bumpUnread, markRead, markAllRead, removeItem, loadSettings, saveSettings,
   }
 })

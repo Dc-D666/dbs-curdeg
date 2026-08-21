@@ -4,13 +4,18 @@
 - stream(messages) → 文本块迭代器（SSE 帮写用）
 - embed(text) → 向量（GLM Embedding-3 API；DeepSeek 无 embedding 端点，不做兜底）
 
+调用自动写 ai_call_logs（P0 文档⑰），写日志失败静默不影响主流程。
+feature 参数供调用方标注业务功能（assist/review/rag/summary）。
+
 测试：直接 monkeypatch 本模块的 chat / stream / embed 三个函数（conftest 已全局 mock）。
 """
 import logging
+import time
 
 from openai import OpenAI, Timeout
 
 from app.core.config import settings
+from app.services.ai_call_log_service import log_ai_call
 
 logger = logging.getLogger(__name__)
 
@@ -36,17 +41,28 @@ def chat(
     model: str = "",
     max_tokens: int = 1024,
     temperature: float = 0.7,
+    feature: str = "chat",
+    user_id: int | None = None,
 ) -> str:
-    """单轮补全（智谱主 → DeepSeek 兜底）。"""
+    """单轮补全（智谱主 → DeepSeek 兜底），自动记录调用日志。"""
     m = model or settings.ZHIPU_MODEL
+    start = time.monotonic()
     try:
         resp = _zhipu().chat.completions.create(
             model=m, messages=messages, max_tokens=max_tokens, temperature=temperature
         )
-        return resp.choices[0].message.content or ""
+        text = resp.choices[0].message.content or ""
+        log_ai_call(feature, user_id, m, int((time.monotonic() - start) * 1000), "ok")
+        return text
     except Exception as e:  # 主模型异常：切兜底
         logger.warning("GLM 调用失败(%s)，切换 DeepSeek 兜底", e)
-        return _deepseek_chat(messages, max_tokens, temperature)
+        text = _deepseek_chat(messages, max_tokens, temperature)
+        log_ai_call(
+            feature, user_id, settings.DEEPSEEK_MODEL,
+            int((time.monotonic() - start) * 1000),
+            "ok" if text else "error", str(e)[:255],
+        )
+        return text
 
 
 def stream(
@@ -108,7 +124,17 @@ def _iter_text(resp) -> iter:
             yield delta
 
 
-def embed(text: str) -> list[float]:
-    """文本向量（GLM Embedding-3）。"""
-    resp = _zhipu().embeddings.create(model=settings.ZHIPU_EMBED_MODEL, input=text)
-    return resp.data[0].embedding
+def embed(text: str, feature: str = "embed", user_id: int | None = None) -> list[float]:
+    """文本向量（GLM Embedding-3），自动记录调用日志。"""
+    start = time.monotonic()
+    try:
+        resp = _zhipu().embeddings.create(model=settings.ZHIPU_EMBED_MODEL, input=text)
+        result = resp.data[0].embedding
+        log_ai_call(feature, user_id, settings.ZHIPU_EMBED_MODEL, int((time.monotonic() - start) * 1000))
+        return result
+    except Exception as e:
+        log_ai_call(
+            feature, user_id, settings.ZHIPU_EMBED_MODEL,
+            int((time.monotonic() - start) * 1000), "error", str(e)[:255],
+        )
+        raise

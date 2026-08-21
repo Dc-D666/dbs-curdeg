@@ -1,18 +1,21 @@
-"""分享短链接口（阶段 5，文档⑭）。
+"""分享短链接口（阶段 5 + P0，文档⑭）。
 
 - POST /api/v1/shares：生成短链（需登录）
+- GET /api/v1/shares：短链记录查询（需登录，可查自己的；管理员可全量）
+- DELETE /api/v1/shares/{code}：短链失效（需登录，本人或管理员）
 - GET /s/{code}：跳转（根路径例外，nginx 反代到本路由；未登录/外部用户可打开）
 """
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user
 from app.core.ratelimit import get_client_ip, rate_limit
-from app.core.response import NotFoundError, ok
+from app.core.response import NotFoundError, PermissionError_, ok
 from app.db import get_db
-from app.models.short_link import TARGET_COMMUNITY, TARGET_POST, TARGET_USER
+from app.models.short_link import ShortLink, TARGET_COMMUNITY, TARGET_POST, TARGET_USER
 from app.models.user import User
 from app.services import share_service
 
@@ -34,6 +37,36 @@ def create_share(
     """生成分享短链，返回 { code, url }。"""
     data = share_service.create_share(db, user, payload.target_type, payload.target_id)
     return ok(data=data, message="短链已生成")
+
+
+@router.get("/shares")
+def list_shares(
+    target_type: int | None = Query(None, ge=1, le=3),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=50),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """短链记录查询：普通用户只能查自己生成的；系统管理员可全量。"""
+    creator_id = None if user.user_type == 1 else user.id
+    return ok(data=share_service.list_shares(db, creator_id, target_type, page, page_size))
+
+
+@router.delete("/shares/{code}")
+def invalidate_share(
+    code: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """短链失效：本人生成或系统管理员可操作。"""
+    if user.user_type != 1:
+        row = db.execute(
+            select(ShortLink).where(ShortLink.code == code)
+        ).scalar_one_or_none()
+        if row is None or row.creator_id != user.id:
+            raise PermissionError_("只能操作自己生成的短链")
+    share_service.invalidate_share(db, code)
+    return ok(message="短链已失效")
 
 
 @public_router.get("/s/{code}")

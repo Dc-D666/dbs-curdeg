@@ -1,14 +1,14 @@
-"""AI 接口（阶段 6）：帮写（SSE 流式）/ 问答（RAG）/ 审核记录与申诉。"""
+"""AI 接口（阶段 6 + P0）：帮写（SSE）/ 问答（RAG）/ 摘要 / 绘画 / 频道助手 / 审核与申诉。"""
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.ai import assist, rag, review
+from app.ai import assist, rag, review, summary
 from app.core.deps import get_current_user
 from app.core.ratelimit import rate_limit
-from app.core.response import ok
+from app.core.response import NotFoundError, ParamError, ok
 from app.db import get_db
 from app.models.review import Review
 from app.models.user import User
@@ -92,6 +92,131 @@ async def ai_qa_stream(
 ):
     """RAG 问答 SSE 流：搜帖 / 构建 embedding 时实时推送进度，再流式输出回答。"""
     return _sse_events(rag.qa_stream(db, payload.question, payload.community_id))
+
+
+class SummaryRequest(BaseModel):
+    post_id: int = Field(gt=0)
+
+
+@router.post("/summary", dependencies=[Depends(rate_limit("ai_summary", limit=20, window=60))])
+def ai_summary(
+    payload: SummaryRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """帖子 AI 摘要（P0 文档⑰内容摘要）。"""
+    return ok(data={"summary": summary.summarize_post(db, payload.post_id)})
+
+
+class DrawRequest(BaseModel):
+    prompt: str = Field(min_length=1, max_length=500)
+
+
+@router.post("/draw", dependencies=[Depends(rate_limit("ai_draw", limit=10, window=60))])
+def ai_draw(
+    payload: DrawRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """AI 绘画入口（P0 文档四：发帖编辑器"文生图"）。
+
+    需在系统配置中设置 draw_api_url / draw_api_key（兼容 OpenAI 图片接口），
+    未配置时返回明确提示（不发真实请求）。
+    """
+    from app.services import system_config_service
+
+    draw_url = system_config_service.get(db, "draw_api_url")
+    draw_key = system_config_service.get(db, "draw_api_key")
+    if not draw_url or not draw_key:
+        raise ParamError("AI 绘画服务未配置，请联系管理员开启")
+    try:
+        import requests
+
+        resp = requests.post(
+            draw_url,
+            headers={"Authorization": f"Bearer {draw_key}"},
+            json={
+                "model": system_config_service.get(db, "draw_api_model") or "flux",
+                "prompt": payload.prompt,
+                "n": 1,
+                "size": "1024x1024",
+            },
+            timeout=60,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        # OpenAI 图片接口风格：data[].url 或 data[].b64_json
+        img = data["data"][0]
+        return ok(data={"url": img.get("url") or "", "b64_json": img.get("b64_json") or ""})
+    except Exception as e:
+        raise ParamError(f"AI 绘画调用失败：{e}") from e
+
+
+class AssistantCreateRequest(BaseModel):
+    nickname: str = Field(default="频道助手", max_length=32)
+
+
+@router.post("/communities/{community_id}/ai-assistant")
+def ai_assistant_ensure(
+    community_id: int,
+    payload: AssistantCreateRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """创建/获取频道 AI 助手虚拟成员（member.type=ai，P0 文档四"频道助手"）。
+
+    幂等：每个频道一个 AI 虚拟账号（user_type=2）+ member(member_type=4)，
+    前端可在发帖/评论中 @ 触发问答。
+    """
+    from app.models.member import MEMBER_AI, Member
+    from app.services.post_service import _require_member
+
+    _require_member(db, community_id, user.id)
+    # 取该频道已有的 AI 助手成员
+    existing = db.execute(
+        select(Member).where(Member.community_id == community_id, Member.member_type == MEMBER_AI)
+    ).scalar_one_or_none()
+    if existing:
+        ai_user = db.get(User, existing.user_id)
+        return ok(data={
+            "member_id": existing.id,
+            "user_id": existing.user_id,
+            "nickname": ai_user.nickname if ai_user else existing.nickname,
+            "avatar_url": ai_user.avatar_url if ai_user else "",
+        })
+    # 创建/复用 AI 虚拟账号（按昵称全局唯一）
+    nickname = payload.nickname.strip() or "频道助手"
+    ai_user = db.execute(
+        select(User).where(User.user_type == 2, User.username == f"ai_{community_id}")
+    ).scalar_one_or_none()
+    if ai_user is None:
+        from app.core.security import hash_password
+
+        ai_user = User(
+            username=f"ai_{community_id}",
+            nickname=nickname,
+            email=f"ai_{community_id}@internal.local",
+            password_hash=hash_password("ai-assistant-not-for-login"),
+            user_type=2,  # AI 虚拟账号
+            bio="本频道的 AI 助手，可在发帖中 @ 触发问答",
+        )
+        db.add(ai_user)
+        db.flush()
+    member = Member(
+        community_id=community_id,
+        user_id=ai_user.id,
+        nickname=nickname,
+        member_type=MEMBER_AI,
+    )
+    db.add(member)
+    db.commit()
+    db.refresh(member)
+    return ok(data={
+        "member_id": member.id,
+        "user_id": ai_user.id,
+        "nickname": ai_user.nickname,
+        "avatar_url": ai_user.avatar_url,
+    }, message="频道助手已就位")
 
 
 @router.get("/reviews/me")

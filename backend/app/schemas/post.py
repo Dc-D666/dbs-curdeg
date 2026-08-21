@@ -12,6 +12,8 @@ class CreatePostRequest(BaseModel):
     content: str | None = Field(default=None, min_length=1, max_length=10000)
     rich_content: list | None = Field(default=None, description="4.4 分片：[{type:1,text},{type:3,url,display_text}]")
     images: list[str] = Field(default_factory=list, max_length=9)
+    post_type: int = Field(default=0, ge=0, le=3, description="0普通 1图文 2视频 3投票")
+    topic_id: int | None = Field(default=None, gt=0, description="关联话题（P0）")
 
 
 class UpdatePostRequest(BaseModel):
@@ -19,6 +21,8 @@ class UpdatePostRequest(BaseModel):
     content: str | None = Field(default=None, min_length=1, max_length=10000)
     rich_content: list | None = Field(default=None)
     images: list[str] | None = Field(default=None, max_length=9)
+    post_type: int | None = Field(default=None, ge=0, le=3)
+    topic_id: int | None = Field(default=None, gt=0)
 
 
 class CreateCommentRequest(BaseModel):
@@ -36,11 +40,16 @@ class PostOut(BaseModel):
     board_id: int
     author_id: int
     title: str
+    post_type: int = 0
+    topic_id: int | None = None
     rich_content: list
     source_markdown: str
     images: list
     like_count: int
     comment_count: int
+    view_count: int = 0
+    favorite_count: int = 0
+    share_count: int = 0
     is_top: bool
     is_essence: bool
     status: int
@@ -51,6 +60,7 @@ class PostOut(BaseModel):
     community_name: str = ""
     board_name: str = ""
     is_liked: bool = False       # 我是否点过赞
+    is_favorited: bool = False   # 我是否收藏过（P0）
     is_followed: bool = False    # 我是否关注了该频道
     is_member: bool = False      # 我是否为频道成员（决定能否评论）
 
@@ -64,7 +74,10 @@ class CommentOut(BaseModel):
     parent_id: int | None
     reply_to_user_id: int | None
     content: str
+    comment_type: int = 0
     like_count: int
+    reply_count: int = 0
+    ip_region: str = ""
     status: int
     created_at: datetime
     # 视图增强

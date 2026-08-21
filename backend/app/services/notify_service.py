@@ -162,6 +162,19 @@ def mark_all_read(db: Session, user_id: int) -> int:
     return result.rowcount or 0
 
 
+def delete_notification(db: Session, user_id: int, notification_id: int) -> None:
+    """删除一条通知（只能删自己的）。"""
+    n = db.execute(
+        select(Notification).where(
+            Notification.id == notification_id, Notification.user_id == user_id
+        )
+    ).scalar_one_or_none()
+    if n is None:
+        raise NotFoundError("通知不存在")
+    db.delete(n)
+    db.commit()
+
+
 # ---------- 内部 ----------
 
 

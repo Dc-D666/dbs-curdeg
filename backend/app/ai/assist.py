@@ -46,7 +46,7 @@ async def assist_stream(payload, request: Request) -> iter:
     线程继续运行。
     """
     msgs = build_messages(payload)
-    text = await asyncio.to_thread(llm_gateway.chat, msgs, "", 2048, 0.7)
+    text = await asyncio.to_thread(llm_gateway.chat, msgs, "", 2048, 0.7, "assist")
     step = 8
     for i in range(0, len(text), step):
         if await request.is_disconnected():

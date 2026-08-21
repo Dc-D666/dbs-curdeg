@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
-from app.api.v1 import admin, ai, auth, boards, comments, communities, interact, manage, members, notifications, posts, roles, search, shares, topics, uploads, users
+from app.api.v1 import admin, ai, attachments, auth, boards, comments, communities, favorites, interact, manage, members, notifications, posts, reports, roles, search, shares, topics, uploads, user_follows, users
 from app.core.config import settings
 from app.core.security import decode_token
 from app.db import get_db
@@ -93,18 +93,23 @@ app.include_router(boards.router, prefix=API_V1)
 app.include_router(members.router, prefix=API_V1)
 app.include_router(uploads.router, prefix=API_V1)
 app.include_router(posts.router, prefix=API_V1)
+app.include_router(attachments.router, prefix=API_V1)
 app.include_router(comments.router, prefix=API_V1)
 app.include_router(interact.router, prefix=API_V1)
+app.include_router(favorites.router, prefix=API_V1)
+app.include_router(user_follows.router, prefix=API_V1)
 app.include_router(topics.router, prefix=API_V1)
 app.include_router(roles.router, prefix=API_V1)
 app.include_router(manage.router, prefix=API_V1)
 app.include_router(search.router, prefix=API_V1)
 app.include_router(notifications.router, prefix=API_V1)
+app.include_router(reports.router, prefix=API_V1)
 app.include_router(shares.router, prefix=API_V1)
 # 短链跳转：根路径例外（nginx 反代 /s/ 到本路由，方案 §5.1）
 app.include_router(shares.public_router)
 app.include_router(ai.router, prefix=API_V1)
 app.include_router(admin.router, prefix=API_V1)
+app.include_router(admin.public_router, prefix=API_V1)
 
 
 @app.on_event("startup")
@@ -113,6 +118,24 @@ async def _capture_ws_loop() -> None:
     events.set_ws_loop(asyncio.get_running_loop())
     # 过期短链每日清理（后台任务）
     asyncio.create_task(share_service.cleanup_loop())
+    # 当日运营统计定时汇总（后台任务）
+    from app.services.stats_service import compute_daily_stats
+
+    async def _stats_loop():
+        while True:
+            try:
+                from app.db import SessionLocal
+
+                db = SessionLocal()
+                try:
+                    await asyncio.to_thread(compute_daily_stats, db)
+                finally:
+                    db.close()
+            except Exception:
+                pass
+            await asyncio.sleep(6 * 3600)
+
+    asyncio.create_task(_stats_loop())
     # AI 内容审核消费（后台任务）
     if settings.AI_REVIEW_ENABLED:
         from app.ai.review import review_loop

@@ -42,6 +42,13 @@ def upload_avatar(
     return ok(data=auth_service.get_user_out(user), message="头像已更新")
 
 
+@router.post("/me/deactivate")
+def deactivate_me(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """注销账号（软注销：登录态立即失效，后续登录被拒）。"""
+    auth_service.deactivate(db, user)
+    return ok(message="账号已注销")
+
+
 @router.get("/{user_id}")
 def get_user(user_id: int, db: Session = Depends(get_db)):
     """他人主页（公开资料，不含邮箱等隐私字段）。"""

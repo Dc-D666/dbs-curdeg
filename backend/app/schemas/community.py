@@ -115,6 +115,8 @@ class OpLogOut(BaseModel):
     target_type: str
     target_id: int | None
     detail: dict | None
+    request_params: dict | None = None
+    response_result: dict | None = None
     created_at: datetime
     operator_nickname: str = ""  # 视图增强
 

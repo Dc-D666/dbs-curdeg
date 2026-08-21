@@ -99,7 +99,7 @@ def qa(db: Session, question: str, community_id: int | None = None) -> dict:
         },
         {"role": "user", "content": f"问题：{question}\n\n参考帖子：\n{context}"},
     ]
-    answer = llm_gateway.chat(messages, max_tokens=1024, temperature=0.3)
+    answer = llm_gateway.chat(messages, "", 1024, 0.3, feature="rag")
     return {
         "answer": answer,
         "references": [{"id": p.id, "title": p.title} for _, p in top],
@@ -164,7 +164,7 @@ async def qa_stream(db: Session, question: str, community_id: int | None = None)
         {"role": "user", "content": f"问题：{question}\n\n参考帖子：\n{context}"},
     ]
     answer = await asyncio.to_thread(
-        llm_gateway.chat, messages, "", 1024, 0.3
+        llm_gateway.chat, messages, "", 1024, 0.3, "rag"
     )
     # 与 assist_stream 同理：GLM 推理模型流式 content 为空，故一次性取回再切块。
     # 关键：块间必须 asyncio.sleep 停顿，否则所有 chunk 紧挨发出、被前端一次性消费，

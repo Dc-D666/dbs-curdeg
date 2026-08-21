@@ -33,6 +33,13 @@
           <p v-if="n.community_name" class="ntf-community">来自频道《{{ n.community_name }}》</p>
         </div>
         <span v-if="!n.is_read" class="ntf-dot" />
+        <t-button
+          variant="text"
+          size="small"
+          theme="danger"
+          class="ntf-del"
+          @click.stop="onRemove(n)"
+        >删除</t-button>
       </div>
       <div v-if="store.items.length < store.total" class="ntf-more">
         <t-button variant="text" theme="primary" :loading="store.loading" @click="loadMore">
@@ -142,6 +149,15 @@ async function onReadAll() {
     MessagePlugin.success('已全部标记为已读')
   } catch (e) {
     MessagePlugin.error((e as Error).message || '操作失败')
+  }
+}
+
+async function onRemove(n: NotificationItem) {
+  try {
+    await store.removeItem(n.id)
+    MessagePlugin.success('已删除')
+  } catch (e) {
+    MessagePlugin.error((e as Error).message || '删除失败')
   }
 }
 
@@ -270,6 +286,11 @@ onMounted(() => {
   height: 8px;
   border-radius: 50%;
   background: var(--danger);
+}
+.ntf-del {
+  align-self: flex-start;
+  flex-shrink: 0;
+  margin-left: -4px;
 }
 .ntf-item.unread .ntf-title-text {
   font-weight: 600;

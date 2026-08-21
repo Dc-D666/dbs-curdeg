@@ -42,6 +42,31 @@
         <div v-if="activeBoardInfo" class="board-desc">{{ activeBoardInfo.description || '暂无版块描述' }}</div>
       </section>
 
+      <!-- 话题（P0） -->
+      <section class="panel topic-panel">
+        <div class="panel-title-row">
+          <h3 class="panel-title">话题</h3>
+          <div class="topic-toolbar">
+            <t-radio-group v-model="topicSort" variant="default-filled" size="small">
+              <t-radio-button value="hot">热度</t-radio-button>
+              <t-radio-button value="latest">最新</t-radio-button>
+            </t-radio-group>
+            <t-button v-if="community.is_member" variant="outline" size="small" @click="openTopicDialog()">+ 新建</t-button>
+          </div>
+        </div>
+        <div v-if="topics.length" class="topic-list">
+          <div v-for="t in topics" :key="t.id" class="topic-item">
+            <span class="topic-name">#{{ t.name }}</span>
+            <span class="topic-count">{{ t.post_count }} 帖 · 热度 {{ t.heat_value }}</span>
+            <div v-if="community.my_member_type === 0 || community.my_member_type === 1" class="topic-ops">
+              <t-button variant="text" size="small" @click="openTopicDialog(t)">编辑</t-button>
+              <t-button variant="text" size="small" theme="danger" @click="removeTopic(t)">删除</t-button>
+            </div>
+          </div>
+        </div>
+        <p v-else class="no-board">暂无话题</p>
+      </section>
+
       <section v-if="activeBoardInfo" class="panel feed-panel">
         <div class="feed-toolbar">
           <t-radio-group v-model="feedSort" variant="default-filled" size="small">
@@ -132,6 +157,21 @@
       </section>
     </div>
     <div v-else class="state">频道不存在</div>
+
+    <!-- 话题编辑弹窗 -->
+    <t-dialog
+      v-model:visible="topicDialog"
+      :header="topicForm.id ? '编辑话题' : '新建话题'"
+      :confirm-btn="{ content: topicForm.id ? '保存' : '创建', theme: 'primary', loading: topicSaving }"
+      cancel-btn="取消"
+      @confirm="saveTopic"
+    >
+      <div class="topic-form">
+        <t-input v-model="topicForm.name" placeholder="话题名称（不带 #）" maxlength="32" class="topic-input" />
+        <t-input v-model="topicForm.description" placeholder="话题描述（选填）" maxlength="255" class="topic-input" />
+        <t-textarea v-model="topicForm.rules" :autosize="{ minRows: 2, maxRows: 4 }" placeholder="话题规则（选填）" maxlength="500" />
+      </div>
+    </t-dialog>
   </main>
 </template>
 
@@ -139,7 +179,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeftIcon } from 'tdesign-icons-vue-next'
-import { communityApi, type Community, type JoinRequestItem, type Member } from '@/api/community'
+import { communityApi, type Community, type JoinRequestItem, type Member, type TopicItem } from '@/api/community'
 import { postApi, type PostItem } from '@/api/post'
 import FeedCard from '@/components/FeedCard.vue'
 import SkeletonFeed from '@/components/SkeletonFeed.vue'
@@ -166,6 +206,73 @@ const membersOpen = ref(false)
 const members = ref<Member[]>([])
 const requestsOpen = ref(false)
 const requests = ref<JoinRequestItem[]>([])
+
+// 话题（P0）
+const topics = ref<TopicItem[]>([])
+const topicSort = ref<'hot' | 'latest'>('hot')
+const topicDialog = ref(false)
+const topicSaving = ref(false)
+const topicForm = reactive({ id: 0, name: '', description: '', rules: '' })
+
+async function loadTopics() {
+  try {
+    topics.value = await communityApi.topics(cid, topicSort.value)
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '加载话题失败', 'error')
+  }
+}
+
+watch(topicSort, () => loadTopics())
+
+function openTopicDialog(t?: TopicItem) {
+  topicForm.id = t?.id ?? 0
+  topicForm.name = t?.name ?? ''
+  topicForm.description = t?.description ?? ''
+  topicForm.rules = t?.rules ?? ''
+  topicDialog.value = true
+}
+
+async function saveTopic() {
+  if (!topicForm.name.trim()) {
+    toast('请填写话题名称', 'error')
+    return
+  }
+  topicSaving.value = true
+  try {
+    if (topicForm.id) {
+      await communityApi.updateTopic(cid, topicForm.id, {
+        name: topicForm.name,
+        description: topicForm.description,
+        rules: topicForm.rules,
+      })
+      toast('话题已更新')
+    } else {
+      await communityApi.createTopic(cid, {
+        name: topicForm.name,
+        description: topicForm.description,
+        rules: topicForm.rules,
+      })
+      toast('话题已创建')
+    }
+    topicDialog.value = false
+    await loadTopics()
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '保存失败', 'error')
+  } finally {
+    topicSaving.value = false
+  }
+}
+
+async function removeTopic(t: TopicItem) {
+  if (!(await confirmDialog('删除话题', `确定删除话题「${t.name}」？`))) return
+  try {
+    await communityApi.deleteTopic(cid, t.id)
+    await loadTopics()
+    toast('话题已删除')
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '删除失败', 'error')
+  }
+}
 
 const activeBoardInfo = computed(
   () => community.value?.boards.find((b) => b.id === activeBoard.value) ?? null,
@@ -224,6 +331,7 @@ onMounted(async () => {
       activeBoard.value = community.value.boards[0].id
     }
     statusForm.status = community.value.status
+    loadTopics()
   } finally {
     loading.value = false
   }
@@ -568,5 +676,57 @@ async function onDissolve() {
 }
 .load-more {
   margin-top: var(--sp-3);
+}
+.topic-panel .panel-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--sp-2);
+}
+.topic-panel .panel-title {
+  margin: 0;
+  font-size: var(--fs-title);
+  font-weight: 600;
+}
+.topic-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.topic-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+.topic-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) 0;
+  border-bottom: 1px dashed var(--border);
+}
+.topic-item:last-child {
+  border-bottom: none;
+}
+.topic-name {
+  color: #8a6d1a;
+  background: #fff7e6;
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: var(--fs-body);
+}
+.topic-count {
+  font-size: var(--fs-caption);
+  color: var(--text-3);
+}
+.topic-ops {
+  margin-left: auto;
+  display: flex;
+  gap: var(--sp-1);
+}
+.topic-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
 }
 </style>

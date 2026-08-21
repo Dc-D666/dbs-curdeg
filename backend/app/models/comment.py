@@ -19,7 +19,10 @@ class Comment(Base):
     parent_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, index=True)
     reply_to_user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     content: Mapped[str] = mapped_column(String(2000), nullable=False)
+    comment_type: Mapped[int] = mapped_column(Integer, default=0)  # 0普通 1回复 2@提及（P0 补全）
     like_count: Mapped[int] = mapped_column(Integer, default=0)
+    reply_count: Mapped[int] = mapped_column(Integer, default=0)   # 楼中楼回复数（P0 补全）
+    ip_region: Mapped[str] = mapped_column(String(64), default="")  # IP 属地（P0 补全）
     status: Mapped[int] = mapped_column(Integer, default=0)  # 0正常 1删除（软删）
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

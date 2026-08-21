@@ -4,92 +4,281 @@
       <router-link to="/me" class="back">
         <ArrowLeftIcon class="back-icon" /> 返回
       </router-link>
-      <h1 class="page-title">运营看板</h1>
+      <h1 class="page-title">运营管理</h1>
     </header>
 
-    <div v-if="loading" class="state">加载中…</div>
+    <t-tabs v-model="tab" class="tabs">
+      <!-- 总览 -->
+      <t-tab-panel value="overview" label="总览">
+        <div v-if="loading" class="state">加载中…</div>
+        <template v-else-if="stats">
+          <section class="cards">
+            <div class="card"><span class="card-num">{{ stats.users_total }}</span><span class="card-label">用户</span></div>
+            <div class="card"><span class="card-num">{{ stats.communities_total }}</span><span class="card-label">频道</span></div>
+            <div class="card"><span class="card-num">{{ stats.posts_total }}</span><span class="card-label">帖子</span></div>
+            <div class="card"><span class="card-num">{{ stats.comments_total }}</span><span class="card-label">评论</span></div>
+            <div class="card"><span class="card-num">{{ stats.likes_total }}</span><span class="card-label">点赞</span></div>
+            <div class="card hot"><span class="card-num">{{ stats.posts_today }}</span><span class="card-label">今日发帖</span></div>
+          </section>
 
-    <template v-else-if="stats">
-      <!-- 统计卡片 -->
-      <section class="cards">
-        <div class="card"><span class="card-num">{{ stats.users_total }}</span><span class="card-label">用户</span></div>
-        <div class="card"><span class="card-num">{{ stats.communities_total }}</span><span class="card-label">频道</span></div>
-        <div class="card"><span class="card-num">{{ stats.posts_total }}</span><span class="card-label">帖子</span></div>
-        <div class="card"><span class="card-num">{{ stats.comments_total }}</span><span class="card-label">评论</span></div>
-        <div class="card"><span class="card-num">{{ stats.likes_total }}</span><span class="card-label">点赞</span></div>
-        <div class="card hot"><span class="card-num">{{ stats.posts_today }}</span><span class="card-label">今日发帖</span></div>
-      </section>
+          <section class="panel">
+            <div class="panel-title-row">
+              <h3 class="panel-title">近 7 天发帖趋势</h3>
+              <t-button variant="outline" size="small" @click="exportTrend">导出 CSV</t-button>
+            </div>
+            <div v-if="trend.length" class="trend">
+              <div v-for="t in trend" :key="t.date" class="trend-col">
+                <span class="trend-val">{{ t.count }}</span>
+                <div class="trend-bar" :style="{ height: barHeight(t.count) }" />
+                <span class="trend-date">{{ t.date.slice(5) }}</span>
+              </div>
+            </div>
+            <p v-else class="muted">近 7 天暂无发帖</p>
+          </section>
+        </template>
+        <div v-else class="state">{{ error }}</div>
+      </t-tab-panel>
 
-      <!-- 近 7 天发帖趋势 -->
-      <section class="panel">
-        <h3 class="panel-title">近 7 天发帖趋势</h3>
-        <div v-if="trend.length" class="trend">
-          <div v-for="t in trend" :key="t.date" class="trend-col">
-            <span class="trend-val">{{ t.count }}</span>
-            <div class="trend-bar" :style="{ height: barHeight(t.count) }" />
-            <span class="trend-date">{{ t.date.slice(5) }}</span>
+      <!-- 举报处理 -->
+      <t-tab-panel value="reports" label="举报处理">
+        <div class="panel">
+          <div class="report-row" v-for="r in reports" :key="r.id">
+            <div class="report-main">
+              <span class="report-type">{{ reportTypeName(r.target_type) }} #{{ r.target_id }}</span>
+              <span class="report-reason">{{ r.reason_type }}</span>
+              <span class="report-status">{{ reportStatusName(r.status) }}</span>
+            </div>
+            <p v-if="r.detail" class="report-detail">{{ r.detail }}</p>
+            <p class="report-meta">举报人：{{ r.reporter_nickname }} · {{ r.created_at }}</p>
+            <div class="report-ops">
+              <t-button v-if="r.status === 0" variant="outline" size="small" @click="handleReport(r, 'processing')">受理</t-button>
+              <t-button variant="outline" size="small" @click="handleReport(r, 'done')">办结</t-button>
+              <t-button variant="outline" size="small" theme="danger" @click="handleReport(r, 'rejected')">驳回</t-button>
+            </div>
+          </div>
+          <t-empty v-if="reports.length === 0" description="暂无举报" />
+        </div>
+      </t-tab-panel>
+
+      <!-- 敏感词库 -->
+      <t-tab-panel value="words" label="敏感词库">
+        <div class="panel">
+          <div class="word-form">
+            <t-input v-model="wordForm.word" class="word-input" placeholder="敏感词" maxlength="64" clearable />
+            <t-select v-model="wordForm.category" class="word-cat">
+              <t-option value="涉政" label="涉政" />
+              <t-option value="涉黄" label="涉黄" />
+              <t-option value="广告" label="广告" />
+              <t-option value="诈骗" label="诈骗" />
+              <t-option value="辱骂" label="辱骂" />
+              <t-option value="其他" label="其他" />
+            </t-select>
+            <t-button theme="primary" size="small" :disabled="!wordForm.word" @click="addWord">添加</t-button>
+          </div>
+          <div class="word-row" v-for="w in words" :key="w.id">
+            <span class="word-text">{{ w.word }}</span>
+            <t-tag size="small" variant="light">{{ w.category }}</t-tag>
+            <t-switch :value="w.enabled" size="small" @change="(v: boolean) => toggleWord(w, v)" />
+            <t-button variant="text" size="small" theme="danger" @click="removeWord(w)">删除</t-button>
+          </div>
+          <t-empty v-if="words.length === 0" description="暂无敏感词" />
+        </div>
+      </t-tab-panel>
+
+      <!-- 系统配置 -->
+      <t-tab-panel value="configs" label="系统配置">
+        <div class="panel">
+          <div class="cfg-row" v-for="c in configs" :key="c.key">
+            <span class="cfg-key">{{ c.key }}</span>
+            <span class="cfg-desc">{{ c.description }}</span>
+            <t-input v-model="cfgForm[c.key]" size="small" class="cfg-input" />
+            <t-button variant="outline" size="small" @click="saveConfig(c.key)">保存</t-button>
           </div>
         </div>
-        <p v-else class="muted">近 7 天暂无发帖</p>
-      </section>
+      </t-tab-panel>
 
-      <!-- Top 频道 -->
-      <section class="panel">
-        <h3 class="panel-title">发帖最多的频道 TOP5</h3>
-        <div v-if="stats.top_communities.length" class="top-list">
-          <div v-for="(c, i) in stats.top_communities" :key="c.community_id" class="top-row">
-            <span class="top-rank">{{ i + 1 }}</span>
-            <router-link :to="`/c/${c.community_id}`" class="top-name">{{ c.name }}</router-link>
-            <span class="top-posts">{{ c.posts }} 帖</span>
+      <!-- AI 配置 -->
+      <t-tab-panel value="ai" label="AI 配置">
+        <div class="panel">
+          <div class="ai-row" v-for="c in aiConfigs" :key="c.feature">
+            <span class="ai-feature">{{ featureLabel(c.feature) }}</span>
+            <t-switch :value="c.enabled" size="small" @change="(v: boolean) => toggleAi(c.feature, v)" />
+            <span class="ai-model">{{ c.model || '默认模型' }}</span>
           </div>
+          <p class="muted">AI 功能开关与模型展示；详细配置请在数据库中维护。</p>
         </div>
-        <p v-else class="muted">暂无数据</p>
-      </section>
-    </template>
-    <div v-else class="state">{{ error }}</div>
+      </t-tab-panel>
+    </t-tabs>
   </main>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { ArrowLeftIcon } from 'tdesign-icons-vue-next'
 import { request } from '@/api/http'
+import { adminApi, type ReportItem, type SensitiveWordItem } from '@/api/admin'
+import { toast } from '@/utils/toast'
 
-interface TrendPoint {
-  date: string
-  count: number
-}
-interface Stats {
-  users_total: number
-  communities_total: number
-  posts_total: number
-  comments_total: number
-  likes_total: number
-  users_today: number
-  posts_today: number
-  posts_trend_7d: TrendPoint[]
-  top_communities: Array<{ community_id: number; name: string; posts: number }>
-}
-
+const tab = ref<'overview' | 'reports' | 'words' | 'configs' | 'ai'>('overview')
 const loading = ref(true)
 const error = ref('')
-const stats = ref<Stats | null>(null)
+const stats = ref<Record<string, any> | null>(null)
+const trend = ref<Array<{ date: string; count: number }>>([])
 
-const trend = computed(() => stats.value?.posts_trend_7d ?? [])
+// 举报
+const reports = ref<ReportItem[]>([])
+// 敏感词
+const words = ref<SensitiveWordItem[]>([])
+const wordForm = reactive({ word: '', category: '其他' })
+// 配置
+const configs = ref<Array<{ key: string; value: string; description: string }>>([])
+const cfgForm = reactive<Record<string, string>>({})
+// AI 配置
+const aiConfigs = ref<Array<{ feature: string; enabled: boolean; model: string }>>([])
 
 function barHeight(count: number): string {
   const max = Math.max(1, ...trend.value.map((t) => t.count))
   return `${Math.max(8, Math.round((count / max) * 120))}px`
 }
 
-onMounted(async () => {
+function reportTypeName(t: number): string {
+  return t === 1 ? '帖子' : t === 2 ? '评论' : t === 3 ? '用户' : t === 4 ? '频道' : '内容'
+}
+function reportStatusName(s: number): string {
+  return s === 0 ? '待处理' : s === 1 ? '处理中' : s === 2 ? '已办结' : s === 3 ? '驳回' : '未知'
+}
+function featureLabel(f: string): string {
+  const map: Record<string, string> = { assist: 'AI 帮写', review: '内容审核', rag: '问答机器人', summary: 'AI 摘要', draw: 'AI 绘画' }
+  return map[f] || f
+}
+
+async function loadOverview() {
   try {
-    stats.value = await request<Stats>({ url: '/admin/stats' })
+    stats.value = await request<Record<string, any>>({ url: '/admin/stats' })
+    trend.value = stats.value?.posts_trend_7d ?? []
   } catch (e) {
     error.value = e instanceof Error ? e.message : '加载失败'
   } finally {
     loading.value = false
   }
+}
+
+async function loadReports() {
+  try {
+    reports.value = (await adminApi.reports(undefined, 1, 50)).items
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '加载失败', 'error')
+  }
+}
+
+async function loadWords() {
+  try {
+    words.value = (await adminApi.sensitiveWords(undefined, 1, 50)).items
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '加载失败', 'error')
+  }
+}
+
+async function loadConfigs() {
+  try {
+    configs.value = await adminApi.configs()
+    for (const c of configs.value) cfgForm[c.key] = c.value
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '加载失败', 'error')
+  }
+}
+
+async function loadAiConfigs() {
+  try {
+    aiConfigs.value = await adminApi.aiConfigs()
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '加载失败', 'error')
+  }
+}
+
+async function handleReport(r: ReportItem, action: 'processing' | 'done' | 'rejected') {
+  try {
+    await adminApi.handleReport(r.id, action)
+    toast('已处理')
+    await loadReports()
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '操作失败', 'error')
+  }
+}
+
+async function addWord() {
+  if (!wordForm.word.trim()) return
+  try {
+    await adminApi.addSensitiveWord(wordForm.word.trim(), wordForm.category)
+    wordForm.word = ''
+    await loadWords()
+    toast('已添加敏感词')
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '添加失败', 'error')
+  }
+}
+
+async function toggleWord(w: SensitiveWordItem, enabled: boolean) {
+  try {
+    await adminApi.setSensitiveWordEnabled(w.id, enabled)
+    w.enabled = enabled
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '操作失败', 'error')
+  }
+}
+
+async function removeWord(w: SensitiveWordItem) {
+  try {
+    await adminApi.deleteSensitiveWord(w.id)
+    words.value = words.value.filter((x) => x.id !== w.id)
+    toast('已删除')
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '删除失败', 'error')
+  }
+}
+
+async function saveConfig(key: string) {
+  try {
+    await adminApi.setConfig(key, cfgForm[key] ?? '')
+    toast('配置已保存')
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '保存失败', 'error')
+  }
+}
+
+async function toggleAi(feature: string, enabled: boolean) {
+  try {
+    await adminApi.updateAiConfig(feature, { enabled })
+    const c = aiConfigs.value.find((x) => x.feature === feature)
+    if (c) c.enabled = enabled
+    toast('配置已保存')
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '保存失败', 'error')
+  }
+}
+
+async function exportTrend() {
+  try {
+    const res = await adminApi.exportDashboard(7)
+    if (!res.ok) return
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'stats_report.csv'
+    a.click()
+    URL.revokeObjectURL(url)
+  } catch {
+    toast('导出失败', 'error')
+  }
+}
+
+onMounted(async () => {
+  await loadOverview()
+  loadReports()
+  loadWords()
+  loadConfigs()
+  loadAiConfigs()
 })
 </script>
 
@@ -167,9 +356,15 @@ onMounted(async () => {
   padding: var(--sp-4);
 }
 .panel-title {
-  margin: 0 0 var(--sp-3);
+  margin: 0;
   font-size: var(--fs-body);
   font-weight: 600;
+}
+.panel-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--sp-3);
 }
 .trend {
   display: flex;
@@ -201,41 +396,120 @@ onMounted(async () => {
   font-size: 10px;
   color: var(--text-3);
 }
-.top-list .top-row {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-  padding: 10px 0;
-  border-bottom: 1px solid var(--border);
+.muted {
+  color: var(--text-3);
+  font-size: var(--fs-caption);
 }
-.top-list .top-row:last-child {
+.report-row {
+  padding: var(--sp-3) 0;
+  border-bottom: 1px dashed var(--border);
+}
+.report-row:last-child {
   border-bottom: none;
 }
-.top-rank {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: var(--brand-weak);
-  color: var(--brand);
-  font-size: var(--fs-caption);
-  font-weight: 600;
-  display: inline-flex;
+.report-main {
+  display: flex;
   align-items: center;
-  justify-content: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
 }
-.top-name {
+.report-type {
+  font-weight: 600;
+}
+.report-reason {
+  color: var(--brand);
+  background: var(--brand-weak);
+  border-radius: 4px;
+  padding: 0 6px;
+  font-size: var(--fs-caption);
+}
+.report-status {
+  font-size: var(--fs-caption);
+  color: var(--text-3);
+}
+.report-detail {
+  margin: var(--sp-1) 0 0;
+  font-size: var(--fs-caption);
+  color: var(--text-2);
+}
+.report-meta {
+  margin: 4px 0 0;
+  font-size: var(--fs-caption);
+  color: var(--text-3);
+}
+.report-ops {
+  margin-top: var(--sp-2);
+  display: flex;
+  gap: var(--sp-2);
+}
+.word-form {
+  display: flex;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+  flex-wrap: wrap;
+}
+.word-input {
   flex: 1;
-  color: var(--text-1);
+  min-width: 140px;
+}
+.word-cat {
+  width: 100px;
+}
+.word-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) 0;
+  border-bottom: 1px dashed var(--border);
+}
+.word-row:last-child {
+  border-bottom: none;
+}
+.word-text {
+  flex: 1;
+  font-weight: 600;
+}
+.cfg-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) 0;
+  border-bottom: 1px dashed var(--border);
+  flex-wrap: wrap;
+}
+.cfg-key {
+  width: 150px;
+  font-family: Consolas, monospace;
+  font-size: var(--fs-caption);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.top-posts {
+.cfg-desc {
+  flex: 1;
+  min-width: 100px;
   font-size: var(--fs-caption);
   color: var(--text-3);
 }
-.muted {
-  color: var(--text-3);
+.cfg-input {
+  width: 180px;
+}
+.ai-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) 0;
+  border-bottom: 1px dashed var(--border);
+}
+.ai-row:last-child {
+  border-bottom: none;
+}
+.ai-feature {
+  flex: 1;
+  font-weight: 600;
+}
+.ai-model {
   font-size: var(--fs-caption);
+  color: var(--text-3);
 }
 </style>

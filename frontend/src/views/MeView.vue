@@ -67,6 +67,19 @@
         <span>我关注的频道</span>
         <ArrowRightIcon class="feed-arrow" />
       </router-link>
+      <router-link to="/me/favorites" class="feed-link">
+        <span>我的收藏</span>
+        <ArrowRightIcon class="feed-arrow" />
+      </router-link>
+    </section>
+
+    <section class="panel">
+      <h3 class="panel-title">通知设置</h3>
+      <div class="switch-row" v-for="item in notifyItems" :key="item.key">
+        <span class="switch-label">{{ item.label }}</span>
+        <t-switch v-model="notifyForm[item.key]" size="small" @change="saveNotify" />
+      </div>
+      <p v-if="notifyMsg" class="msg">{{ notifyMsg }}</p>
     </section>
 
     <section v-if="auth.user?.user_type === 1" class="panel">
@@ -97,6 +110,14 @@
         </t-button>
       </form>
     </section>
+
+    <section class="panel">
+      <h3 class="panel-title">账号</h3>
+      <t-button variant="outline" theme="danger" block :loading="deactivating" @click="onDeactivate">
+        {{ deactivating ? '处理中…' : '注销账号' }}
+      </t-button>
+      <p class="deactivate-hint">注销后无法登录，频道内的帖子与评论保留（作者标记为已注销）。</p>
+    </section>
   </main>
 </template>
 
@@ -105,6 +126,8 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { ArrowLeftIcon, ArrowRightIcon } from 'tdesign-icons-vue-next'
 import { request } from '@/api/http'
 import { useAuthStore, type UserInfo } from '@/stores/auth'
+import { confirmDialog } from '@/utils/confirm'
+import { toast } from '@/utils/toast'
 
 const auth = useAuthStore()
 const form = reactive({
@@ -121,6 +144,55 @@ const pwForm = reactive({ old_password: '', new_password: '', confirm: '' })
 const pwSaving = ref(false)
 const pwMsg = ref('')
 const pwError = ref(false)
+const deactivating = ref(false)
+
+// 通知开关（P0）
+const notifyItems = [
+  { key: 'mention', label: '被 @ 提醒' },
+  { key: 'like', label: '被点赞' },
+  { key: 'comment', label: '新评论' },
+  { key: 'follow', label: '新粉丝' },
+  { key: 'system', label: '系统通知' },
+  { key: 'review', label: '审核结果' },
+  { key: 'report', label: '举报反馈' },
+]
+const notifyForm = reactive<Record<string, boolean>>({})
+const notifyMsg = ref('')
+
+async function loadNotify() {
+  try {
+    const settings = await request<Record<string, boolean>>({ url: '/notifications/settings' })
+    for (const item of notifyItems) notifyForm[item.key] = !!settings[item.key]
+  } catch {
+    /* 忽略 */
+  }
+}
+
+async function saveNotify() {
+  try {
+    const patch: Record<string, boolean> = {}
+    for (const item of notifyItems) patch[item.key] = !!notifyForm[item.key]
+    await request<Record<string, boolean>>({ url: '/notifications/settings', method: 'PUT', data: patch })
+    notifyMsg.value = '设置已保存'
+  } catch (e) {
+    notifyMsg.value = e instanceof Error ? e.message : '保存失败'
+  }
+}
+
+async function onDeactivate() {
+  if (!(await confirmDialog('注销账号', '确定注销账号？此操作不可撤销！'))) return
+  deactivating.value = true
+  try {
+    await request<null>({ url: '/users/me/deactivate', method: 'POST' })
+    auth.logout()
+    toast('账号已注销', 'success')
+    window.location.href = '/login'
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '注销失败', 'error')
+  } finally {
+    deactivating.value = false
+  }
+}
 
 const initial = computed(() => (auth.user?.nickname || auth.user?.username || 'U').slice(0, 1).toUpperCase())
 const createdDate = computed(() => (auth.user?.created_at || '').slice(0, 10))
@@ -134,6 +206,7 @@ onMounted(async () => {
     form.province = me.province
     form.city = me.city
   }
+  loadNotify()
 })
 
 async function onAvatarChange(e: Event) {
@@ -334,5 +407,24 @@ async function onChangePassword() {
   color: var(--td-text-color-placeholder);
   width: 16px;
   height: 16px;
+}
+.switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--sp-2) 0;
+  border-bottom: 1px dashed var(--td-component-border);
+}
+.switch-row:last-child {
+  border-bottom: none;
+}
+.switch-label {
+  font-size: var(--fs-body);
+  color: var(--td-text-color-primary);
+}
+.deactivate-hint {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--fs-caption);
+  color: var(--td-text-color-placeholder);
 }
 </style>
