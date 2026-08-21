@@ -12,18 +12,18 @@
         <label class="field-label">标题</label>
         <t-input v-model.trim="form.title" size="large" maxlength="128" placeholder="一句话说清楚" clearable />
         <div class="ai-bar">
-          <span class="ai-bar-label">🤖 AI 帮写</span>
+          <span class="ai-bar-label"><AiIcon class="ai-bar-cal-icon" /> AI 帮写</span>
           <t-button size="small" variant="outline" :loading="aiBusy === 'title'" :disabled="!!aiBusy" @click="aiRun('title')">
-            📝 起标题
+            <template #icon><EditIcon /></template> 起标题
           </t-button>
           <t-button size="small" variant="outline" :loading="aiBusy === 'write'" :disabled="!!aiBusy" @click="aiRun('write')">
-            ✍️ 写正文
+            <template #icon><PenIcon /></template> 写正文
           </t-button>
           <t-button size="small" variant="outline" :loading="aiBusy === 'polish'" :disabled="!!aiBusy" @click="aiRun('polish')">
-            🪄 润色
+            <template #icon><BrushIcon /></template> 润色
           </t-button>
           <t-button size="small" variant="outline" :loading="drawBusy" :disabled="!!aiBusy" @click="aiDraw">
-            🎨 文生图
+            <template #icon><ImageIcon /></template> 文生图
           </t-button>
         </div>
       </div>
@@ -53,7 +53,7 @@
       <!-- AI 生成预览（打字机效果） -->
       <section v-if="aiText" class="ai-preview">
         <div class="ai-preview-head">
-          <span>✨ AI 生成{{ aiBusy ? '中…' : '' }}</span>
+          <span><AiIcon class="ai-preview-icon" /> AI 生成{{ aiBusy ? '中…' : '' }}</span>
           <div v-if="!aiBusy">
             <t-button size="small" theme="primary" variant="text" @click="aiApply">插入内容</t-button>
             <t-button size="small" variant="text" @click="aiText = ''">丢弃</t-button>
@@ -74,7 +74,7 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeftIcon } from 'tdesign-icons-vue-next'
+import { AiIcon, ArrowLeftIcon, BrushIcon, EditIcon, ImageIcon, PenIcon } from 'tdesign-icons-vue-next'
 import RichEditor from '@/components/RichEditor.vue'
 import { communityApi, type TopicItem } from '@/api/community'
 import { postApi, type RichSegment } from '@/api/post'
@@ -319,6 +319,18 @@ async function onSubmit() {
 .ai-bar-label {
   font-size: var(--fs-caption);
   color: var(--td-text-color-placeholder);
+}
+.ai-bar-cal-icon {
+  width: 16px;
+  height: 16px;
+  vertical-align: -3px;
+  margin-right: 2px;
+}
+.ai-preview-head .ai-preview-icon {
+  width: 14px;
+  height: 14px;
+  vertical-align: -2px;
+  margin-right: 2px;
 }
 .ai-preview {
   margin-top: 4px;

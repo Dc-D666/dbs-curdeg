@@ -2,13 +2,13 @@
   <div class="ai-bot">
     <!-- 浮动入口（登录后显示） -->
     <button v-if="authed && !open" class="ai-bot-fab" title="AI 问答助手" @click="open = true">
-      🤖
+      <RobotIcon class="ai-fab-icon" />
     </button>
 
     <!-- 对话框 -->
     <div v-if="open" class="ai-bot-panel">
       <header class="ai-bot-head">
-        <span>🤖 频道问答助手</span>
+        <span><RobotIcon class="ai-head-icon" /> 频道问答助手</span>
         <button class="ai-bot-close" title="关闭" @click="open = false">✕</button>
       </header>
       <div ref="bodyEl" class="ai-bot-body">
@@ -36,6 +36,7 @@
 <script setup lang="ts">
 import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { RobotIcon } from 'tdesign-icons-vue-next'
 import { tokenStore } from '@/api/http'
 import { streamPost } from '@/utils/sse'
 
@@ -139,6 +140,14 @@ function gotoPost(id: number) {
   cursor: pointer;
   z-index: 90;
   box-shadow: var(--shadow-overlay);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.ai-fab-icon {
+  width: 26px;
+  height: 26px;
+  color: #fff;
 }
 .ai-bot-panel {
   position: fixed;
@@ -164,6 +173,12 @@ function gotoPost(id: number) {
   color: #fff;
   font-size: var(--fs-body);
   font-weight: 600;
+}
+.ai-head-icon {
+  width: 16px;
+  height: 16px;
+  vertical-align: -2px;
+  margin-right: 4px;
 }
 .ai-bot-close {
   border: none;

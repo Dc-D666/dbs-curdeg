@@ -75,7 +75,9 @@
         </div>
 
         <div class="post-extra">
-          <t-button v-if="!summary" variant="text" size="small" :loading="summarizing" @click="genSummary">✨ AI 摘要</t-button>
+          <t-button v-if="!summary" variant="text" size="small" :loading="summarizing" @click="genSummary">
+            <template #icon><AiIcon /></template> AI 摘要
+          </t-button>
           <p v-else class="ai-summary"><b>AI 摘要：</b>{{ summary }}</p>
         </div>
 
@@ -202,7 +204,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeftIcon } from 'tdesign-icons-vue-next'
+import { AiIcon, ArrowLeftIcon } from 'tdesign-icons-vue-next'
 import { communityApi } from '@/api/community'
 import EmptyState from '@/components/EmptyState.vue'
 import { postApi, type AttachmentItem, type CommentItem, type PostItem } from '@/api/post'

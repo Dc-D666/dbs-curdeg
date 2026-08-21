@@ -29,9 +29,9 @@
       <button type="button" class="re-btn" title="提及成员" @click="openAt">@</button>
       <button type="button" class="re-btn" title="话题" @click="insertTopic">#</button>
       <button type="button" class="re-btn" title="表情" @click="emojiOpen = !emojiOpen">☺</button>
-      <button type="button" class="re-btn" title="插入链接" @click="insertLink">🔗</button>
+      <button type="button" class="re-btn" title="插入链接" @click="insertLink"><LinkIcon class="re-icon" /></button>
       <label class="re-btn" title="插入图片">
-        🖼
+        <ImageIcon class="re-icon" />
         <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden @change="onPickImage" />
       </label>
       <span v-if="uploading" class="re-uploading">上传中…</span>
@@ -71,6 +71,7 @@
 
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
+import { ImageIcon, LinkIcon } from 'tdesign-icons-vue-next'
 import { communityApi, type Member } from '@/api/community'
 import { request } from '@/api/http'
 import type { RichSegment, SegStyle } from '@/api/post'
@@ -498,6 +499,10 @@ function styleText(text: string, s: SegStyle): Node {
 .re-btn:hover {
   background: var(--brand-weak);
   color: var(--brand);
+}
+.re-icon {
+  width: 16px;
+  height: 16px;
 }
 .re-sep {
   width: 1px;
