@@ -42,7 +42,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeftIcon } from 'tdesign-icons-vue-next'
 import { userApi, type PublicUser } from '@/api/user'
 import { useAuthStore } from '@/stores/auth'
@@ -50,6 +50,7 @@ import { tokenStore } from '@/api/http'
 import { toast } from '@/utils/toast'
 
 const route = useRoute()
+const router = useRouter()
 const uid = Number(route.params.id)
 const auth = useAuthStore()
 const user = ref<PublicUser | null>(null)
@@ -76,7 +77,7 @@ onMounted(async () => {
 
 async function toggleFollow() {
   if (!tokenStore.access) {
-    window.location.href = `/login?redirect=${encodeURIComponent(route.fullPath)}`
+    router.push(`/login?redirect=${encodeURIComponent(route.fullPath)}`)
     return
   }
   if (followBusy.value) return

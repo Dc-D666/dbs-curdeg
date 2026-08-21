@@ -47,6 +47,7 @@
       <t-button v-if="hasMore" variant="outline" block class="load-more" :loading="loading" @click="loadMore()">
         {{ loading ? '加载中…' : '加载更多' }}
       </t-button>
+      <p v-else-if="items.length > 0 && !loading" class="feed-end">已经到底啦，没有更多帖子了</p>
     </section>
   </main>
 </template>
@@ -199,6 +200,12 @@ function onLogout() {
 }
 .load-more {
   margin-top: var(--sp-3);
+}
+.feed-end {
+  margin: var(--sp-4) 0 0;
+  text-align: center;
+  font-size: var(--fs-caption);
+  color: var(--text-3);
 }
 .feed-error {
   padding: var(--sp-6) 0;

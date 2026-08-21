@@ -115,7 +115,7 @@ function aiPlainContent(): string {
 async function aiRun(action: 'write' | 'polish' | 'title') {
   if (aiBusy.value) return
   if (!tokenStore.access) {
-    window.location.href = `/login?redirect=${encodeURIComponent(route.fullPath)}`
+    router.push(`/login?redirect=${encodeURIComponent(route.fullPath)}`)
     return
   }
   aiBusy.value = action
@@ -155,7 +155,7 @@ function aiApply() {
 async function aiDraw() {
   if (drawBusy.value) return
   if (!tokenStore.access) {
-    window.location.href = `/login?redirect=${encodeURIComponent(route.fullPath)}`
+    router.push(`/login?redirect=${encodeURIComponent(route.fullPath)}`)
     return
   }
   const prompt = window.prompt('输入画面描述（用于文生图）：')
@@ -211,7 +211,7 @@ function onImages(urls: string[]) {
 async function onSubmit() {
   if (submitting.value) return
   if (!tokenStore.access) {
-    window.location.href = `/login?redirect=${encodeURIComponent(route.fullPath)}`
+    router.push(`/login?redirect=${encodeURIComponent(route.fullPath)}`)
     return
   }
   if (!form.title) {

@@ -55,7 +55,7 @@ function goDetail() {
 
 function requireLogin(): boolean {
   if (tokenStore.access) return true
-  window.location.href = `/login?redirect=${encodeURIComponent(route.fullPath)}`
+  router.push(`/login?redirect=${encodeURIComponent(route.fullPath)}`)
   return false
 }
 
@@ -134,7 +134,8 @@ async function toggleLike() {
   margin-top: var(--sp-3);
   display: flex;
   align-items: center;
-  gap: var(--sp-3);
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-3);
   font-size: 12px;
   color: var(--text-3);
 }
@@ -164,8 +165,9 @@ async function toggleLike() {
 .fc-action {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 2px 8px;
+  gap: 6px;
+  min-height: 32px; /* 触摸热区（>=32px），避免移动端难点/误触 */
+  padding: 4px 10px;
   border: none;
   background: transparent;
   color: var(--text-3);

@@ -329,7 +329,7 @@ async function loadComments(page: number) {
 
 function requireLogin(): boolean {
   if (tokenStore.access) return true
-  window.location.href = `/login?redirect=${encodeURIComponent(route.fullPath)}`
+  router.push(`/login?redirect=${encodeURIComponent(route.fullPath)}`)
   return false
 }
 

@@ -83,11 +83,12 @@
 
 <script setup lang="ts">
 import { onUnmounted, reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { request } from '@/api/http'
 import { useAuthStore, type TokenPair } from '@/stores/auth'
 
 const router = useRouter()
+const route = useRoute()
 const auth = useAuthStore()
 
 const form = reactive({
@@ -156,7 +157,8 @@ async function onSubmit() {
     })
     auth.setTokens(data)
     await auth.fetchMe()
-    router.push('/')
+    const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/'
+    router.push(redirect)
   } catch (e) {
     error.value = e instanceof Error ? e.message : '注册失败'
   } finally {

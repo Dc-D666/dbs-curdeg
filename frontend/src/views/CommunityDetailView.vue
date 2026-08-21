@@ -339,7 +339,7 @@ onMounted(async () => {
 
 async function onJoin() {
   if (!tokenStore.access) {
-    window.location.href = `/login?redirect=${encodeURIComponent(route.fullPath)}`
+    router.push(`/login?redirect=${encodeURIComponent(route.fullPath)}`)
     return
   }
   if (joining.value) return
