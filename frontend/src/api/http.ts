@@ -39,7 +39,7 @@ export const tokenStore = {
 
 const http: AxiosInstance = axios.create({
   baseURL: '/api/v1',
-  timeout: 15000,
+  timeout: 60000, // AI 问答/帮写走 LLM，冷启动 + embedding 可能在 15s 外；放宽到 60s
 })
 
 http.interceptors.request.use((config) => {

@@ -24,7 +24,7 @@
 import { computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { HomeIcon, BrowseIcon, UserIcon, NotificationIcon } from 'tdesign-icons-vue-next'
-import { request } from '@/api/http'
+import http from '@/api/http'
 import { useNotificationStore } from '@/stores/notification'
 import { useWebSocket } from '@/composables/useWebSocket'
 import AiBot from '@/components/AiBot.vue'
@@ -48,8 +48,9 @@ onMounted(async () => {
   // WebSocket 通知（登录后自动连接，未读角标实时更新）
   useWebSocket()
   try {
-    const data = await request<{ message: string }>({ url: '/ping' })
-    console.log('[SDUdiscord] 后端连通:', data.message)
+    // /ping 返回裸 {message:"pong"}（无统一 code 包装），用原生 http 直接读消息避免误判
+    const res = await http.get<{ message: string }>('/api/v1/ping')
+    console.log('[SDUdiscord] 后端连通:', res.data?.message)
   } catch (e) {
     console.warn('[SDUdiscord] 后端未连通:', e)
   }

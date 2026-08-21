@@ -39,6 +39,18 @@ def _sse_stream(gen) -> StreamingResponse:
     return StreamingResponse(wrapper(), media_type="text/event-stream")
 
 
+def _sse_events(gen) -> StreamingResponse:
+    """通用 SSE：yield 任意事件 dict，原样序列化为 data: {...json...} 行。"""
+    import json
+
+    async def wrapper():
+        async for event in gen:
+            yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(wrapper(), media_type="text/event-stream")
+
+
 @router.post("/assist", dependencies=[Depends(rate_limit("ai_assist", limit=20, window=60))])
 async def ai_assist(
     payload: AssistRequest,
@@ -60,6 +72,16 @@ def ai_qa(
         return ok(data=rag.qa(db, payload.question, payload.community_id), message="ok")
     except RuntimeError as e:
         return ok(data={"answer": str(e), "references": []})
+
+
+@router.post("/qa/stream", dependencies=[Depends(rate_limit("ai_qa", limit=20, window=60))])
+async def ai_qa_stream(
+    payload: QARequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """RAG 问答 SSE 流：搜帖 / 构建 embedding 时实时推送进度，再流式输出回答。"""
+    return _sse_events(rag.qa_stream(db, payload.question, payload.community_id))
 
 
 @router.get("/reviews/me")

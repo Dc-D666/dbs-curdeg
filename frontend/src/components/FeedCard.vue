@@ -15,26 +15,70 @@
         <UserAvatar :name="post.author_nickname" :src="post.author_avatar" :size="18" />
         {{ post.author_nickname }}
       </router-link>
-      <span class="fc-stat">{{ post.like_count }} 赞</span>
       <span class="fc-stat">{{ post.comment_count }} 评论</span>
-      <span class="fc-time">{{ post.created_at.slice(0, 16) }}</span>
+      <span class="fc-time">{{ timeAgo(post.created_at) }}</span>
+    </div>
+    <div class="fc-actions">
+      <button class="fc-action" :class="{ liked: post.is_liked }" :disabled="liking" @click.stop="toggleLike">
+        <ThumbUpIcon class="fc-action-icon" />
+        <span>{{ post.is_liked ? '已赞' : '赞' }}</span>
+        <span v-if="post.like_count" class="fc-action-count">{{ post.like_count }}</span>
+      </button>
     </div>
   </article>
 </template>
 
 <script setup lang="ts">
-import { useRouter } from 'vue-router'
+import { ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ThumbUpIcon } from 'tdesign-icons-vue-next'
 import type { PostItem } from '@/api/post'
+import { postApi } from '@/api/post'
+import { tokenStore } from '@/api/http'
 import UserAvatar from '@/components/UserAvatar.vue'
+import { timeAgo } from '@/utils/time'
+import { toast } from '@/utils/toast'
 
 const props = withDefaults(
   defineProps<{ post: PostItem; showCommunity?: boolean }>(),
   { showCommunity: false },
 )
 
+const emit = defineEmits<{ (e: 'updated'): void }>()
 const router = useRouter()
+const route = useRoute()
+const liking = ref(false)
+
 function goDetail() {
   router.push(`/p/${props.post.id}`)
+}
+
+function requireLogin(): boolean {
+  if (tokenStore.access) return true
+  window.location.href = `/login?redirect=${encodeURIComponent(route.fullPath)}`
+  return false
+}
+
+async function toggleLike() {
+  if (!requireLogin() || liking.value) return
+  const p = props.post
+  liking.value = true
+  try {
+    if (p.is_liked) {
+      const r = await postApi.unlike(p.id)
+      p.is_liked = false
+      p.like_count = r.count
+    } else {
+      const r = await postApi.like(p.id)
+      p.is_liked = true
+      p.like_count = r.count
+    }
+    emit('updated')
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '操作失败', 'error')
+  } finally {
+    liking.value = false
+  }
 }
 </script>
 
@@ -111,5 +155,45 @@ function goDetail() {
 }
 .fc-time {
   margin-left: auto;
+}
+.fc-actions {
+  margin-top: var(--sp-2);
+  padding-top: var(--sp-2);
+  border-top: 1px solid var(--border);
+}
+.fc-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-3);
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: var(--radius-btn);
+  transition: color var(--anim-duration) var(--anim-ease),
+    background var(--anim-duration) var(--anim-ease);
+}
+.fc-action:hover {
+  color: var(--brand);
+  background: var(--brand-weak);
+}
+.fc-action.liked {
+  color: var(--td-brand-color);
+}
+.fc-action.liked .fc-action-icon {
+  fill: currentColor;
+}
+.fc-action:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.fc-action-icon {
+  width: 15px;
+  height: 15px;
+}
+.fc-action-count {
+  font-variant-numeric: tabular-nums;
 }
 </style>

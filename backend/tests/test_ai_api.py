@@ -149,6 +149,31 @@ def test_qa_embeddings_cached(ctx, monkeypatch):
     assert calls["n"] == first + 1
 
 
+def test_qa_stream_progress_and_answer(ctx):
+    """SSE 流：搜帖/embedding 进度事件 + 回答 + 引用，结尾 [DONE]。"""
+    client, owner, normal, cid, bid = ctx["client"], ctx["owner"], ctx["normal"], ctx["cid"], ctx["bid"]
+    _create_post(client, owner, cid, bid, "爬山攻略", "泰山日出路线和装备清单")
+    _create_post(client, normal, cid, bid, "火锅推荐", "川渝火锅哪家强")
+
+    res = client.post("/api/v1/ai/qa/stream", json={"question": "周末去爬山有什么推荐"}, headers=_auth(normal))
+    assert res.status_code == 200, res.text
+    assert res.headers["content-type"].startswith("text/event-stream")
+    body = res.text
+
+    # 进度事件：搜帖 + 构建 embedding（逐篇）
+    assert '"type": "progress"' in body
+    assert '"stage": "search"' in body
+    assert '"stage": "embed"' in body
+
+    # 回答 + 引用
+    assert "测试回复" in body
+    assert '"type": "refs"' in body
+    assert "爬山攻略" in body or "火锅推荐" in body
+
+    # 结尾标记
+    assert body.rstrip().endswith("data: [DONE]")
+
+
 # ---------- 内容审核 ----------
 
 

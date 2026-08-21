@@ -22,7 +22,7 @@
                 <t-tag size="small" variant="light" theme="warning" class="m-lv">Lv.{{ m.level }}</t-tag>
               </div>
               <div class="m-sub">
-                <span v-if="m.shutup_expire_at" class="m-muted">🔇 禁言至 {{ m.shutup_expire_at.slice(0, 16) }}</span>
+                <span v-if="m.shutup_expire_at" class="m-muted">🔇 禁言至 {{ formatTime(m.shutup_expire_at) }}</span>
                 <span v-if="m.is_blocked" class="m-blocked">🚫 已移出</span>
                 <span v-else class="m-muted">@{{ m.username }}</span>
               </div>
@@ -150,7 +150,7 @@
       <t-tab-panel value="ops" label="操作日志">
         <div class="panel">
           <div class="op-row" v-for="o in ops" :key="o.id">
-            <span class="op-time">{{ o.created_at.slice(0, 16) }}</span>
+            <span class="op-time">{{ formatTime(o.created_at) }}</span>
             <t-tag size="small" variant="light" theme="primary" class="op-action">{{ actionLabel(o.action) }}</t-tag>
             <span class="op-operator">{{ o.operator_nickname }}</span>
           </div>
@@ -183,6 +183,7 @@ import { ArrowLeftIcon } from 'tdesign-icons-vue-next'
 import { useAuthStore } from '@/stores/auth'
 import { communityApi, manageApi, roleApi, type Community, type Member, type MyRole, type OpLogItem, type RoleItem } from '@/api/community'
 import { toast } from '@/utils/toast'
+import { formatTime } from '@/utils/time'
 import { confirmDialog } from '@/utils/confirm'
 
 const route = useRoute()

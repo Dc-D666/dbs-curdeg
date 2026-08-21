@@ -41,10 +41,18 @@
             <span>{{ p.board_name }}</span>
             <span>{{ p.author_nickname }}</span>
             <span>{{ p.like_count }} 赞 · {{ p.comment_count }} 评</span>
-            <span class="search-time">{{ p.created_at.slice(0, 10) }}</span>
+            <span class="search-time">{{ timeAgo(p.created_at) }}</span>
           </div>
         </article>
       </div>
+      <t-button
+        v-if="hasMoreSearchResults"
+        variant="outline"
+        block
+        class="load-more"
+        :loading="searchLoading"
+        @click="loadMoreSearch()"
+      >{{ searchLoading ? '搜索中…' : '加载更多结果' }}</t-button>
     </div>
 
     <!-- 热门搜索词 -->
@@ -78,6 +86,14 @@
         </div>
       </article>
     </div>
+    <t-button
+      v-if="commHasMore"
+      variant="outline"
+      block
+      class="load-more"
+      :loading="commLoadingMore"
+      @click="loadCommunities(false)"
+    >{{ commLoadingMore ? '加载中…' : '加载更多频道' }}</t-button>
 
     <!-- 创建频道弹层 -->
     <t-dialog
@@ -117,6 +133,7 @@ import { communityApi, type Community } from '@/api/community'
 import { searchApi, type HotKeyword, type SearchResult } from '@/api/search'
 import { tokenStore } from '@/api/http'
 import { toast } from '@/utils/toast'
+import { timeAgo } from '@/utils/time'
 import EmptyState from '@/components/EmptyState.vue'
 
 const router = useRouter()
@@ -133,29 +150,71 @@ const searching = ref(false)
 const searchLoading = ref(false)
 const searchResults = ref<SearchResult[]>([])
 const searchTotal = ref(0)
+const searchPage = ref(0)
+const hasMoreSearchResults = ref(false)
 const lastQ = ref('')
 const hotKeywords = ref<HotKeyword[]>([])
 
+// 频道列表分页
+const commPage = ref(1)
+const commHasMore = ref(false)
+const commLoadingMore = ref(false)
+
 onMounted(async () => {
-  try {
-    const data = await communityApi.list(1, 50)
-    communities.value = data.items
-  } finally {
-    loading.value = false
-  }
+  await loadCommunities(true)
   searchApi.hot().then((h) => (hotKeywords.value = h)).catch(() => {})
 })
+
+async function loadCommunities(reset = false) {
+  if (commLoadingMore.value) return
+  const next = reset ? 1 : commPage.value + 1
+  if (!reset && !commHasMore.value) return
+  loading.value = true
+  commLoadingMore.value = true
+  try {
+    const data = await communityApi.list(next, 50)
+    const seen = new Set(communities.value.map((c) => c.id))
+    communities.value = reset ? data.items : [...communities.value, ...data.items.filter((c) => !seen.has(c.id))]
+    commPage.value = next
+    commHasMore.value = data.items.length > 0
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '加载频道失败', 'error')
+  } finally {
+    commLoadingMore.value = false
+    loading.value = false
+  }
+}
+
+// 加载更多结果：搜索结果或频道列表（依据当前视图）
+function loadMore() {
+  if (searching.value) {
+    loadMoreSearch()
+  } else {
+    loadCommunities(false)
+  }
+}
 
 async function doSearch() {
   const q = searchQ.value.trim()
   if (!q || searchLoading.value) return
   searching.value = true
-  searchLoading.value = true
   lastQ.value = q
+  await loadMoreSearch()
+}
+
+async function loadMoreSearch() {
+  if (searchLoading.value) return
+  searchLoading.value = true
   try {
-    const data = await searchApi.posts(q, { page_size: 20 })
-    searchResults.value = data.items
+    const page = searchResults.value.length === 0 ? 1 : searchPage.value + 1
+    const data = await searchApi.posts(lastQ.value, { page, page_size: 20 })
+    const seen = new Set(searchResults.value.map((p) => p.id))
+    searchResults.value = searchResults.value.length === 0
+      ? data.items
+      : [...searchResults.value, ...data.items.filter((p) => !seen.has(p.id))]
     searchTotal.value = data.total
+    searchPage.value = page
+    hasMoreSearchResults.value = data.has_more
   } catch (e) {
     toast(e instanceof Error ? e.message : '搜索失败', 'error')
   } finally {
@@ -167,6 +226,8 @@ function clearSearch() {
   searching.value = false
   searchResults.value = []
   searchTotal.value = 0
+  searchPage.value = 0
+  hasMoreSearchResults.value = false
   searchQ.value = ''
 }
 
@@ -388,5 +449,8 @@ function goDetail(id: number) {
   background: var(--brand-weak);
   border-radius: 2px;
   padding: 0 1px;
+}
+.load-more {
+  margin-top: var(--sp-3);
 }
 </style>

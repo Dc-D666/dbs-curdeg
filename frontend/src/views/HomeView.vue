@@ -32,6 +32,10 @@
       </div>
 
       <SkeletonFeed v-if="loading && items.length === 0" :count="3" />
+      <div v-else-if="loadError && items.length === 0" class="feed-error">
+        <p class="feed-error-text">{{ loadError }}</p>
+        <t-button variant="outline" size="small" @click="retryLoad">重试</t-button>
+      </div>
       <EmptyState v-else-if="items.length === 0" text="还没有帖子" action-text="浏览频道" to="/discover" />
       <div v-else class="feed-list">
         <FeedCard v-for="p in items" :key="p.id" :post="p" show-community />
@@ -61,6 +65,7 @@ const sort = ref<'latest' | 'hot'>('latest')
 const cursor = ref<string | null>(null)
 const hasMore = ref(false)
 const loading = ref(false)
+const loadError = ref('')
 
 onMounted(() => {
   auth.fetchMe()
@@ -70,6 +75,7 @@ onMounted(() => {
 async function loadMore() {
   if (loading.value) return
   loading.value = true
+  loadError.value = ''
   try {
     const data = await postApi.globalFeed(sort.value, cursor.value)
     const seen = new Set(items.value.map((p) => p.id))
@@ -77,10 +83,23 @@ async function loadMore() {
     cursor.value = data.next_cursor
     hasMore.value = data.has_more
   } catch (e) {
-    toast(e instanceof Error ? e.message : '加载失败', 'error')
+    console.error('加载帖子流失败', e)
+    if (items.value.length === 0) {
+      loadError.value = e instanceof Error ? e.message : '加载失败，请稍后重试'
+    } else {
+      toast(e instanceof Error ? e.message : '加载失败', 'error')
+    }
   } finally {
     loading.value = false
   }
+}
+
+function retryLoad() {
+  items.value = []
+  cursor.value = null
+  hasMore.value = false
+  loadError.value = ''
+  loadMore()
 }
 
 function switchSort(s: 'latest' | 'hot') {
@@ -88,6 +107,8 @@ function switchSort(s: 'latest' | 'hot') {
   sort.value = s
   items.value = []
   cursor.value = null
+  hasMore.value = false
+  loadError.value = ''
   loadMore()
 }
 
@@ -162,5 +183,18 @@ function onLogout() {
 }
 .load-more {
   margin-top: var(--sp-3);
+}
+.feed-error {
+  padding: var(--sp-6) 0;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-3);
+}
+.feed-error-text {
+  margin: 0;
+  color: var(--text-3);
+  font-size: var(--fs-body);
 }
 </style>

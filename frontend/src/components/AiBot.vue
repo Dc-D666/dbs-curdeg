@@ -15,7 +15,8 @@
         <p class="ai-bot-tip">基于频道内帖子内容回答，支持引用跳转。</p>
         <div v-for="(m, i) in messages" :key="i" class="ai-msg" :class="m.role">
           <div class="ai-msg-bubble">
-            <p class="ai-msg-text">{{ m.text }}<span v-if="m.streaming" class="ai-cursor">▍</span></p>
+            <p v-if="m.status" class="ai-msg-status">{{ m.status }}<span v-if="m.streaming" class="ai-cursor">▍</span></p>
+            <p class="ai-msg-text">{{ m.text }}<span v-if="m.text && m.streaming" class="ai-cursor">▍</span></p>
             <div v-if="m.refs?.length" class="ai-msg-refs">
               <a v-for="r in m.refs" :key="r.id" :href="`/p/${r.id}`" @click.prevent="gotoPost(r.id)">
                 引用：《{{ r.title.slice(0, 20) }}》
@@ -36,11 +37,12 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { tokenStore } from '@/api/http'
-import { request } from '@/api/http'
+import { streamPost } from '@/utils/sse'
 
 interface QaMsg {
   role: 'user' | 'bot'
   text: string
+  status?: string
   refs?: Array<{ id: number; title: string }>
   streaming?: boolean
 }
@@ -74,14 +76,38 @@ async function ask() {
   messages.value.push(bot)
   busy.value = true
   try {
-    const data = await request<{ answer: string; references: Array<{ id: number; title: string }> }>({
-      url: '/ai/qa',
-      method: 'POST',
-      data: { question: q },
-    })
-    bot.text = data.answer
-    bot.refs = data.references
+    await streamPost(
+      '/api/v1/ai/qa/stream',
+      { question: q },
+      (delta) => {
+        bot.text += delta
+      },
+      {
+        onEvent(event) {
+          if (event.type === 'error') {
+            bot.text = event.message || '问答失败，请稍后再试'
+            return
+          }
+          if (event.type === 'progress') {
+            if (event.stage === 'search') {
+              bot.status = '正在检索帖子…'
+            } else if (event.stage === 'embed') {
+              bot.status = `正在为帖子构建语义向量 ${event.done ?? 0}/${event.total ?? 0}…`
+            }
+            return
+          }
+          if (event.type === 'answer') {
+            bot.status = undefined
+          }
+          if (event.type === 'refs' && event.references?.length) {
+            bot.refs = event.references
+            bot.status = undefined
+          }
+        },
+      },
+    )
   } catch (e) {
+    if (bot.text) return // 已输出部分内容则保留，不做整段覆盖
     bot.text = (e as Error).message || '问答失败，请稍后再试'
   } finally {
     bot.streaming = false
@@ -178,6 +204,11 @@ function gotoPost(id: number) {
   white-space: pre-wrap;
   word-break: break-word;
   line-height: 1.6;
+}
+.ai-msg-status {
+  margin: 0 0 2px;
+  font-size: var(--fs-caption);
+  color: var(--text-3);
 }
 .ai-msg-refs {
   margin-top: 6px;

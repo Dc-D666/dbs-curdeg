@@ -116,7 +116,7 @@
         <div v-if="requestsOpen" class="manage-list">
           <div v-for="r in requests" :key="r.id" class="manage-item">
             <span class="manage-name">{{ r.user_nickname || r.username }}</span>
-            <span class="manage-time">{{ r.created_at.slice(5, 16) }}</span>
+            <span class="manage-time">{{ formatTime(r.created_at) }}</span>
             <t-button variant="outline" size="small" @click="handleRequest(r, true)">通过</t-button>
             <t-button variant="outline" size="small" theme="danger" @click="handleRequest(r, false)">驳回</t-button>
           </div>
@@ -147,6 +147,7 @@ import EmptyState from '@/components/EmptyState.vue'
 import { request, tokenStore } from '@/api/http'
 import { toast } from '@/utils/toast'
 import { confirmDialog } from '@/utils/confirm'
+import { formatTime } from '@/utils/time'
 
 const route = useRoute()
 const router = useRouter()

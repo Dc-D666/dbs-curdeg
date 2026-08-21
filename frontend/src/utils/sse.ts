@@ -1,11 +1,21 @@
-/** SSE 流式读取（AI 帮写用）：POST + ReadableStream 解析 data: {"delta": "..."} 行。 */
+/** SSE 流式读取：POST + ReadableStream 解析 data: {json} 行（AI 帮写 / RAG 问答都用）。 */
 import { tokenStore } from '@/api/http'
+
+export interface SseEvent {
+  type?: string
+  delta?: string
+  message?: string
+  stage?: 'search' | 'embed'
+  done?: number
+  total?: number
+  references?: Array<{ id: number; title: string }>
+}
 
 export async function streamPost(
   url: string,
   data: unknown,
   onDelta: (text: string) => void,
-  signal?: AbortSignal,
+  opts: { signal?: AbortSignal; onEvent?: (event: SseEvent) => void } = {},
 ): Promise<void> {
   const token = tokenStore.access
   const res = await fetch(url, {
@@ -15,7 +25,7 @@ export async function streamPost(
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body: JSON.stringify(data),
-    signal,
+    signal: opts.signal,
   })
   if (!res.ok || !res.body) {
     const err = await res.json().catch(() => null)
@@ -36,7 +46,8 @@ export async function streamPost(
       const payload = line.slice(5).trim()
       if (payload === '[DONE]') continue
       try {
-        const obj = JSON.parse(payload) as { delta?: string }
+        const obj = JSON.parse(payload) as SseEvent
+        opts.onEvent?.(obj)
         if (typeof obj.delta === 'string') onDelta(obj.delta)
       } catch {
         /* 忽略坏行 */

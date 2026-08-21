@@ -20,7 +20,7 @@
           <div class="post-meta">
             <router-link :to="`/users/${post.author_id}`" class="author">{{ post.author_nickname }}</router-link>
             <span>{{ post.community_name }} · {{ post.board_name }}</span>
-            <span>{{ post.created_at.slice(0, 16) }}</span>
+            <span>{{ formatTime(post.created_at) }}</span>
           </div>
         </div>
 
@@ -107,7 +107,7 @@
           <li v-for="c in comments" :key="c.id" class="comment-item">
             <div class="comment-head">
               <router-link :to="`/users/${c.author_id}`" class="author">{{ c.author_nickname }}</router-link>
-              <span class="comment-time">{{ c.created_at.slice(5, 16) }}</span>
+              <span class="comment-time">{{ formatTime(c.created_at) }}</span>
               <t-button v-if="canDeleteComment(c)" variant="text" size="small" theme="danger" class="comment-del" @click="deleteComment(c.id)">删除</t-button>
             </div>
             <p class="comment-content">{{ c.content }}</p>
@@ -127,7 +127,7 @@
                 <span v-if="r.reply_to_nickname" class="reply-to">回复 {{ r.reply_to_nickname }}</span>
                 <span class="reply-content">{{ r.content }}</span>
                 <t-button v-if="canDeleteComment(r)" variant="text" size="small" theme="danger" class="comment-del" @click="deleteComment(r.id)">删除</t-button>
-                <span class="reply-time">{{ r.created_at.slice(5, 16) }}</span>
+                <span class="reply-time">{{ formatTime(r.created_at) }}</span>
               </div>
               <t-button
                 v-if="(replyMap.get(c.id)?.items.length ?? 0) < (replyMap.get(c.id)?.total ?? 0)"
@@ -170,6 +170,7 @@ import { request } from '@/api/http'
 import { useAuthStore } from '@/stores/auth'
 import { toast } from '@/utils/toast'
 import { confirmDialog } from '@/utils/confirm'
+import { formatTime } from '@/utils/time'
 
 const route = useRoute()
 const router = useRouter()
