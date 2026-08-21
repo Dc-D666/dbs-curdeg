@@ -35,6 +35,15 @@ def list_communities(
     return ok(data=community_service.list_communities(db, page, page_size, uid))
 
 
+@router.get("/mine")
+def my_communities(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """我的频道：按 我创建/我管理/我加入 分组返回。"""
+    return ok(data=community_service.my_communities(db, user))
+
+
 @router.get("/{community_id}")
 def get_community(
     community_id: int,

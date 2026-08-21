@@ -6,7 +6,7 @@
         <t-button variant="text" theme="primary" size="small" :disabled="!store.items.length" @click="onReadAll">
           全部已读
         </t-button>
-        <t-button variant="text" theme="default" size="small" @click="onOpenSettings">设置</t-button>
+        <router-link to="/me/notification-settings" class="ntf-settings-link">设置</router-link>
       </div>
     </header>
 
@@ -54,37 +54,18 @@
     <section v-else class="ntf-empty">
       <t-skeleton v-for="i in 3" :key="i" :rows="2" />
     </section>
-
-    <!-- 通知设置 -->
-    <t-dialog
-      v-model:visible="settingsVisible"
-      header="通知设置"
-      :footer="false"
-      width="320px"
-    >
-      <div class="ntf-settings">
-        <div v-for="s in settingRows" :key="s.key" class="ntf-setting-row">
-          <span>{{ s.label }}</span>
-          <t-switch
-            :value="!!(store.settings && store.settings[s.key])"
-            @change="(v: boolean) => onToggleSetting(s.key, v)"
-          />
-        </div>
-      </div>
-    </t-dialog>
   </main>
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useNotificationStore } from '@/stores/notification'
-import type { NotificationItem, NotifySettings } from '@/api/notification'
+import type { NotificationItem } from '@/api/notification'
 
 const router = useRouter()
 const store = useNotificationStore()
-const settingsVisible = ref(false)
 
 const typeLabels: Record<string, string> = {
   mention: '@提及',
@@ -95,16 +76,6 @@ const typeLabels: Record<string, string> = {
   review_result: '审核',
   report_feedback: '举报',
 }
-
-const settingRows: Array<{ key: keyof NotifySettings; label: string }> = [
-  { key: 'mention', label: '@提及我' },
-  { key: 'like', label: '收到的赞' },
-  { key: 'comment', label: '评论与回复' },
-  { key: 'follow', label: '新关注' },
-  { key: 'system', label: '系统通知' },
-  { key: 'review', label: '审核结果' },
-  { key: 'report', label: '举报反馈' },
-]
 
 function typeLabel(t: string) {
   return typeLabels[t] || t
@@ -158,22 +129,6 @@ async function onRemove(n: NotificationItem) {
     MessagePlugin.success('已删除')
   } catch (e) {
     MessagePlugin.error((e as Error).message || '删除失败')
-  }
-}
-
-async function onOpenSettings() {
-  settingsVisible.value = true
-  if (!store.settings) {
-    store.loadSettings().catch(() => {})
-  }
-}
-
-async function onToggleSetting(key: keyof NotifySettings, v: boolean) {
-  try {
-    await store.saveSettings({ [key]: v } as Partial<NotifySettings>)
-    MessagePlugin.success('设置已保存')
-  } catch (e) {
-    MessagePlugin.error((e as Error).message || '保存失败')
   }
 }
 
@@ -302,15 +257,17 @@ onMounted(() => {
 .ntf-empty {
   padding: 48px 16px;
 }
-.ntf-settings .ntf-setting-row {
-  display: flex;
+.ntf-settings-link {
+  font-size: var(--fs-caption);
+  color: var(--brand);
+  text-decoration: none;
+  white-space: nowrap;
+  padding: 6px 4px;
+  min-height: 32px;
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--border);
-  font-size: var(--fs-body);
 }
-.ntf-settings .ntf-setting-row:last-child {
-  border-bottom: none;
+.ntf-settings-link:active {
+  opacity: 0.7;
 }
 </style>

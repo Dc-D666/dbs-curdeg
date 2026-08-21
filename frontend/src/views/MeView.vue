@@ -7,274 +7,109 @@
       <h1 class="me-title">个人中心</h1>
     </header>
 
-    <section class="panel">
-      <div class="profile-row">
-        <div class="avatar-wrap">
-          <t-avatar :image="auth.user?.avatar_url || undefined" size="56px">
-            <template #icon>{{ initial }}</template>
-          </t-avatar>
-          <label class="avatar-edit" title="更换头像">
-            <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" @change="onAvatarChange" />
-            <span>更换</span>
-          </label>
-        </div>
-        <div class="profile-main">
-          <p class="nickname">{{ form.nickname || auth.user?.username }}</p>
-          <p class="meta">@{{ auth.user?.username }} · 注册于 {{ createdDate }}</p>
-        </div>
+    <!-- 账号信息卡片 -->
+    <section class="profile-card">
+      <t-avatar :image="auth.user?.avatar_url || undefined" size="56px" class="profile-avatar">
+        <template #icon>{{ initial }}</template>
+      </t-avatar>
+      <div class="profile-main">
+        <p class="nickname">{{ auth.user?.nickname || auth.user?.username }}</p>
+        <p class="meta">@{{ auth.user?.username }} · 注册于 {{ createdDate }}</p>
       </div>
-      <p v-if="avatarMsg" class="msg">{{ avatarMsg }}</p>
     </section>
 
-    <section class="panel">
-      <h3 class="panel-title">编辑资料</h3>
-      <form class="form" @submit.prevent="onSave">
-        <div class="field">
-          <label class="field-label">昵称</label>
-          <t-input v-model="form.nickname" size="large" maxlength="64" clearable />
-        </div>
-        <div class="field">
-          <label class="field-label">简介</label>
-          <t-textarea v-model="form.bio" :autosize="{ minRows: 3, maxRows: 6 }" maxlength="255" />
-        </div>
-        <div class="field">
-          <label class="field-label">性别</label>
-          <t-select v-model="form.gender" size="large">
-            <t-option :value="0" label="保密" />
-            <t-option :value="1" label="男" />
-            <t-option :value="2" label="女" />
-          </t-select>
-        </div>
-        <div class="field-row">
-          <div class="field">
-            <label class="field-label">省份</label>
-            <t-input v-model="form.province" size="large" maxlength="32" clearable />
-          </div>
-          <div class="field">
-            <label class="field-label">城市</label>
-            <t-input v-model="form.city" size="large" maxlength="32" clearable />
-          </div>
-        </div>
-        <p v-if="msg" class="msg">{{ msg }}</p>
-        <t-button theme="primary" size="large" type="submit" block :loading="saving">
-          {{ saving ? '保存中…' : '保存' }}
-        </t-button>
-      </form>
-    </section>
-
-    <section class="panel">
-      <router-link to="/me/feed" class="feed-link">
-        <span>我关注的频道</span>
-        <ArrowRightIcon class="feed-arrow" />
-      </router-link>
-      <router-link to="/me/favorites" class="feed-link">
-        <span>我的收藏</span>
-        <ArrowRightIcon class="feed-arrow" />
-      </router-link>
-    </section>
-
-    <section class="panel">
-      <h3 class="panel-title">通知设置</h3>
-      <div class="switch-row" v-for="item in notifyItems" :key="item.key">
-        <span class="switch-label">{{ item.label }}</span>
-        <t-switch v-model="notifyForm[item.key]" size="small" @change="saveNotify" />
+    <div class="section">
+      <h2 class="section-title">账号</h2>
+      <div class="panel">
+        <router-link to="/me/profile" class="row">
+          <span class="row-icon icon-blue">👤</span>
+          <span class="row-label">个人资料</span>
+          <span class="row-hint">昵称、简介、头像</span>
+          <ChevronRightIcon class="row-arrow" />
+        </router-link>
+        <router-link to="/me/security" class="row">
+          <span class="row-icon icon-green">🔒</span>
+          <span class="row-label">账号安全</span>
+          <span class="row-hint">修改密码、注销</span>
+          <ChevronRightIcon class="row-arrow" />
+        </router-link>
       </div>
-      <p v-if="notifyMsg" class="msg">{{ notifyMsg }}</p>
-    </section>
+    </div>
 
-    <section v-if="auth.user?.user_type === 1" class="panel">
-      <router-link to="/dashboard" class="feed-link">
-        <span>📊 运营看板（系统管理员）</span>
-        <ArrowRightIcon class="feed-arrow" />
-      </router-link>
-    </section>
+    <div class="section">
+      <h2 class="section-title">我的频道</h2>
+      <div class="panel">
+        <router-link to="/me/channels" class="row">
+          <span class="row-icon icon-purple">📡</span>
+          <span class="row-label">我加入的频道</span>
+          <span class="row-hint">我创建的、管理的、加入的</span>
+          <ChevronRightIcon class="row-arrow" />
+        </router-link>
+      </div>
+    </div>
 
-    <section class="panel">
-      <h3 class="panel-title">修改密码</h3>
-      <form class="form" @submit.prevent="onChangePassword">
-        <div class="field">
-          <label class="field-label">原密码</label>
-          <t-input v-model="pwForm.old_password" size="large" type="password" autocomplete="current-password" />
-        </div>
-        <div class="field">
-          <label class="field-label">新密码（至少 6 位，含字母和数字）</label>
-          <t-input v-model="pwForm.new_password" size="large" type="password" autocomplete="new-password" />
-        </div>
-        <div class="field">
-          <label class="field-label">确认新密码</label>
-          <t-input v-model="pwForm.confirm" size="large" type="password" autocomplete="new-password" />
-        </div>
-        <p v-if="pwMsg" class="msg" :class="{ error: pwError }">{{ pwMsg }}</p>
-        <t-button theme="primary" size="large" type="submit" block :loading="pwSaving">
-          {{ pwSaving ? '提交中…' : '修改密码' }}
-        </t-button>
-      </form>
-    </section>
+    <div class="section">
+      <h2 class="section-title">内容</h2>
+      <div class="panel">
+        <router-link to="/me/favorites" class="row">
+          <span class="row-icon icon-orange">⭐</span>
+          <span class="row-label">我的收藏</span>
+          <span class="row-hint">收藏的帖子</span>
+          <ChevronRightIcon class="row-arrow" />
+        </router-link>
+        <router-link to="/me/feed" class="row">
+          <span class="row-icon icon-cyan">💬</span>
+          <span class="row-label">我关注的频道</span>
+          <span class="row-hint">关注频道的动态</span>
+          <ChevronRightIcon class="row-arrow" />
+        </router-link>
+      </div>
+    </div>
 
-    <section class="panel">
-      <h3 class="panel-title">账号</h3>
-      <t-button variant="outline" theme="danger" block :loading="deactivating" @click="onDeactivate">
-        {{ deactivating ? '处理中…' : '注销账号' }}
-      </t-button>
-      <p class="deactivate-hint">注销后无法登录，频道内的帖子与评论保留（作者标记为已注销）。</p>
-    </section>
+    <div class="section">
+      <h2 class="section-title">偏好</h2>
+      <div class="panel">
+        <router-link to="/me/notification-settings" class="row">
+          <span class="row-icon icon-red">🔔</span>
+          <span class="row-label">通知设置</span>
+          <span class="row-hint">@提及、点赞、评论等</span>
+          <ChevronRightIcon class="row-arrow" />
+        </router-link>
+      </div>
+    </div>
+
+    <div v-if="auth.user?.user_type === 1" class="section">
+      <h2 class="section-title">管理</h2>
+      <div class="panel">
+        <router-link to="/dashboard" class="row">
+          <span class="row-icon icon-indigo">📊</span>
+          <span class="row-label">运营看板</span>
+          <span class="row-hint">系统管理员</span>
+          <ChevronRightIcon class="row-arrow" />
+        </router-link>
+      </div>
+    </div>
+
+    <t-button variant="outline" theme="default" block class="logout" @click="onLogout">退出登录</t-button>
   </main>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
-import { ArrowLeftIcon, ArrowRightIcon } from 'tdesign-icons-vue-next'
-import { request } from '@/api/http'
-import { useAuthStore, type UserInfo } from '@/stores/auth'
+import { computed } from 'vue'
+import { ArrowLeftIcon, ChevronRightIcon } from 'tdesign-icons-vue-next'
+import { useAuthStore } from '@/stores/auth'
 import { confirmDialog } from '@/utils/confirm'
 import { toast } from '@/utils/toast'
 
 const auth = useAuthStore()
-const form = reactive({
-  nickname: '',
-  bio: '',
-  gender: 0,
-  province: '',
-  city: '',
-})
-const saving = ref(false)
-const msg = ref('')
-const avatarMsg = ref('')
-const pwForm = reactive({ old_password: '', new_password: '', confirm: '' })
-const pwSaving = ref(false)
-const pwMsg = ref('')
-const pwError = ref(false)
-const deactivating = ref(false)
-
-// 通知开关（P0）
-const notifyItems = [
-  { key: 'mention', label: '被 @ 提醒' },
-  { key: 'like', label: '被点赞' },
-  { key: 'comment', label: '新评论' },
-  { key: 'follow', label: '新粉丝' },
-  { key: 'system', label: '系统通知' },
-  { key: 'review', label: '审核结果' },
-  { key: 'report', label: '举报反馈' },
-]
-const notifyForm = reactive<Record<string, boolean>>({})
-const notifyMsg = ref('')
-
-async function loadNotify() {
-  try {
-    const settings = await request<Record<string, boolean>>({ url: '/notifications/settings' })
-    for (const item of notifyItems) notifyForm[item.key] = !!settings[item.key]
-  } catch {
-    /* 忽略 */
-  }
-}
-
-async function saveNotify() {
-  try {
-    const patch: Record<string, boolean> = {}
-    for (const item of notifyItems) patch[item.key] = !!notifyForm[item.key]
-    await request<Record<string, boolean>>({ url: '/notifications/settings', method: 'PUT', data: patch })
-    notifyMsg.value = '设置已保存'
-  } catch (e) {
-    notifyMsg.value = e instanceof Error ? e.message : '保存失败'
-  }
-}
-
-async function onDeactivate() {
-  if (!(await confirmDialog('注销账号', '确定注销账号？此操作不可撤销！'))) return
-  deactivating.value = true
-  try {
-    await request<null>({ url: '/users/me/deactivate', method: 'POST' })
-    auth.logout()
-    toast('账号已注销', 'success')
-    window.location.href = '/login'
-  } catch (e) {
-    toast(e instanceof Error ? e.message : '注销失败', 'error')
-  } finally {
-    deactivating.value = false
-  }
-}
-
 const initial = computed(() => (auth.user?.nickname || auth.user?.username || 'U').slice(0, 1).toUpperCase())
 const createdDate = computed(() => (auth.user?.created_at || '').slice(0, 10))
 
-onMounted(async () => {
-  const me = await auth.fetchMe()
-  if (me) {
-    form.nickname = me.nickname
-    form.bio = me.bio
-    form.gender = me.gender
-    form.province = me.province
-    form.city = me.city
-  }
-  loadNotify()
-})
-
-async function onAvatarChange(e: Event) {
-  const input = e.target as HTMLInputElement
-  const file = input.files?.[0]
-  if (!file) return
-  avatarMsg.value = '上传中…'
-  const fd = new FormData()
-  fd.append('file', file)
-  try {
-    const updated = await request<UserInfo>({ url: '/users/me/avatar', method: 'POST', data: fd })
-    auth.user = updated
-    avatarMsg.value = '头像已更新'
-  } catch (err) {
-    avatarMsg.value = err instanceof Error ? err.message : '上传失败'
-  }
-}
-
-async function onSave() {
-  if (saving.value) return
-  saving.value = true
-  msg.value = ''
-  try {
-    const updated = await request<UserInfo>({
-      url: '/users/me',
-      method: 'PUT',
-      data: form,
-    })
-    auth.user = updated
-    msg.value = '已保存'
-  } catch (e) {
-    msg.value = e instanceof Error ? e.message : '保存失败'
-  } finally {
-    saving.value = false
-  }
-}
-
-async function onChangePassword() {
-  if (pwSaving.value) return
-  pwMsg.value = ''
-  pwError.value = false
-  if (pwForm.new_password.length < 6 || !/[a-zA-Z]/.test(pwForm.new_password) || !/\d/.test(pwForm.new_password)) {
-    pwMsg.value = '新密码至少 6 位，且需同时包含字母和数字'
-    pwError.value = true
-    return
-  }
-  if (pwForm.new_password !== pwForm.confirm) {
-    pwMsg.value = '两次输入的新密码不一致'
-    pwError.value = true
-    return
-  }
-  pwSaving.value = true
-  try {
-    await request<null>({
-      url: '/auth/password',
-      method: 'PUT',
-      data: { old_password: pwForm.old_password, new_password: pwForm.new_password },
-    })
-    pwMsg.value = '密码已修改，下次登录请使用新密码'
-    pwForm.old_password = ''
-    pwForm.new_password = ''
-    pwForm.confirm = ''
-  } catch (e) {
-    pwMsg.value = e instanceof Error ? e.message : '修改失败'
-    pwError.value = true
-  } finally {
-    pwSaving.value = false
-  }
+async function onLogout() {
+  if (!(await confirmDialog('退出登录', '确定退出当前账号？'))) return
+  auth.logout()
+  toast('已退出登录')
+  window.location.href = '/'
 }
 </script>
 
@@ -307,46 +142,28 @@ async function onChangePassword() {
   font-size: var(--fs-title);
   font-weight: 600;
 }
-.panel {
+.profile-card {
   margin-top: var(--sp-4);
-  background: var(--td-bg-color-container);
-  border: 1px solid var(--td-component-border);
-  border-radius: var(--td-radius-large);
-  padding: var(--sp-4);
-}
-.profile-row {
   display: flex;
   align-items: center;
   gap: var(--sp-4);
+  padding: var(--sp-4);
+  background: linear-gradient(135deg, var(--brand-weak), transparent);
+  border: 1px solid var(--td-component-border);
+  border-radius: var(--td-radius-large);
+}
+.profile-avatar {
+  flex-shrink: 0;
 }
 .profile-main {
   min-width: 0;
   flex: 1;
 }
-.profile-main .nickname,
-.profile-main .meta {
+.nickname,
+.meta {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.avatar-wrap {
-  position: relative;
-  flex-shrink: 0;
-}
-.avatar-edit {
-  position: absolute;
-  right: -2px;
-  bottom: -2px;
-  background: var(--td-bg-color-container);
-  border: 1px solid var(--td-component-border);
-  border-radius: 10px;
-  font-size: 11px;
-  color: var(--td-text-color-secondary);
-  padding: 0 4px;
-  cursor: pointer;
-}
-.avatar-edit input {
-  display: none;
 }
 .nickname {
   margin: 0;
@@ -356,75 +173,79 @@ async function onChangePassword() {
 .meta {
   margin: var(--sp-1) 0 0;
   font-size: var(--fs-caption);
-  color: var(--td-text-color-placeholder);
+  color: var(--text-3);
 }
-.panel-title {
-  margin: 0 0 var(--sp-4);
-  font-size: var(--fs-title);
+.section {
+  margin-top: var(--sp-5);
+}
+.section-title {
+  margin: 0 0 var(--sp-2) var(--sp-1);
+  font-size: var(--fs-caption);
   font-weight: 600;
+  color: var(--text-3);
 }
-.form {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-4);
+.panel {
+  background: var(--td-bg-color-container);
+  border: 1px solid var(--td-component-border);
+  border-radius: var(--td-radius-large);
+  overflow: hidden;
 }
-.field {
+.row {
   display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-}
-.field-row {
-  display: flex;
+  align-items: center;
   gap: var(--sp-3);
-}
-.field-row .field {
-  flex: 1;
-  min-width: 0;
-}
-.field-label {
-  font-size: var(--fs-caption);
-  color: var(--td-text-color-secondary);
-}
-.msg {
-  margin: 0;
-  font-size: var(--fs-caption);
-  color: var(--td-success-color);
-}
-.msg.error {
-  color: var(--td-error-color);
-}
-.feed-link {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  padding: var(--sp-3) var(--sp-4);
+  min-height: 56px;
   color: var(--td-text-color-primary);
-  font-size: var(--fs-body);
   text-decoration: none;
-  padding: var(--sp-1) 0;
-  min-width: 0;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.15s;
 }
-.feed-arrow {
-  color: var(--td-text-color-placeholder);
-  width: 16px;
-  height: 16px;
-}
-.switch-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--sp-2) 0;
-  border-bottom: 1px dashed var(--td-component-border);
-}
-.switch-row:last-child {
+.row:last-child {
   border-bottom: none;
 }
-.switch-label {
-  font-size: var(--fs-body);
-  color: var(--td-text-color-primary);
+.row:active {
+  background: var(--bg-secondary);
 }
-.deactivate-hint {
-  margin: var(--sp-2) 0 0;
+.row-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+.icon-blue { background: var(--brand-weak); }
+.icon-green { background: #e6f7ec; }
+.icon-purple { background: #f3edfe; }
+.icon-orange { background: #fff4e6; }
+.icon-cyan { background: #e4f7f8; }
+.icon-red { background: #ffebe9; }
+.icon-indigo { background: #ecefff; }
+.row-label {
+  font-size: var(--fs-body);
+  font-weight: 500;
+  flex-shrink: 0;
+}
+.row-hint {
+  flex: 1;
+  min-width: 0;
+  text-align: right;
   font-size: var(--fs-caption);
-  color: var(--td-text-color-placeholder);
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.row-arrow {
+  width: 16px;
+  height: 16px;
+  color: var(--text-3);
+  flex-shrink: 0;
+}
+.logout {
+  margin-top: var(--sp-5);
 }
 </style>

@@ -101,6 +101,31 @@ def list_communities(db: Session, page: int, page_size: int, current_user_id: in
     return {"items": out, "total": total, "page": page, "page_size": page_size}
 
 
+def my_communities(db: Session, user: User) -> dict:
+    """我的频道：按成员身份分成 我创建/我管理/我加入 三组。"""
+    rows = db.execute(
+        select(Member.community_id, Member.member_type).where(Member.user_id == user.id, Member.is_blocked.is_(False))
+    ).all()
+    buckets: dict[int, list[int]] = {0: [], 1: [], 2: []}
+    for community_id, member_type in rows:
+        buckets.setdefault(member_type, []).append(community_id)
+
+    result = {"owned": [], "managed": [], "joined": []}
+    for member_type, key in ((MEMBER_OWNER, "owned"), (MEMBER_ADMIN, "managed"), (MEMBER_NORMAL, "joined")):
+        ids = buckets.get(member_type, [])
+        if not ids:
+            continue
+        communities = db.execute(
+            select(Community).where(Community.id.in_(ids), Community.status == 0).order_by(Community.id.desc())
+        ).scalars().all()
+        for c in communities:
+            co = CommunityOut.model_validate(c)
+            co.is_member = True
+            co.my_member_type = member_type
+            result[key].append(co)
+    return result
+
+
 def get_community(db: Session, community_id: int, current_user_id: int | None) -> CommunityOut:
     community = db.get(Community, community_id)
     if community is None or community.status != 0:

@@ -101,9 +101,18 @@ export interface TopicItem {
   created_at: string | null
 }
 
+export interface MyChannels {
+  owned: Community[]
+  managed: Community[]
+  joined: Community[]
+}
+
 export const communityApi = {
   list(page = 1, pageSize = 20) {
     return request<Page<Community>>({ url: '/communities', params: { page, page_size: pageSize } })
+  },
+  mine() {
+    return request<MyChannels>({ url: '/communities/mine' })
   },
   get(id: number) {
     return request<Community>({ url: `/communities/${id}` })
