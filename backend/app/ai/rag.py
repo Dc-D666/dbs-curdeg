@@ -162,8 +162,11 @@ async def qa_stream(db: Session, question: str, community_id: int | None = None)
     answer = await asyncio.to_thread(
         llm_gateway.chat, messages, "", 1024, 0.3
     )
-    # 与 assist_stream 同理：GLM 推理模型流式 content 为空，故一次性取回再切块模拟流式
+    # 与 assist_stream 同理：GLM 推理模型流式 content 为空，故一次性取回再切块。
+    # 关键：块间必须 asyncio.sleep 停顿，否则所有 chunk 紧挨发出、被前端一次性消费，
+    # 看不到逐字输出（真流式出不来时用节奏模拟，SSE 协议仍不变）。
     step = 8
     for i in range(0, len(answer), step):
         yield {"type": "answer", "delta": answer[i:i + step]}
+        await asyncio.sleep(0.03)
     yield {"type": "refs", "references": [{"id": p.id, "title": p.title} for _, p in top]}
