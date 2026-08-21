@@ -34,7 +34,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { tokenStore } from '@/api/http'
 import { streamPost } from '@/utils/sse'
@@ -72,7 +72,9 @@ async function ask() {
   if (!q || busy.value) return
   messages.value.push({ role: 'user', text: q })
   question.value = ''
-  const bot: QaMsg = { role: 'bot', text: '', streaming: true }
+  // 必须用 reactive 持有 proxy：push 进 ref 数组后，模板读到的是响应式代理，
+  // 若直接用普通对象再写 text/status 会绕过响应式触发，导致流式/状态不渲染。
+  const bot = reactive<QaMsg>({ role: 'bot', text: '', streaming: true })
   messages.value.push(bot)
   busy.value = true
   try {
