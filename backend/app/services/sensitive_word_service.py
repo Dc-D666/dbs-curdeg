@@ -86,7 +86,10 @@ def list_words(db: Session, page: int, page_size: int, category: str | None = No
     stmt = select(SensitiveWord).order_by(SensitiveWord.id.desc())
     if category:
         stmt = stmt.where(SensitiveWord.category == category)
-    total = len(db.execute(stmt.with_only_columns(SensitiveWord.id)).scalars().all())
+    count_stmt = select(func.count(SensitiveWord.id))
+    if category:
+        count_stmt = count_stmt.where(SensitiveWord.category == category)
+    total = db.execute(count_stmt).scalar_one()
     items = db.execute(stmt.offset((page - 1) * page_size).limit(page_size)).scalars().all()
     return {
         "items": [

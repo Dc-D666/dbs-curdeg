@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.ai import assist, rag, review, summary
@@ -14,6 +14,25 @@ from app.models.review import Review
 from app.models.user import User
 
 router = APIRouter(prefix="/ai", tags=["ai"])
+
+
+def _is_private_host(host: str) -> bool:
+    """字面量判定内网/回环主机，用于拦截 AI 绘画等服务配置到内网地址的 SSRF 面。
+
+    注：仅字面量匹配（不做 DNS 解析，避免 DNS rebinding 绕过），localhost/`.local` 及
+    私有/回环 IPv4、回环链路本地 IPv6 命中即拒绝。
+    """
+    import ipaddress
+
+    h = host.strip().strip("[]")
+    low = h.lower()
+    if low in ("localhost", "0.0.0.0") or low.endswith(".local"):
+        return True
+    try:
+        ip = ipaddress.ip_address(h)
+    except ValueError:
+        return False  # 域名：交给解析层；此处不阻止普通公网域名
+    return ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast
 
 
 class AssistRequest(BaseModel):
@@ -129,6 +148,11 @@ def ai_draw(
     draw_key = system_config_service.get(db, "draw_api_key")
     if not draw_url or not draw_key:
         raise ParamError("AI 绘画服务未配置，请联系管理员开启")
+    from urllib.parse import urlsplit
+
+    parsed = urlsplit(draw_url)
+    if _is_private_host(parsed.hostname or ""):
+        raise ParamError("AI 绘画服务地址不合法（不支持内网地址）")
     try:
         import requests
 
@@ -228,7 +252,9 @@ def my_reviews(
 ):
     """我的内容审核记录。"""
     stmt = select(Review).where(Review.user_id == user.id).order_by(Review.id.desc())
-    total = len(db.execute(stmt.with_only_columns(Review.id)).scalars().all())
+    total = db.execute(
+        select(func.count(Review.id)).where(Review.user_id == user.id)
+    ).scalar_one()
     items = db.execute(stmt.offset((page - 1) * page_size).limit(page_size)).scalars().all()
     return ok(data={
         "items": [_review_out(r) for r in items],

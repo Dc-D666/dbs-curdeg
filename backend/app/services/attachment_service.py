@@ -2,7 +2,7 @@
 
 附件记录携带完整元数据（尺寸/大小/时长/排序），与 posts.images(展示 URL) 互补。
 """
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.response import NotFoundError, PermissionError_
@@ -32,6 +32,10 @@ def create_attachment(
     is_admin = member is not None and member.member_type in (MEMBER_OWNER, MEMBER_ADMIN)
     if post.author_id != user.id and not is_admin:
         raise PermissionError_("无权给该帖子添加附件")
+    # 排序号用 MAX+1，避免并发下 list 计数产生重复序号
+    next_sort = db.execute(
+        select(func.max(Attachment.sort_order)).where(Attachment.post_id == post.id)
+    ).scalar_one()
     att = Attachment(
         post_id=post.id,
         media_type=media_type,
@@ -41,7 +45,7 @@ def create_attachment(
         height=height,
         file_size=file_size,
         duration=duration,
-        sort_order=len(list_attachments(db, post.id)),
+        sort_order=(next_sort or 0) + 1,
     )
     db.add(att)
     db.commit()

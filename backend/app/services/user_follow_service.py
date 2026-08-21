@@ -30,13 +30,18 @@ def follow_user(db: Session, user: User, target_user_id: int) -> dict:
     db.add(UserFollow(user_id=user.id, target_user_id=target_user_id))
     try:
         db.commit()
-        notify(
-            db, target_user_id, "follow", "有人关注了你",
-            summary=f"{user.nickname or user.username} 关注了你",
-            ref_id=user.id, actor_id=user.id,
-        )
     except IntegrityError:
         db.rollback()  # 并发重复关注：唯一约束兜底
+    else:
+        # 关注落库成功后发通知；通知失败不影响关注结果
+        try:
+            notify(
+                db, target_user_id, "follow", "有人关注了你",
+                summary=f"{user.nickname or user.username} 关注了你",
+                ref_id=user.id, actor_id=user.id,
+            )
+        except Exception:
+            db.rollback()
     return {"following": True, "count": _follower_count(db, target_user_id)}
 
 
@@ -55,13 +60,16 @@ def unfollow_user(db: Session, user: User, target_user_id: int) -> dict:
 
 def list_following(db: Session, user_id: int, page: int, page_size: int) -> dict:
     """我关注的用户列表（新在前）。"""
-    stmt = (
+    total = db.execute(
+        select(func.count(UserFollow.id)).where(UserFollow.user_id == user_id)
+    ).scalar_one()
+    rows = db.execute(
         select(UserFollow)
         .where(UserFollow.user_id == user_id)
         .order_by(UserFollow.id.desc())
-    )
-    total = len(db.execute(stmt.with_only_columns(UserFollow.id)).scalars().all())
-    rows = db.execute(stmt.offset((page - 1) * page_size).limit(page_size)).scalars().all()
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    ).scalars().all()
     uids = [r.target_user_id for r in rows]
     users = (
         {u.id: u for u in db.execute(select(User).where(User.id.in_(uids))).scalars().all()}
@@ -82,13 +90,16 @@ def list_following(db: Session, user_id: int, page: int, page_size: int) -> dict
 
 def list_followers(db: Session, user_id: int, page: int, page_size: int) -> dict:
     """关注我（粉丝）的用户列表（新在前）。"""
-    stmt = (
+    total = db.execute(
+        select(func.count(UserFollow.id)).where(UserFollow.target_user_id == user_id)
+    ).scalar_one()
+    rows = db.execute(
         select(UserFollow)
         .where(UserFollow.target_user_id == user_id)
         .order_by(UserFollow.id.desc())
-    )
-    total = len(db.execute(stmt.with_only_columns(UserFollow.id)).scalars().all())
-    rows = db.execute(stmt.offset((page - 1) * page_size).limit(page_size)).scalars().all()
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    ).scalars().all()
     uids = [r.user_id for r in rows]
     users = (
         {u.id: u for u in db.execute(select(User).where(User.id.in_(uids))).scalars().all()}

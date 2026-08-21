@@ -36,8 +36,18 @@ def create_report(
     detail: str,
     evidence: list[str],
 ) -> Report:
-    """提交举报（目标须存在）。"""
+    """提交举报（目标须存在；同一用户对同一目标存在未办结举报时拒绝重复提交）。"""
     _check_target(db, target_type, target_id)
+    duplicate = db.execute(
+        select(Report.id).where(
+            Report.reporter_id == reporter.id,
+            Report.target_type == target_type,
+            Report.target_id == target_id,
+            Report.status.in_((REPORT_PENDING, REPORT_PROCESSING)),
+        )
+    ).scalar_one_or_none()
+    if duplicate:
+        raise ParamError("你已举报过该内容，请等待处理结果")
     report = Report(
         target_type=target_type,
         target_id=target_id,
@@ -55,27 +65,34 @@ def create_report(
 def list_reports(db: Session, status: int | None, page: int, page_size: int) -> dict:
     """举报记录分页（管理端，可过滤状态）。"""
     stmt = select(Report).order_by(Report.id.desc())
+    conditions = []
     if status is not None:
+        conditions.append(Report.status == status)
         stmt = stmt.where(Report.status == status)
-    total = db.execute(stmt.with_only_columns(func.count(Report.id))).scalar_one()
-    items = db.execute(stmt.offset((page - 1) * page_size).limit(page_size)).scalars().all()
+    total = db.execute(
+        select(func.count(Report.id)).where(*conditions)
+    ).scalar_one()
+    rows = db.execute(stmt.offset((page - 1) * page_size).limit(page_size)).scalars().all()
     return {
-        "items": [_report_out(db, r) for r in items],
+        "items": _reports_out(db, rows),
         "total": total, "page": page, "page_size": page_size,
     }
 
 
 def list_my_reports(db: Session, reporter_id: int, page: int, page_size: int) -> dict:
     """我的举报记录。"""
-    stmt = (
+    total = db.execute(
+        select(func.count(Report.id)).where(Report.reporter_id == reporter_id)
+    ).scalar_one()
+    rows = db.execute(
         select(Report)
         .where(Report.reporter_id == reporter_id)
         .order_by(Report.id.desc())
-    )
-    total = db.execute(stmt.with_only_columns(func.count(Report.id))).scalar_one()
-    items = db.execute(stmt.offset((page - 1) * page_size).limit(page_size)).scalars().all()
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    ).scalars().all()
     return {
-        "items": [_report_out(db, r) for r in items],
+        "items": _reports_out(db, rows),
         "total": total, "page": page, "page_size": page_size,
     }
 
@@ -136,22 +153,31 @@ def _check_target(db: Session, target_type: int, target_id: int) -> None:
         raise ParamError("举报类型仅支持 1帖子 2评论 3用户 4频道")
 
 
-def _report_out(db: Session, r: Report) -> dict:
-    reporter = db.get(User, r.reporter_id)
-    handler = db.get(User, r.handler_id) if r.handler_id else None
-    return {
-        "id": r.id,
-        "target_type": r.target_type,
-        "target_id": r.target_id,
-        "reason_type": r.reason_type,
-        "detail": r.detail,
-        "evidence": r.evidence or [],
-        "status": r.status,
-        "result": r.result,
-        "handler_id": r.handler_id,
-        "handler_nickname": (handler.nickname or handler.username) if handler else "",
-        "handled_at": r.handled_at.strftime("%Y-%m-%d %H:%M:%S") if r.handled_at else None,
-        "created_at": r.created_at.strftime("%Y-%m-%d %H:%M:%S") if r.created_at else None,
-        "reporter_id": r.reporter_id,
-        "reporter_nickname": (reporter.nickname or reporter.username) if reporter else "",
-    }
+def _reports_out(db: Session, rows: list[Report]) -> list[dict]:
+    """批量输出增强：一次性预取 reporter/handler，避免每行 N+1 查询。"""
+    uids = {r.reporter_id for r in rows} | {r.handler_id for r in rows if r.handler_id}
+    users = (
+        {u.id: u for u in db.execute(select(User).where(User.id.in_(uids))).scalars()}
+        if uids else {}
+    )
+    items = []
+    for r in rows:
+        reporter = users.get(r.reporter_id)
+        handler = users.get(r.handler_id) if r.handler_id else None
+        items.append({
+            "id": r.id,
+            "target_type": r.target_type,
+            "target_id": r.target_id,
+            "reason_type": r.reason_type,
+            "detail": r.detail,
+            "evidence": r.evidence or [],
+            "status": r.status,
+            "result": r.result,
+            "handler_id": r.handler_id,
+            "handler_nickname": (handler.nickname or handler.username) if handler else "",
+            "handled_at": r.handled_at.strftime("%Y-%m-%d %H:%M:%S") if r.handled_at else None,
+            "created_at": r.created_at.strftime("%Y-%m-%d %H:%M:%S") if r.created_at else None,
+            "reporter_id": r.reporter_id,
+            "reporter_nickname": (reporter.nickname or reporter.username) if reporter else "",
+        })
+    return items

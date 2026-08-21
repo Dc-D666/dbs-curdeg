@@ -68,7 +68,8 @@ def upload_attachment(
 ):
     """上传附件文件并绑定到帖子（图片/视频/文件，作者本人或频道管理者）。"""
     post = attachment_service._get_post(db, post_id)
-    saved = upload_service.save_attachment(file)
+    limit = upload_service.configured_max_size(db)
+    saved = upload_service.save_attachment(file, max_size=limit)
     att = attachment_service.create_attachment(
         db, post, user,
         media_type=saved["media_type"],

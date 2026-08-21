@@ -69,7 +69,9 @@ def list_favorites(
         .where(Favorite.user_id == user.id)
         .order_by(Favorite.id.desc())
     )
-    total = len(db.execute(stmt.with_only_columns(Favorite.id)).scalars().all())
+    total = db.execute(
+        select(func.count(Favorite.id)).where(Favorite.user_id == user.id)
+    ).scalar_one()
     rows = db.execute(stmt.offset((page - 1) * page_size).limit(page_size)).scalars().all()
     post_ids = [r.post_id for r in rows]
     posts = (

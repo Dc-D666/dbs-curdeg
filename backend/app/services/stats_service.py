@@ -103,14 +103,22 @@ def compute_daily_stats(db: Session, d: date | None = None) -> DailyStat:
 
 
 def dashboard_trend(db: Session, days: int = 7) -> dict:
-    """近 N 天趋势：读 daily_stats（缺失的天实时补齐计算）。"""
+    """近 N 天趋势：读 daily_stats。
+
+    - 今日缺行：实时补齐计算（数据新鲜）；
+    - 历史缺行：填零空值，避免对多天做全表聚合重扫（后台统计任务会逐步回填）。
+    """
     today = date.today()
     stats = []
     for i in range(days - 1, -1, -1):
         d = today - timedelta(days=i)
         row = db.execute(select(DailyStat).where(DailyStat.stat_date == d)).scalar_one_or_none()
         if row is None:
-            row = compute_daily_stats(db, d)
+            if d == today:
+                row = compute_daily_stats(db, d)
+            else:
+                stats.append(_empty_out(d))
+                continue
         stats.append(_out(row))
     # 汇总近 N 天
     summary = {
@@ -150,4 +158,18 @@ def _out(s: DailyStat) -> dict:
         "violations": s.violations,
         "ai_calls": s.ai_calls,
         "retention": s.retention,
+    }
+
+
+def _empty_out(d: date) -> dict:
+    """历史缺行：零值占位。"""
+    return {
+        "stat_date": d.isoformat(),
+        "new_members": 0,
+        "active_members": 0,
+        "posts": 0,
+        "interactions": 0,
+        "violations": 0,
+        "ai_calls": 0,
+        "retention": 0,
     }

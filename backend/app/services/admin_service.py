@@ -97,9 +97,11 @@ def overview_stats(db: Session) -> dict:
 def list_reviews(db: Session, status: int | None, page: int, page_size: int) -> dict:
     """审核记录分页（可选按状态过滤）。"""
     stmt = select(Review).order_by(Review.id.desc())
+    count_stmt = select(func.count(Review.id))
     if status is not None:
         stmt = stmt.where(Review.status == status)
-    total = db.execute(stmt.with_only_columns(func.count(Review.id))).scalar_one()
+        count_stmt = count_stmt.where(Review.status == status)
+    total = db.execute(count_stmt).scalar_one()
     items = db.execute(stmt.offset((page - 1) * page_size).limit(page_size)).scalars().all()
     # 批量预取关联帖子标题，避免每行一次 db.get（N+1）
     post_ids = {r.content_id for r in items if r.content_type == CONTENT_POST}

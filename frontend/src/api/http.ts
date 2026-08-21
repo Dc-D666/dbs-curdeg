@@ -102,11 +102,8 @@ http.interceptors.response.use(
   },
 )
 
-/** 统一解包：非 0 code 抛出业务错误；HTTP 错误时提取后端 message。FormData 自动识别 multipart。 */
+/** 统一解包：非 0 code 抛出业务错误；HTTP 错误时提取后端 message。FormData 由浏览器自动分配带 boundary 的 multipart 类型，勿手动设头。 */
 export async function request<T>(config: AxiosRequestConfig): Promise<T> {
-  if (config.data instanceof FormData) {
-    config.headers = { ...(config.headers as object), 'Content-Type': 'multipart/form-data' }
-  }
   try {
     const res = await http.request<ApiResponse<T>>(config)
     const body = res.data

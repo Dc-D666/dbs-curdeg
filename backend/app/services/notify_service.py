@@ -117,7 +117,9 @@ def list_notifications(
         .where(Notification.user_id == user_id)
         .order_by(Notification.is_read.asc(), Notification.id.desc())
     )
-    total = db.execute(stmt.with_only_columns(func.count(Notification.id))).scalar_one()
+    total = db.execute(
+        select(func.count(Notification.id)).where(Notification.user_id == user_id)
+    ).scalar_one()
     items = db.execute(stmt.offset((page - 1) * page_size).limit(page_size)).scalars().all()
     return {
         "items": _decorate(db, items),

@@ -84,7 +84,7 @@
             <img v-if="att.media_type === 1" :src="att.url" class="att-img" alt="" @click="previewIndex = imagesPreview(att)" />
             <video v-else-if="att.media_type === 2" :src="att.url" class="att-video" controls />
             <a v-else :href="att.url" target="_blank" rel="noopener" class="att-file">📎 {{ attUrlName(att.url) }}</a>
-            <t-button v-if="canManage && post.author_id === auth.user?.id" variant="text" size="small" theme="danger" class="att-del" @click="removeAttachment(att.id)">删除</t-button>
+            <t-button v-if="canManage" variant="text" size="small" theme="danger" class="att-del" @click="removeAttachment(att.id)">删除</t-button>
           </div>
         </div>
 
