@@ -22,13 +22,13 @@
       <h2 class="section-title">账号</h2>
       <div class="panel">
         <router-link to="/me/profile" class="row">
-          <span class="row-icon icon-blue"><UserIcon class="row-icon-svg" /></span>
+          <span class="row-icon"><UserIcon class="row-icon-svg" /></span>
           <span class="row-label">个人资料</span>
           <span class="row-hint">昵称、简介、头像</span>
           <ChevronRightIcon class="row-arrow" />
         </router-link>
         <router-link to="/me/security" class="row">
-          <span class="row-icon icon-green"><KeyIcon class="row-icon-svg" /></span>
+          <span class="row-icon"><KeyIcon class="row-icon-svg" /></span>
           <span class="row-label">账号安全</span>
           <span class="row-hint">修改密码、注销</span>
           <ChevronRightIcon class="row-arrow" />
@@ -40,7 +40,7 @@
       <h2 class="section-title">我的频道</h2>
       <div class="panel">
         <router-link to="/me/channels" class="row">
-          <span class="row-icon icon-purple"><UsergroupIcon class="row-icon-svg" /></span>
+          <span class="row-icon"><UsergroupIcon class="row-icon-svg" /></span>
           <span class="row-label">我加入的频道</span>
           <span class="row-hint">我创建的、管理的、加入的</span>
           <ChevronRightIcon class="row-arrow" />
@@ -52,13 +52,13 @@
       <h2 class="section-title">内容</h2>
       <div class="panel">
         <router-link to="/me/favorites" class="row">
-          <span class="row-icon icon-orange"><StarIcon class="row-icon-svg" /></span>
+          <span class="row-icon"><StarIcon class="row-icon-svg" /></span>
           <span class="row-label">我的收藏</span>
           <span class="row-hint">收藏的帖子</span>
           <ChevronRightIcon class="row-arrow" />
         </router-link>
         <router-link to="/me/feed" class="row">
-          <span class="row-icon icon-cyan"><ChatIcon class="row-icon-svg" /></span>
+          <span class="row-icon"><ChatIcon class="row-icon-svg" /></span>
           <span class="row-label">我关注的频道</span>
           <span class="row-hint">关注频道的动态</span>
           <ChevronRightIcon class="row-arrow" />
@@ -70,7 +70,7 @@
       <h2 class="section-title">偏好</h2>
       <div class="panel">
         <router-link to="/me/notification-settings" class="row">
-          <span class="row-icon icon-red"><NotificationIcon class="row-icon-svg" /></span>
+          <span class="row-icon"><NotificationIcon class="row-icon-svg" /></span>
           <span class="row-label">通知设置</span>
           <span class="row-hint">@提及、点赞、评论等</span>
           <ChevronRightIcon class="row-arrow" />
@@ -82,7 +82,7 @@
       <h2 class="section-title">管理</h2>
       <div class="panel">
         <router-link to="/dashboard" class="row">
-          <span class="row-icon icon-indigo"><DashboardIcon class="row-icon-svg" /></span>
+          <span class="row-icon"><DashboardIcon class="row-icon-svg" /></span>
           <span class="row-label">运营看板</span>
           <span class="row-hint">系统管理员</span>
           <ChevronRightIcon class="row-arrow" />
@@ -217,13 +217,6 @@ async function onLogout() {
   width: 18px;
   height: 18px;
 }
-.icon-blue { color: var(--brand); }
-.icon-green { color: #00a870; }
-.icon-purple { color: #7a3ff2; }
-.icon-orange { color: #e37318; }
-.icon-cyan { color: #0891b2; }
-.icon-red { color: #d54941; }
-.icon-indigo { color: #5a67f2; }
 .row-label {
   font-size: var(--fs-body);
   font-weight: 500;
