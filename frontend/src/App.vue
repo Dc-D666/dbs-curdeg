@@ -48,8 +48,9 @@ onMounted(async () => {
   // WebSocket 通知（登录后自动连接，未读角标实时更新）
   useWebSocket()
   try {
-    // /ping 返回裸 {message:"pong"}（无统一 code 包装），用原生 http 直接读消息避免误判
-    const res = await http.get<{ message: string }>('/api/v1/ping')
+    // /ping 返回裸 {message:"pong"}（无统一 code 包装）。注意 http 实例 baseURL 已是 /api/v1，
+    // 这里必须用相对路径 /ping，否则会拼成 /api/v1/api/v1/ping → 404。
+    const res = await http.get<{ message: string }>('/ping')
     console.log('[SDUdiscord] 后端连通:', res.data?.message)
   } catch (e) {
     console.warn('[SDUdiscord] 后端未连通:', e)
