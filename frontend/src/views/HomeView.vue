@@ -14,6 +14,10 @@
       </nav>
     </header>
 
+    <p v-if="buildTime" class="deploy-time" title="前端构建/部署时间，每次 push 由 cron 自动更新">
+      更新时间：{{ buildTime }}
+    </p>
+
     <section class="hero">
       <h2 class="hero-title">仿腾讯频道 · 私域社区</h2>
       <p class="hero-desc">频道 → 版块 → 帖子 → 评论，构建你的兴趣社区</p>
@@ -56,9 +60,14 @@ import EmptyState from '@/components/EmptyState.vue'
 import { postApi, type PostItem } from '@/api/post'
 import { useAuthStore } from '@/stores/auth'
 import { toast } from '@/utils/toast'
+import { formatBeijing } from '@/utils/time'
 
 const auth = useAuthStore()
 const router = useRouter()
+
+// 首页更新时间：构建时由 Vite define 注入（__BUILD_TIME__），显示为北京时间。
+// 服务器 cron 每次 push 都会重编前端，因此该时间可用于确认部署是否生效。
+const buildTime = ref(formatBeijing(__BUILD_TIME__))
 
 const items = ref<PostItem[]>([])
 const sort = ref<'latest' | 'hot'>('latest')
@@ -136,6 +145,13 @@ function onLogout() {
   font-size: var(--fs-page);
   font-weight: 700;
   color: var(--brand);
+}
+.deploy-time {
+  margin: 0;
+  padding: var(--sp-1) 0 0;
+  font-size: var(--fs-caption);
+  color: var(--text-3);
+  text-align: right;
 }
 .nav {
   display: flex;

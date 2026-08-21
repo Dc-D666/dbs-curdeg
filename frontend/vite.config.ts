@@ -4,6 +4,11 @@ import { VitePWA } from 'vite-plugin-pwa'
 import { fileURLToPath, URL } from 'node:url'
 
 export default defineConfig({
+  // 构建时注入部署时间（UTC ISO）。服务器 cron 每次 push 都会 git reset 后重编前端，
+  // 因此首页"更新时间"即最近一次部署/构建时间，用于人工确认 cron 是否生效、有无漏跑。
+  define: {
+    __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
+  },
   plugins: [
     vue(),
     VitePWA({

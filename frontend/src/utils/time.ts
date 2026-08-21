@@ -39,3 +39,23 @@ export function formatTime(value: string | number | Date | null | undefined): st
   const base = `${mm}-${dd} ${hh}:${mi}`
   return d.getFullYear() !== new Date().getFullYear() ? `${d.getFullYear()} ${base}` : base
 }
+
+/** 北京时间完整串：YYYY-MM-DD HH:mm:ss。用于首页"更新时间"（服务器构建常用 UTC）。 */
+export function formatBeijing(value: string | number | Date | null | undefined): string {
+  const d = parseTime(value)
+  if (!d) return ''
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).formatToParts(d)
+  const map: Record<string, string> = {}
+  for (const p of parts) map[p.type] = p.value
+  const hh = map.hour === '24' ? '00' : map.hour
+  return `${map.year}-${map.month}-${map.day} ${hh}:${map.minute}:${map.second}`
+}
