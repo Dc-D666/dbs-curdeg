@@ -36,7 +36,13 @@ def _sse_stream(gen) -> StreamingResponse:
             yield f"data: {json.dumps({'delta': chunk}, ensure_ascii=False)}\n\n"
         yield "data: [DONE]\n\n"
 
-    return StreamingResponse(wrapper(), media_type="text/event-stream")
+    # X-Accel-Buffering: no 让 nginx 关闭 response buffering，逐事件实时转发到浏览器，
+    # 否则 nginx 会把整个 SSE 缓冲到结束才一次吐给前端，看不到流式/进度。
+    return StreamingResponse(
+        wrapper(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 def _sse_events(gen) -> StreamingResponse:
@@ -48,7 +54,11 @@ def _sse_events(gen) -> StreamingResponse:
             yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
         yield "data: [DONE]\n\n"
 
-    return StreamingResponse(wrapper(), media_type="text/event-stream")
+    return StreamingResponse(
+        wrapper(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.post("/assist", dependencies=[Depends(rate_limit("ai_assist", limit=20, window=60))])
