@@ -1,6 +1,6 @@
 <template>
-  <main class="detail-page">
-    <header class="page-header">
+  <main class="detail-page" :class="{ embedded }">
+    <header v-if="!embedded" class="page-header">
       <router-link :to="post ? `/c/${post.community_id}` : '/discover'" class="back">
         <ArrowLeftIcon class="back-icon" /> 返回
       </router-link>
@@ -235,7 +235,12 @@ import { formatTime } from '@/utils/time'
 
 const route = useRoute()
 const router = useRouter()
-const pid = Number(route.params.id)
+// 可嵌入：抽屉传 postId 时优先使用，否则读路由参数（独立 /p/:id 页）。
+const props = withDefaults(defineProps<{ postId?: number; embedded?: boolean }>(), {
+  postId: undefined,
+  embedded: false,
+})
+const pid = props.postId ?? Number(route.params.id)
 const auth = useAuthStore()
 const interaction = useInteractionStore()
 
@@ -716,6 +721,12 @@ async function onDeletePost() {
 .detail-page {
   max-width: var(--page-max);
   margin: 0 auto;
+  padding: 0 var(--sp-4) var(--sp-6);
+}
+/* 抽屉内嵌模式：取消居中页面宽度，改用抽屉自身布局 */
+.detail-page.embedded {
+  max-width: none;
+  margin: 0;
   padding: 0 var(--sp-4) var(--sp-6);
 }
 .page-header {

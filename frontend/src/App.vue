@@ -17,6 +17,9 @@
 
     <!-- AI 问答助手浮窗（阶段 6） -->
     <AiBot />
+
+    <!-- 帖子阅读右侧抽屉（P1 ①：保持一致上下文） -->
+    <PostDrawer />
   </div>
 </template>
 
@@ -29,6 +32,7 @@ import { useNotificationStore } from '@/stores/notification'
 import { useWebSocket } from '@/composables/useWebSocket'
 import { useGlobalShortcuts } from '@/composables/useGlobalShortcuts'
 import AiBot from '@/components/AiBot.vue'
+import PostDrawer from '@/components/PostDrawer.vue'
 
 const route = useRoute()
 const notif = useNotificationStore()

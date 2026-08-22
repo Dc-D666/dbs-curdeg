@@ -70,6 +70,7 @@ import { tokenStore } from '@/api/http'
 import UserAvatar from '@/components/UserAvatar.vue'
 import Lightbox from '@/components/Lightbox.vue'
 import { useInteractionStore } from '@/stores/interaction'
+import { usePostDrawer } from '@/stores/postDrawer'
 import { timeAgo } from '@/utils/time'
 import { toast } from '@/utils/toast'
 
@@ -136,7 +137,12 @@ watch(() => props.post.source_markdown, () => {
 })
 
 function goDetail() {
-  router.push(`/p/${props.post.id}`)
+  // 桌面端用右侧抽屉保持上下文；移动端整页跳转体验更好
+  if (window.innerWidth >= 1024) {
+    usePostDrawer().open(props.post.id)
+  } else {
+    router.push(`/p/${props.post.id}`)
+  }
 }
 
 function requireLogin(): boolean {
