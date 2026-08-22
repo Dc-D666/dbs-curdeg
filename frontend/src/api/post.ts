@@ -121,8 +121,12 @@ export const postApi = {
   replies(commentId: number, page = 1, pageSize = 20) {
     return request<Page<CommentItem>>({ url: `/comments/${commentId}/replies`, params: { page, page_size: pageSize } })
   },
-  createReply(commentId: number, content: string) {
-    return request<CommentItem>({ url: `/comments/${commentId}/replies`, method: 'POST', data: { content } })
+  createReply(commentId: number, content: string, replyToUserId?: number) {
+    return request<CommentItem>({
+      url: `/comments/${commentId}/replies`,
+      method: 'POST',
+      data: { content, ...(replyToUserId ? { reply_to_user_id: replyToUserId } : {}) },
+    })
   },
   deleteComment(commentId: number) {
     return request<null>({ url: `/comments/${commentId}`, method: 'DELETE' })

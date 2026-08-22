@@ -47,7 +47,10 @@
       <div class="field">
         <span class="field-label">内容</span>
         <RichEditor ref="editorRef" v-model="form.rich" :cid="cid" :initial-images="initialImages" @update:images="onImages" />
-        <p class="field-hint">支持插入链接与图片（最多 9 张图片）</p>
+        <div class="field-hint-row">
+          <p class="field-hint">支持插入链接与图片（最多 9 张图片）</p>
+          <span class="draft-hint">{{ draftSavedAt ? `已自动保存 ${draftSavedAt}` : '输入内容后每 2 秒自动保存草稿' }}</span>
+        </div>
       </div>
 
       <!-- AI 生成预览（打字机效果） -->
@@ -72,14 +75,15 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { AiIcon, ArrowLeftIcon, BrushIcon, EditIcon, ImageIcon, PenIcon } from 'tdesign-icons-vue-next'
 import RichEditor from '@/components/RichEditor.vue'
 import { communityApi, type TopicItem } from '@/api/community'
 import { postApi, type RichSegment } from '@/api/post'
 import { request, tokenStore } from '@/api/http'
 import { toast } from '@/utils/toast'
+import { confirmDialog } from '@/utils/confirm'
 import { streamPost } from '@/utils/sse'
 
 const route = useRoute()
@@ -88,6 +92,12 @@ const cid = Number(route.params.id)
 const bid = Number(route.params.bid)
 const editId = Number(route.query.edit) || 0
 
+// 草稿自动保存（P0）：每 2 秒防抖写 localStorage；key 区分 发帖/编辑 + 频道/版块，避免串稿
+const draftKey = `draft:post:${cid}:${bid}:${editId || 'new'}`
+const draftSavedAt = ref('')
+const submitted = ref(false)
+let draftTimer: number | undefined
+
 const form = reactive({ title: '', rich: [] as RichSegment[], images: [] as string[], topic_id: null as number | null })
 const initialImages = ref<string[]>([])
 const error = ref('')
@@ -95,6 +105,22 @@ const submitting = ref(false)
 const editing = ref(editId > 0)
 const loading = ref(false)
 const editorRef = ref<InstanceType<typeof RichEditor> | null>(null)
+
+// 是否已有可保存的内容（空表单不落草稿，避免残留空稿）
+const formDirty = computed(() => {
+  return !!(form.title.trim() || form.rich.length > 0 || form.images.length > 0 || form.topic_id != null)
+})
+
+// 内容变化 → 防抖 2s 落草稿
+watch(
+  () => ({ title: form.title, rich: form.rich, images: form.images, topic_id: form.topic_id }),
+  () => {
+    if (submitted.value || !formDirty.value) return
+    window.clearTimeout(draftTimer)
+    draftTimer = window.setTimeout(saveDraft, 2000)
+  },
+  { deep: true },
+)
 
 // 话题 / AI 绘画（P0）
 const topics = ref<TopicItem[]>([])
@@ -188,24 +214,96 @@ function useDrawImage() {
 
 onMounted(async () => {
   communityApi.topics(cid, 'hot').then((list) => (topics.value = list)).catch(() => {})
-  if (!editing.value) return
-  loading.value = true
-  try {
-    const post = await postApi.get(editId)
-    form.title = post.title
-    form.rich = post.rich_content
-    form.images = [...post.images]
-    form.topic_id = post.topic_id
-    initialImages.value = [...post.images] // 旧帖图片渲染进编辑器
-  } catch (e) {
-    error.value = e instanceof Error ? e.message : '加载帖子失败'
-  } finally {
-    loading.value = false
+  if (editing.value) {
+    loading.value = true
+    try {
+      const post = await postApi.get(editId)
+      form.title = post.title
+      form.rich = post.rich_content
+      form.images = [...post.images]
+      form.topic_id = post.topic_id
+      initialImages.value = [...post.images] // 旧帖图片渲染进编辑器
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : '加载帖子失败'
+    } finally {
+      loading.value = false
+    }
   }
+  tryRestoreDraft()
+})
+
+// 离开前拦截：内容未发布时提示（草稿已存，可稍后恢复）
+onBeforeRouteLeave(async () => {
+  if (submitted.value || !formDirty.value) return true
+  const ok = await confirmDialog('离开页面？', '内容尚未发布。草稿已自动保存，可稍后回来继续编辑。', false)
+  return ok
+})
+
+// 刷新/关闭/路由离开前把最后 2 秒内的输入补落一次草稿
+onBeforeUnmount(() => {
+  window.clearTimeout(draftTimer)
+  saveDraft()
 })
 
 function onImages(urls: string[]) {
   form.images = urls
+}
+
+// ---------- 草稿自动保存 ----------
+
+function saveDraft() {
+  if (submitted.value) return
+  try {
+    localStorage.setItem(
+      draftKey,
+      JSON.stringify({
+        title: form.title,
+        rich: form.rich,
+        images: form.images,
+        topic_id: form.topic_id,
+        savedAt: Date.now(),
+      }),
+    )
+    draftSavedAt.value = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+  } catch {
+    // localStorage 不可用（隐私模式/超限）：静默忽略，不阻断编辑
+  }
+}
+
+function tryRestoreDraft() {
+  const raw = localStorage.getItem(draftKey)
+  if (!raw) return
+  let d: { title?: string; rich?: RichSegment[]; images?: string[]; topic_id?: number | null; savedAt?: number }
+  try {
+    d = JSON.parse(raw)
+  } catch {
+    localStorage.removeItem(draftKey)
+    return
+  }
+  const hasContent = !!(d.title?.trim() || d.rich?.length || d.images?.length || d.topic_id != null)
+  if (!hasContent) {
+    localStorage.removeItem(draftKey)
+    return
+  }
+  const when = d.savedAt ? new Date(d.savedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : ''
+  confirmDialog(
+    '发现未发布草稿',
+    when ? `检测到 ${when} 保存的草稿，是否恢复？` : '检测到未发布的草稿，是否恢复？',
+    false,
+  ).then((ok) => {
+    if (ok) {
+      form.title = d.title ?? ''
+      form.rich = d.rich ?? []
+      form.images = d.images ?? []
+      form.topic_id = d.topic_id ?? null
+      initialImages.value = [...(d.images ?? [])]
+      editorRef.value?.setContent(form.rich, form.images)
+      toast('已恢复草稿', 'success')
+    } else {
+      localStorage.removeItem(draftKey)
+      draftSavedAt.value = ''
+    }
+  })
 }
 
 async function onSubmit() {
@@ -237,6 +335,9 @@ async function onSubmit() {
         topic_id: form.topic_id ?? undefined,
       })
       toast('已保存', 'success')
+      localStorage.removeItem(draftKey)
+      draftSavedAt.value = ''
+      submitted.value = true
       router.push(`/p/${post.id}`)
     } else {
       const post = await postApi.create(cid, bid, {
@@ -245,6 +346,9 @@ async function onSubmit() {
         images: form.images,
         topic_id: form.topic_id ?? undefined,
       })
+      localStorage.removeItem(draftKey)
+      draftSavedAt.value = ''
+      submitted.value = true
       router.push(`/p/${post.id}`)
     }
   } catch (e) {
@@ -308,6 +412,17 @@ async function onSubmit() {
   margin: 0;
   font-size: var(--fs-caption);
   color: var(--td-text-color-placeholder);
+}
+.field-hint-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+.draft-hint {
+  font-size: var(--fs-caption);
+  color: var(--td-text-color-placeholder);
+  white-space: nowrap;
 }
 .ai-bar {
   display: flex;

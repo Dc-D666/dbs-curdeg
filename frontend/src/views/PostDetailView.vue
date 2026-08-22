@@ -106,14 +106,10 @@
       <section class="panel comment-panel">
         <h3 class="panel-title">评论</h3>
 
-        <div v-if="replyTarget" class="reply-banner">
-          回复 {{ replyTarget.nickname }}
-          <t-button variant="text" size="small" class="reply-cancel" @click="replyTarget = null">取消</t-button>
-        </div>
         <div class="comment-input-row">
           <t-input
             v-model="commentInput"
-            :placeholder="replyTarget ? `回复 ${replyTarget.nickname}…` : '写下你的评论…'"
+            placeholder="写下你的评论…"
             maxlength="2000"
             @enter="submitComment"
           />
@@ -124,7 +120,7 @@
         <EmptyState v-else-if="comments.length === 0" text="暂无评论" />
 
         <ul v-else class="comment-list">
-          <li v-for="c in comments" :key="c.id" class="comment-item">
+          <li v-for="c in comments" :key="c.id" class="comment-item" :class="{ 'flash-highlight': flashId === c.id }">
             <div class="comment-head">
               <router-link :to="`/users/${c.author_id}`" class="author">{{ c.author_nickname }}</router-link>
               <span class="comment-time">{{ formatTime(c.created_at) }}</span>
@@ -132,21 +128,38 @@
             </div>
             <p class="comment-content">{{ c.content }}</p>
             <div class="comment-ops">
-              <t-button variant="text" size="small" :class="{ 't-active': c.is_liked }" @click="toggleCommentLike(c)">
+              <t-button variant="text" size="small" :class="{ 't-active': c.is_liked }" :disabled="interaction.isPending(`clike:${c.id}`)" @click="toggleCommentLike(c)">
                 {{ c.is_liked ? '已赞' : '赞' }} {{ c.like_count }}
               </t-button>
-              <t-button variant="text" size="small" @click="setReplyTarget(c)">回复</t-button>
+              <t-button variant="text" size="small" @click="openReply(c)">回复</t-button>
               <t-button variant="text" size="small" @click="toggleReplies(c)">
                 {{ replyMap.get(c.id)?.expanded ? '收起' : `楼中楼${replyMap.get(c.id)?.total ? ' ' + replyMap.get(c.id)?.total : ''}` }}
               </t-button>
             </div>
 
+            <!-- 行内回复框：在对应评论下方就地展开，不打断阅读脉络 -->
+            <div v-if="replyTarget?.commentId === c.id" ref="replyBoxEl" class="inline-reply">
+              <t-input
+                v-model="replyInput"
+                :placeholder="`回复 ${replyTarget?.nickname}…`"
+                maxlength="2000"
+                @enter="submitReply"
+              />
+              <div class="inline-reply-ops">
+                <t-button size="small" variant="text" @click="closeReply">取消</t-button>
+                <t-button size="small" theme="primary" :loading="sending" @click="submitReply">发送</t-button>
+              </div>
+            </div>
+
             <div v-if="replyMap.get(c.id)?.expanded" class="replies">
-              <div v-for="r in replyMap.get(c.id)?.items ?? []" :key="r.id" class="reply-item">
+              <div v-for="r in replyMap.get(c.id)?.items ?? []" :key="r.id" class="reply-item" :class="{ 'flash-highlight': flashId === r.id }">
                 <span class="reply-author">{{ r.author_nickname }}</span>
                 <span v-if="r.reply_to_nickname" class="reply-to">回复 {{ r.reply_to_nickname }}</span>
                 <span class="reply-content">{{ r.content }}</span>
-                <t-button v-if="canDeleteComment(r)" variant="text" size="small" theme="danger" class="comment-del" @click="deleteComment(r.id)">删除</t-button>
+                <span class="reply-ops">
+                  <t-button variant="text" size="small" @click="openReply(c, r)">回复</t-button>
+                  <t-button v-if="canDeleteComment(r)" variant="text" size="small" theme="danger" class="comment-del" @click="deleteComment(r.id)">删除</t-button>
+                </span>
                 <span class="reply-time">{{ formatTime(r.created_at) }}</span>
               </div>
               <t-button
@@ -202,7 +215,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { AiIcon, ArrowLeftIcon } from 'tdesign-icons-vue-next'
 import { communityApi } from '@/api/community'
@@ -211,6 +224,7 @@ import { postApi, type AttachmentItem, type CommentItem, type PostItem } from '@
 import { tokenStore } from '@/api/http'
 import { request } from '@/api/http'
 import { useAuthStore } from '@/stores/auth'
+import { useInteractionStore } from '@/stores/interaction'
 import { toast } from '@/utils/toast'
 import { confirmDialog } from '@/utils/confirm'
 import { formatTime } from '@/utils/time'
@@ -219,6 +233,7 @@ const route = useRoute()
 const router = useRouter()
 const pid = Number(route.params.id)
 const auth = useAuthStore()
+const interaction = useInteractionStore()
 
 const post = ref<PostItem | null>(null)
 const loading = ref(true)
@@ -241,7 +256,12 @@ const commentTotal = ref(0)
 const commentsLoading = ref(false)
 const commentInput = ref('')
 const sending = ref(false)
-const replyTarget = ref<{ id: number; nickname: string } | null>(null)
+const replyInput = ref('')
+// 行内回复目标：commentId 为楼中楼挂载点（顶层评论），replyToUserId 用于「回复 @某人」
+const replyTarget = ref<{ commentId: number; nickname: string; replyToUserId?: number } | null>(null)
+const replyBoxEl = ref<HTMLDivElement | null>(null)
+// 新评论/新回复追加后的闪烁高亮 id
+const flashId = ref<number | null>(null)
 
 interface ReplyState {
   items: CommentItem[]
@@ -338,16 +358,25 @@ function requireLogin(): boolean {
 async function toggleLike() {
   if (!post.value || !requireLogin()) return
   const p = post.value
+  const key = `like:${p.id}`
+  if (interaction.isPending(key)) return
+  const wasLiked = p.is_liked
+  const prevCount = p.like_count
   try {
-    if (p.is_liked) {
-      const r = await postApi.unlike(p.id)
-      p.is_liked = false
-      p.like_count = r.count
-    } else {
-      const r = await postApi.like(p.id)
-      p.is_liked = true
-      p.like_count = r.count
-    }
+    await interaction.run(key, {
+      apply: () => {
+        p.is_liked = !wasLiked
+        p.like_count = Math.max(0, prevCount + (wasLiked ? -1 : 1))
+      },
+      rollback: () => {
+        p.is_liked = wasLiked
+        p.like_count = prevCount
+      },
+      request: () => (wasLiked ? postApi.unlike(p.id) : postApi.like(p.id)),
+      onSuccess: (r) => {
+        p.like_count = r.count
+      },
+    })
   } catch (e) {
     toast(e instanceof Error ? e.message : '操作失败', 'error')
   }
@@ -356,14 +385,22 @@ async function toggleLike() {
 async function toggleFollow() {
   if (!post.value || !requireLogin()) return
   const p = post.value
+  const key = `follow:${p.community_id}`
+  if (interaction.isPending(key)) return
+  const wasFollowed = p.is_followed
   try {
-    if (p.is_followed) {
-      await postApi.unfollow(p.community_id)
-      p.is_followed = false
-    } else {
-      await postApi.follow(p.community_id)
-      p.is_followed = true
-    }
+    await interaction.run(key, {
+      apply: () => {
+        p.is_followed = !wasFollowed
+      },
+      rollback: () => {
+        p.is_followed = wasFollowed
+      },
+      request: () => (wasFollowed ? postApi.unfollow(p.community_id) : postApi.follow(p.community_id)),
+      onSuccess: (r) => {
+        p.is_followed = r.followed
+      },
+    })
   } catch (e) {
     toast(e instanceof Error ? e.message : '操作失败', 'error')
   }
@@ -395,16 +432,25 @@ async function sharePost() {
 async function toggleFavorite() {
   if (!post.value || !requireLogin()) return
   const p = post.value
+  const key = `favorite:${p.id}`
+  if (interaction.isPending(key)) return
+  const wasFavorited = p.is_favorited
+  const prevCount = p.favorite_count
   try {
-    if (p.is_favorited) {
-      const r = await postApi.unfavorite(p.id)
-      p.is_favorited = false
-      p.favorite_count = r.count
-    } else {
-      const r = await postApi.favorite(p.id)
-      p.is_favorited = true
-      p.favorite_count = r.count
-    }
+    await interaction.run(key, {
+      apply: () => {
+        p.is_favorited = !wasFavorited
+        p.favorite_count = Math.max(0, prevCount + (wasFavorited ? -1 : 1))
+      },
+      rollback: () => {
+        p.is_favorited = wasFavorited
+        p.favorite_count = prevCount
+      },
+      request: () => (wasFavorited ? postApi.unfavorite(p.id) : postApi.favorite(p.id)),
+      onSuccess: (r) => {
+        p.favorite_count = r.count
+      },
+    })
   } catch (e) {
     toast(e instanceof Error ? e.message : '操作失败', 'error')
   }
@@ -476,26 +522,16 @@ function attUrlName(url: string): string {
 async function submitComment() {
   if (!post.value || !requireLogin()) return
   const text = commentInput.value.trim()
-  if (!text) return
-  if (sending.value) return
+  if (!text || sending.value) return
   sending.value = true
   try {
-    if (replyTarget.value) {
-      await postApi.createReply(replyTarget.value.id, text)
-      const c = comments.value.find((x) => x.id === replyTarget.value!.id)
-      if (c) {
-        const st = ensureReplyState(c)
-        st.total += 1
-        await refreshReplies(c)
-        st.expanded = true
-      }
-    } else {
-      await postApi.createComment(pid, text)
-      if (post.value) post.value.comment_count += 1
-      await loadComments(1)
-    }
+    // 顶层评论：无刷新追加 + 高亮闪烁，保持当前阅读位置
+    const item = await postApi.createComment(pid, text)
+    if (post.value) post.value.comment_count += 1
+    commentTotal.value += 1
+    comments.value = [...comments.value, item]
     commentInput.value = ''
-    replyTarget.value = null
+    flashItem(item.id)
   } catch (e) {
     toast(e instanceof Error ? e.message : '发送失败', 'error')
   } finally {
@@ -503,9 +539,57 @@ async function submitComment() {
   }
 }
 
-function setReplyTarget(c: CommentItem) {
+/** 行内回复（楼中楼）：在对应评论下方直接发送，成功后无刷新追加并高亮。 */
+async function submitReply() {
+  if (!post.value || !requireLogin()) return
+  const t = replyTarget.value
+  const text = replyInput.value.trim()
+  if (!t || !text || sending.value) return
+  sending.value = true
+  try {
+    const item = await postApi.createReply(t.commentId, text, t.replyToUserId)
+    const c = comments.value.find((x) => x.id === t.commentId)
+    if (c) {
+      const st = ensureReplyState(c)
+      st.items = [...st.items, item]
+      st.total += 1
+      st.expanded = true // 展开楼中楼让新回复可见
+      flashItem(item.id)
+    }
+    replyInput.value = ''
+    closeReply()
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '发送失败', 'error')
+  } finally {
+    sending.value = false
+  }
+}
+
+/** 新评论/回复闪烁高亮（1.6s 后自动移除）。 */
+function flashItem(id: number) {
+  flashId.value = id
+  window.setTimeout(() => {
+    if (flashId.value === id) flashId.value = null
+  }, 1600)
+}
+
+/** 打开行内回复框（r 存在 = 回复楼中楼里的某条回复，默认回复该顶层评论）。 */
+function openReply(c: CommentItem, r?: CommentItem) {
   if (!requireLogin()) return
-  replyTarget.value = { id: c.id, nickname: c.author_nickname }
+  replyTarget.value = {
+    commentId: c.id,
+    nickname: r ? r.author_nickname : c.author_nickname,
+    replyToUserId: r ? r.author_id : undefined,
+  }
+  replyInput.value = r ? `@${r.author_nickname} ` : ''
+  nextTick(() => {
+    replyBoxEl.value?.querySelector('input')?.focus()
+  })
+}
+
+function closeReply() {
+  replyTarget.value = null
+  replyInput.value = ''
 }
 
 function ensureReplyState(c: CommentItem): ReplyState {
@@ -556,16 +640,25 @@ async function loadMoreReplies(c: CommentItem) {
 
 async function toggleCommentLike(c: CommentItem) {
   if (!requireLogin()) return
+  const key = `clike:${c.id}`
+  if (interaction.isPending(key)) return
+  const wasLiked = c.is_liked
+  const prevCount = c.like_count
   try {
-    if (c.is_liked) {
-      const r = await postApi.unlike(undefined, c.id)
-      c.is_liked = false
-      c.like_count = r.count
-    } else {
-      const r = await postApi.like(undefined, c.id)
-      c.is_liked = true
-      c.like_count = r.count
-    }
+    await interaction.run(key, {
+      apply: () => {
+        c.is_liked = !wasLiked
+        c.like_count = Math.max(0, prevCount + (wasLiked ? -1 : 1))
+      },
+      rollback: () => {
+        c.is_liked = wasLiked
+        c.like_count = prevCount
+      },
+      request: () => (wasLiked ? postApi.unlike(undefined, c.id) : postApi.like(undefined, c.id)),
+      onSuccess: (r) => {
+        c.like_count = r.count
+      },
+    })
   } catch (e) {
     toast(e instanceof Error ? e.message : '操作失败', 'error')
   }
@@ -901,6 +994,36 @@ async function onDeletePost() {
 .reply-time {
   margin-left: var(--sp-2);
   color: var(--text-3);
+}
+.inline-reply {
+  margin-top: var(--sp-2);
+  padding: var(--sp-2);
+  border: 1px solid var(--brand);
+  border-radius: var(--radius-btn);
+  background: var(--bg-card);
+}
+.inline-reply-ops {
+  margin-top: var(--sp-2);
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-1);
+}
+.reply-ops {
+  margin-left: var(--sp-2);
+}
+.reply-ops .comment-del {
+  margin-left: 0;
+}
+.flash-highlight {
+  animation: flash-bg 1.6s ease;
+}
+@keyframes flash-bg {
+  0% {
+    background: var(--brand-weak);
+  }
+  100% {
+    background: transparent;
+  }
 }
 .load-more {
   margin-top: var(--sp-3);

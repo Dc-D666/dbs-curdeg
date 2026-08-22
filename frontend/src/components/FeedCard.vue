@@ -24,8 +24,8 @@
       <span class="fc-time">{{ timeAgo(post.created_at) }}</span>
     </div>
     <div class="fc-actions">
-      <button class="fc-action" :class="{ liked: post.is_liked }" :disabled="liking" @click.stop="toggleLike">
-        <ThumbUpIcon class="fc-action-icon" />
+      <button class="fc-action" :class="{ liked: post.is_liked }" :disabled="interaction.isPending(`like:${post.id}`)" @click.stop="toggleLike">
+        <ThumbUpIcon :key="popTick" class="fc-action-icon" :class="{ 'liked-pop': post.is_liked }" />
         <span>{{ post.is_liked ? '已赞' : '赞' }}</span>
         <span v-if="post.like_count" class="fc-action-count">{{ post.like_count }}</span>
       </button>
@@ -41,6 +41,7 @@ import type { PostItem } from '@/api/post'
 import { postApi } from '@/api/post'
 import { tokenStore } from '@/api/http'
 import UserAvatar from '@/components/UserAvatar.vue'
+import { useInteractionStore } from '@/stores/interaction'
 import { timeAgo } from '@/utils/time'
 import { toast } from '@/utils/toast'
 
@@ -52,7 +53,9 @@ const props = withDefaults(
 const emit = defineEmits<{ (e: 'updated'): void }>()
 const router = useRouter()
 const route = useRoute()
-const liking = ref(false)
+const interaction = useInteractionStore()
+// 点赞图标弹跳动画重触发：每次点赞更新 key 使图标重挂载，重新播放 CSS 动画
+const popTick = ref(0)
 
 function goDetail() {
   router.push(`/p/${props.post.id}`)
@@ -65,24 +68,33 @@ function requireLogin(): boolean {
 }
 
 async function toggleLike() {
-  if (!requireLogin() || liking.value) return
+  if (!requireLogin()) return
   const p = props.post
-  liking.value = true
+  const key = `like:${p.id}`
+  if (interaction.isPending(key)) return
+  const wasLiked = p.is_liked
+  const prevCount = p.like_count
+  popTick.value += 1
   try {
-    if (p.is_liked) {
-      const r = await postApi.unlike(p.id)
-      p.is_liked = false
-      p.like_count = r.count
-    } else {
-      const r = await postApi.like(p.id)
-      p.is_liked = true
-      p.like_count = r.count
-    }
+    await interaction.run(key, {
+      // 乐观翻转：点击瞬间计数变化，不等接口返回
+      apply: () => {
+        p.is_liked = !wasLiked
+        p.like_count = Math.max(0, prevCount + (wasLiked ? -1 : 1))
+      },
+      rollback: () => {
+        p.is_liked = wasLiked
+        p.like_count = prevCount
+      },
+      request: () => (wasLiked ? postApi.unlike(p.id) : postApi.like(p.id)),
+      // 成功后以服务端权威计数校准（消除并发期间的误差）
+      onSuccess: (r) => {
+        p.like_count = r.count
+      },
+    })
     emit('updated')
   } catch (e) {
     toast(e instanceof Error ? e.message : '操作失败', 'error')
-  } finally {
-    liking.value = false
   }
 }
 </script>
@@ -191,6 +203,20 @@ async function toggleLike() {
 }
 .fc-action.liked .fc-action-icon {
   fill: currentColor;
+}
+.fc-action.liked .fc-action-icon.liked-pop {
+  animation: like-pop 0.3s ease;
+}
+@keyframes like-pop {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.4);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 .fc-action:disabled {
   cursor: default;

@@ -294,7 +294,14 @@ function insertText(text: string, mode: 'append' | 'replace' = 'append') {
   el.focus()
 }
 
-defineExpose({ insertText })
+/** 外部整体回填内容（草稿恢复用）：分片 + 图片，并同步触发序列化。 */
+function setContent(segs: RichSegment[], images: string[] = []) {
+  renderSegments(segs, images)
+  emit('update:modelValue', serialize())
+  emit('update:images', images)
+}
+
+defineExpose({ insertText, setContent })
 
 function serialize(): RichSegment[] {
   const segs: RichSegment[] = []
