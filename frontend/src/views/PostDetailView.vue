@@ -55,7 +55,7 @@
             >#{{ seg.topic.topic_name }}</router-link>
           </template>
           <div v-if="post.images.length" class="post-images">
-            <img v-for="(img, i) in post.images" :key="img" :src="img" alt="" @click="previewIndex = i" />
+            <img v-for="(img, i) in post.images" :key="img" :src="img" alt="" loading="lazy" @click="openGallery(i)" />
           </div>
         </div>
 
@@ -83,7 +83,7 @@
 
         <div v-if="attachments.length" class="attachments">
           <div v-for="att in attachments" :key="att.id" class="attachment">
-            <img v-if="att.media_type === 1" :src="att.url" class="att-img" alt="" @click="previewIndex = imagesPreview(att)" />
+            <img v-if="att.media_type === 1" :src="att.url" class="att-img" alt="" @click="openAttPreview(att)" />
             <video v-else-if="att.media_type === 2" :src="att.url" class="att-video" controls />
             <a v-else :href="att.url" target="_blank" rel="noopener" class="att-file">📎 {{ attUrlName(att.url) }}</a>
             <t-button v-if="canManage" variant="text" size="small" theme="danger" class="att-del" @click="removeAttachment(att.id)">删除</t-button>
@@ -182,9 +182,12 @@
         >{{ commentsLoading ? '加载中…' : '加载更多评论' }}</t-button>
       </section>
 
-      <div v-if="previewIndex !== null && post.images[previewIndex]" class="preview-mask" @click="previewIndex = null">
-        <img :src="post.images[previewIndex]" alt="" />
-      </div>
+      <Lightbox
+        ref="lightboxRef"
+        :images="post.images"
+        :index="previewIndex"
+        @update:index="(i: number) => (previewIndex = i)"
+      />
     </template>
 
     <div v-else class="state">帖子不存在</div>
@@ -220,6 +223,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { AiIcon, ArrowLeftIcon } from 'tdesign-icons-vue-next'
 import { communityApi } from '@/api/community'
 import EmptyState from '@/components/EmptyState.vue'
+import Lightbox from '@/components/Lightbox.vue'
 import { postApi, type AttachmentItem, type CommentItem, type PostItem } from '@/api/post'
 import { tokenStore } from '@/api/http'
 import { request } from '@/api/http'
@@ -238,7 +242,20 @@ const interaction = useInteractionStore()
 const post = ref<PostItem | null>(null)
 const loading = ref(true)
 const myMemberType = ref<number | null>(null)
-const previewIndex = ref<number | null>(null)
+
+// 图片灯箱（P1）：缩放/切换/Esc，替代旧的全屏遮罩
+const lightboxRef = ref<InstanceType<typeof Lightbox> | null>(null)
+const previewIndex = ref(0)
+
+function openGallery(i: number) {
+  previewIndex.value = i
+  lightboxRef.value?.open()
+}
+function openAttPreview(att: AttachmentItem) {
+  // 附件图片：仅在属于帖子图库时复用灯箱，否则忽略（保持旧行为）
+  const idx = post.value?.images.indexOf(att.url) ?? -1
+  if (idx >= 0) openGallery(idx)
+}
 
 // 收藏 / 举报 / AI 摘要 / 附件（P0）
 const attachments = ref<AttachmentItem[]>([])
@@ -506,12 +523,6 @@ async function removeAttachment(attachmentId: number) {
   } catch (e) {
     toast(e instanceof Error ? e.message : '删除失败', 'error')
   }
-}
-
-function imagesPreview(att: AttachmentItem): number | null {
-  // 附件图片点击预览：若在 post.images 中存在则复用索引
-  const idx = post.value?.images.indexOf(att.url) ?? -1
-  return idx >= 0 ? idx : null
 }
 
 function attUrlName(url: string): string {

@@ -5,10 +5,30 @@
       <t-tag v-if="post.is_top" theme="danger" variant="light" size="small">置顶</t-tag>
       <t-tag v-if="post.is_essence" theme="warning" variant="light" size="small">精华</t-tag>
     </div>
-    <p v-if="post.images.length" class="fc-thumbs">
-      <img v-for="img in post.images.slice(0, 3)" :key="img" :src="img" alt="" />
+
+    <!-- 图片：自适应栅格 + 懒加载 + 灯箱 -->
+    <div v-if="post.images.length" class="fc-media" :class="imgClass">
+      <img
+        v-for="(img, i) in post.images.slice(0, 9)"
+        :key="img"
+        :src="img"
+        :alt="post.title"
+        loading="lazy"
+        class="fc-img"
+        :class="{ loaded: imgLoaded[img] }"
+        @click.stop="openLightbox(i)"
+        @load="markLoaded(img)"
+      />
+    </div>
+
+    <!-- 正文：折叠 + 渐变遮罩 + 展开全文 -->
+    <p v-if="post.source_markdown" ref="excerptEl" class="fc-excerpt" :class="{ clamped, expanded: !clamped }">
+      {{ post.source_markdown }}
     </p>
-    <p class="fc-excerpt">{{ post.source_markdown }}</p>
+    <button v-if="overflowing" class="fc-expand" @click.stop="clamped = !clamped">
+      {{ clamped ? '展开全文' : '收起' }}
+    </button>
+
     <div class="fc-meta">
       <router-link
         v-if="showCommunity"
@@ -30,17 +50,25 @@
         <span v-if="post.like_count" class="fc-action-count">{{ post.like_count }}</span>
       </button>
     </div>
+
+    <Lightbox
+      ref="lightboxRef"
+      :images="post.images.slice(0, 9)"
+      :index="lightboxIndex"
+      @update:index="(i: number) => (lightboxIndex = i)"
+    />
   </article>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ThumbUpIcon } from 'tdesign-icons-vue-next'
 import type { PostItem } from '@/api/post'
 import { postApi } from '@/api/post'
 import { tokenStore } from '@/api/http'
 import UserAvatar from '@/components/UserAvatar.vue'
+import Lightbox from '@/components/Lightbox.vue'
 import { useInteractionStore } from '@/stores/interaction'
 import { timeAgo } from '@/utils/time'
 import { toast } from '@/utils/toast'
@@ -56,6 +84,56 @@ const route = useRoute()
 const interaction = useInteractionStore()
 // 点赞图标弹跳动画重触发：每次点赞更新 key 使图标重挂载，重新播放 CSS 动画
 const popTick = ref(0)
+
+// ---------- 图片栅格 / 懒加载 / 灯箱 ----------
+const lightboxRef = ref<InstanceType<typeof Lightbox> | null>(null)
+const lightboxIndex = ref(0)
+const imgLoaded = reactive<Record<string, boolean>>({})
+
+const imgClass = computed(() => {
+  const n = Math.min(props.post.images.length, 9)
+  if (n === 1) return 'cols-1'
+  if (n === 2) return 'cols-2'
+  if (n === 4) return 'cols-2'
+  return 'cols-3'
+})
+
+function markLoaded(url: string) {
+  imgLoaded[url] = true
+}
+
+function openLightbox(i: number) {
+  lightboxIndex.value = i
+  lightboxRef.value?.open()
+}
+
+// ---------- 正文折叠 + 渐变遮罩 ----------
+const excerptEl = ref<HTMLElement | null>(null)
+const clamped = ref(true)
+const overflowing = ref(false)
+
+async function measureOverflow() {
+  await nextTick()
+  const el = excerptEl.value
+  if (!el) {
+    overflowing.value = false
+    return
+  }
+  // -webkit-line-clamp 下 scrollHeight 仍为完整内容高度，可与可视高度比较判断是否溢出
+  overflowing.value = el.scrollHeight > el.clientHeight + 2
+}
+
+onMounted(() => {
+  measureOverflow()
+  window.addEventListener('resize', measureOverflow)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', measureOverflow)
+})
+watch(() => props.post.source_markdown, () => {
+  clamped.value = true
+  measureOverflow()
+})
 
 function goDetail() {
   router.push(`/p/${props.post.id}`)
@@ -126,27 +204,76 @@ async function toggleLike() {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.fc-thumbs {
-  display: flex;
-  gap: var(--sp-2);
-  margin: var(--sp-2) 0 0;
+
+/* 图片栅格：1/2/4/9 宫格 */
+.fc-media {
+  display: grid;
+  gap: 6px;
+  margin: var(--sp-3) 0 0;
 }
-.fc-thumbs img {
-  width: 72px;
-  height: 72px;
+.fc-media.cols-1 {
+  grid-template-columns: 1fr;
+}
+.fc-media.cols-2 {
+  grid-template-columns: repeat(2, 1fr);
+}
+.fc-media.cols-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+.fc-img {
+  width: 100%;
+  aspect-ratio: 1;
   border-radius: var(--radius-btn);
   object-fit: cover;
+  background: var(--bg-secondary);
+  opacity: 0;
+  transition: opacity 0.35s ease;
 }
+.fc-img.loaded {
+  opacity: 1;
+}
+.fc-media.cols-1 .fc-img {
+  aspect-ratio: 16 / 9;
+}
+
+/* 正文：默认折叠 4 行 + 渐变遮罩，展开后取消限制 */
 .fc-excerpt {
   margin: var(--sp-2) 0 0;
   font-size: var(--fs-body);
   color: var(--text-2);
   line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.fc-excerpt.clamped {
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 4;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  position: relative;
 }
+.fc-excerpt.clamped::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 24px;
+  background: linear-gradient(to bottom, transparent, var(--bg-card));
+}
+.fc-excerpt.expanded {
+  white-space: normal;
+}
+.fc-expand {
+  margin-top: 6px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--brand);
+  font-size: var(--fs-caption);
+  cursor: pointer;
+}
+
 .fc-meta {
   margin-top: var(--sp-3);
   display: flex;

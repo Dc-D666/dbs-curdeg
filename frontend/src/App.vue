@@ -27,6 +27,7 @@ import { HomeIcon, BrowseIcon, UserIcon, NotificationIcon } from 'tdesign-icons-
 import http from '@/api/http'
 import { useNotificationStore } from '@/stores/notification'
 import { useWebSocket } from '@/composables/useWebSocket'
+import { useGlobalShortcuts } from '@/composables/useGlobalShortcuts'
 import AiBot from '@/components/AiBot.vue'
 
 const route = useRoute()
@@ -45,6 +46,8 @@ const showTabbar = computed(() =>
 )
 
 onMounted(async () => {
+  // 全局快捷键（J/K 换帖、/ 聚焦搜索）
+  useGlobalShortcuts()
   // WebSocket 通知（登录后自动连接，未读角标实时更新）
   useWebSocket()
   try {
@@ -92,6 +95,18 @@ button {
 .app-shell {
   min-height: 100vh;
   padding-bottom: var(--tabbar-height);
+}
+/* 键盘导航（J/K）落焦卡片的短暂高亮 */
+.feed-kbd-focus {
+  animation: feed-kbd-focus 0.6s ease;
+}
+@keyframes feed-kbd-focus {
+  0% {
+    box-shadow: 0 0 0 2px var(--brand) inset;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent inset;
+  }
 }
 </style>
 
