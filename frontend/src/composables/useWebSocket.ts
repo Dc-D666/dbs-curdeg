@@ -10,6 +10,7 @@ import { watch } from 'vue'
 import { ref } from 'vue'
 import { tokenStore } from '@/api/http'
 import { useNotificationStore } from '@/stores/notification'
+import { useLiveStore } from '@/stores/live'
 
 const state = ref<'idle' | 'connecting' | 'open' | 'closed'>('idle')
 
@@ -74,6 +75,9 @@ export function connect() {
       useNotificationStore().fetchUnread().catch(() => {})
     } else if (msg.type === 'notification') {
       useNotificationStore().bumpUnread(1)
+    } else if (msg.type === 'feed_new') {
+      // 频道新内容（发帖/评论）→ 浮动药丸计数 +1
+      useLiveStore().increment(1)
     }
     // pong：忽略（心跳只是保活）
   }

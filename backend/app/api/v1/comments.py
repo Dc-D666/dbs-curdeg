@@ -11,8 +11,17 @@ from app.models.post import Post, POST_STATUS_NORMAL
 from app.models.user import User
 from app.schemas.post import CreateCommentRequest
 from app.services import comment_service
+from app.ws import events
 
 router = APIRouter(tags=["comments"])
+
+# P1 ③：频道新内容（评论）广播载荷
+def _feed_new_comment(post: Post) -> dict:
+    return {
+        "kind": "comment",
+        "community_id": post.community_id,
+        "post_id": post.id,
+    }
 
 
 @router.post("/posts/{post_id}/comments")
@@ -25,9 +34,11 @@ def create_comment(
 ):
     """发表评论（需频道成员）。"""
     post = _get_post(db, post_id)
-    return ok(data=comment_service.create_comment(
+    result = comment_service.create_comment(
         db, post, user, payload, ip_region=get_client_ip(request),
-    ), message="评论成功")
+    )
+    events.push_broadcast(events.EVENT_FEED_NEW, _feed_new_comment(post))
+    return ok(data=result, message="评论成功")
 
 
 @router.get("/posts/{post_id}/comments")
@@ -64,9 +75,11 @@ def create_reply(
         parent_id=comment.id,
         reply_to_user_id=payload.reply_to_user_id or comment.author_id,
     )
-    return ok(data=comment_service.create_comment(
+    result = comment_service.create_comment(
         db, post, user, payload, ip_region=get_client_ip(request),
-    ), message="回复成功")
+    )
+    events.push_broadcast(events.EVENT_FEED_NEW, _feed_new_comment(post))
+    return ok(data=result, message="回复成功")
 
 
 @router.get("/comments/{comment_id}/replies")

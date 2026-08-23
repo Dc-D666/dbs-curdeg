@@ -22,7 +22,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import FeedCard from '@/components/FeedCard.vue'
 import SkeletonFeed from '@/components/SkeletonFeed.vue'
 import EmptyState from '@/components/EmptyState.vue'
@@ -42,7 +42,19 @@ const loadError = ref('')
 
 onMounted(() => {
   loadMore()
+  window.addEventListener('live:refresh', onLiveRefresh)
 })
+onBeforeUnmount(() => {
+  window.removeEventListener('live:refresh', onLiveRefresh)
+})
+
+/** P1 ③：收到「新讨论」药丸的查看请求 → 重置并重拉首屏。 */
+function onLiveRefresh() {
+  items.value = []
+  cursor.value = null
+  hasMore.value = false
+  loadMore()
+}
 
 function currentFeed(cursorValue: string | null, pageSize = 20) {
   if (props.view === 'hot') return postApi.globalFeed('hot', cursorValue, pageSize)

@@ -18,6 +18,9 @@
     <!-- AI 问答助手浮窗（阶段 6） -->
     <AiBot />
 
+    <!-- 实时新内容浮动药丸（P1 ③） -->
+    <NewPostsPill />
+
     <!-- 帖子阅读右侧抽屉（P1 ①：保持一致上下文） -->
     <PostDrawer />
   </div>
@@ -33,6 +36,7 @@ import { useWebSocket } from '@/composables/useWebSocket'
 import { useGlobalShortcuts } from '@/composables/useGlobalShortcuts'
 import AiBot from '@/components/AiBot.vue'
 import PostDrawer from '@/components/PostDrawer.vue'
+import NewPostsPill from '@/components/NewPostsPill.vue'
 
 const route = useRoute()
 const notif = useNotificationStore()

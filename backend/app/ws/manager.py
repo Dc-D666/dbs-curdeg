@@ -49,6 +49,20 @@ class ConnectionManager:
                 await self.disconnect(user_id, ws)
         return sent
 
+    async def broadcast(self, message: dict[str, Any]) -> None:
+        """向所有在线连接广播（P1 ③：频道新内容实时推送）。
+
+        单 worker 进程内广播；跨进程需 Redis Pub/Sub（方案 D4，此处未启用）。
+        发送失败的连接即时清理。
+        """
+        async with self._lock:
+            items = [(uid, ws) for uid, conns in self._connections.items() for ws in list(conns)]
+        for uid, ws in items:
+            try:
+                await ws.send_json(message)
+            except Exception:
+                await self.disconnect(uid, ws)
+
     def online_count(self) -> int:
         return sum(len(v) for v in self._connections.values())
 

@@ -12,6 +12,7 @@ from app.models.post import Post, POST_STATUS_NORMAL
 from app.models.user import User
 from app.schemas.post import CreatePostRequest, UpdatePostRequest
 from app.services import heat_service, post_service
+from app.ws import events
 
 router = APIRouter(tags=["posts"])
 
@@ -37,7 +38,15 @@ def create_post(
 ):
     """发帖（需频道成员，校验版块发帖权限）。"""
     community, board = _get_community_board(db, community_id, board_id)
-    return ok(data=post_service.create_post(db, community, board, user, payload), message="发帖成功")
+    post = post_service.create_post(db, community, board, user, payload)
+    # P1 ③：向在线用户广播频道新内容，触发前端「有 N 条新讨论」浮动药丸
+    events.push_broadcast(events.EVENT_FEED_NEW, {
+        "kind": "post",
+        "community_id": community.id,
+        "post_id": post.id,
+        "title": post.title or "",
+    })
+    return ok(data=post, message="发帖成功")
 
 
 @router.get("/communities/{community_id}/feed")

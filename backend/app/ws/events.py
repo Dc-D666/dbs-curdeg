@@ -27,6 +27,7 @@ EVENT_PING = "ping"
 EVENT_PONG = "pong"
 EVENT_AUTH = "auth"
 EVENT_AUTHED = "authed"
+EVENT_FEED_NEW = "feed_new"  # 频道新内容（发帖/评论）实时推送（P1 ③）
 
 # 通知类型
 EVENT_MENTION = "mention"              # 被@
@@ -55,6 +56,17 @@ def push_event(user_id: int, event: str, data: dict[str, Any]) -> None:
         asyncio.run_coroutine_threadsafe(
             manager.send_to_user(user_id, {"type": event, "data": data}), loop
         )
+    except RuntimeError:
+        pass
+
+
+def push_broadcast(event: str, data: dict[str, Any]) -> None:
+    """向所有在线连接广播（P1 ③：频道新内容实时推送）；失败/无主循环静默。"""
+    loop = _ws_loop
+    if loop is None or loop.is_closed():
+        return
+    try:
+        asyncio.run_coroutine_threadsafe(manager.broadcast({"type": event, "data": data}), loop)
     except RuntimeError:
         pass
 

@@ -176,7 +176,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeftIcon } from 'tdesign-icons-vue-next'
 import { communityApi, type Community, type JoinRequestItem, type Member, type TopicItem } from '@/api/community'
@@ -336,6 +336,13 @@ onMounted(async () => {
     loading.value = false
   }
 })
+
+// P1 ③：收到「新讨论」药丸的查看请求 → 重拉当前版块首屏
+function onLiveRefresh() {
+  if (activeBoard.value) loadFeed(true)
+}
+onMounted(() => window.addEventListener('live:refresh', onLiveRefresh))
+onBeforeUnmount(() => window.removeEventListener('live:refresh', onLiveRefresh))
 
 async function onJoin() {
   if (!tokenStore.access) {
