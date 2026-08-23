@@ -1,5 +1,5 @@
 <template>
-  <main class="detail">
+  <main class="detail" :class="{ wb: isWide }">
     <header class="page-header">
       <router-link to="/discover" class="back">
         <ArrowLeftIcon class="back-icon" /> 发现
@@ -10,6 +10,7 @@
 
     <div v-if="loading" class="state">加载中…</div>
     <div v-else-if="community">
+      <template v-if="!isWide">
       <section class="panel head-panel">
         <div v-if="community.cover_url" class="cover" :style="{ backgroundImage: `url('${community.cover_url}')` }"></div>
         <div class="head-title-row">
@@ -161,6 +162,115 @@
 
         <p v-if="ownerMsg" class="msg">{{ ownerMsg }}</p>
       </section>
+      </template>
+
+      <!-- 三栏宽屏工作台（桌面 ≥1024px） -->
+      <template v-else>
+        <div class="wb">
+          <!-- 左栏：社区切换 + 版块树 -->
+          <aside class="wb-left">
+            <div class="wb-rail-title">我的频道</div>
+            <div class="wb-channels">
+              <router-link v-for="c in myChannels" :key="c.id" :to="`/c/${c.id}`" class="wb-channel" :class="{ active: c.id === cid }">
+                <UserAvatar :name="c.name" :src="c.avatar_url" :size="24" />
+                <span class="wb-channel-name">{{ c.name }}</span>
+              </router-link>
+            </div>
+            <div class="wb-rail-title">版块</div>
+            <nav class="wb-boards">
+              <button v-for="b in community.boards" :key="b.id" class="wb-board" :class="{ active: b.id === activeBoard }" @click="activeBoard = b.id">
+                <span class="wb-board-hash">#</span>{{ b.name }}
+              </button>
+              <p v-if="community.boards.length === 0" class="wb-empty">暂无版块</p>
+            </nav>
+          </aside>
+
+          <!-- 中栏：频道头 + 内联发帖 + 信息流 + 管理入口 -->
+          <section class="wb-main">
+            <div class="wb-channel-head">
+              <img v-if="community.avatar_url" :src="community.avatar_url" class="wb-avatar" alt="" />
+              <div class="wb-head-main">
+                <div class="wb-head-name">{{ community.name }}<span v-if="community.is_member" class="tag tag-member">已加入</span></div>
+                <p class="wb-profile">{{ community.profile || '暂无简介' }}</p>
+                <div class="wb-meta">{{ community.member_count }} 成员 · {{ community.boards.length }} 版块 · #{{ community.number }}</div>
+              </div>
+              <div class="wb-actions">
+                <t-button v-if="community.is_member && community.my_member_type !== 0" variant="outline" size="small" @click="onLeave">退出</t-button>
+                <t-button v-else-if="!community.is_member" theme="primary" size="small" :loading="joining" @click="onJoin">加入</t-button>
+              </div>
+            </div>
+
+            <QuickComposer v-if="community.is_member" :cid="cid" :bid="activeBoard ?? 0" @posted="onQuickPosted" />
+
+            <div v-if="activeBoardInfo" class="wb-feed">
+              <div class="feed-toolbar">
+                <t-radio-group v-model="feedSort" variant="default-filled" size="small">
+                  <t-radio-button value="latest">最新</t-radio-button>
+                  <t-radio-button value="hot">热门</t-radio-button>
+                </t-radio-group>
+                <t-button
+                  v-if="community.is_member"
+                  theme="primary"
+                  size="small"
+                  @click="router.push(`/c/${cid}/boards/${activeBoard}/post/new`)"
+                >发帖</t-button>
+              </div>
+              <SkeletonFeed v-if="feedLoading && feedItems.length === 0" :count="2" />
+              <EmptyState v-else-if="feedItems.length === 0" text="这里还没有任何讨论，成为第一个开帖分享的人吧！" />
+              <div v-else class="feed-list">
+                <FeedCard v-for="p in feedItems" :key="p.id" :post="p" />
+              </div>
+              <t-button v-if="feedHasMore" variant="outline" block class="load-more" :loading="feedLoading" @click="loadFeed()">
+                {{ feedLoading ? '加载中…' : '加载更多' }}
+              </t-button>
+            </div>
+
+            <section v-if="community.my_member_type === 0 || community.my_member_type === 1" class="panel owner-panel">
+              <div class="panel-title-row">
+                <h3 class="panel-title">频道管理</h3>
+                <t-button variant="outline" size="small" @click="router.push(`/c/${cid}/admin`)">管理后台</t-button>
+              </div>
+              <p class="owner-hint">头像/封面、频道状态、版块、成员与违规管理请前往管理后台。</p>
+            </section>
+          </section>
+
+          <!-- 右栏：话题 + 今日热议 -->
+          <aside class="wb-right">
+            <div class="wb-panel">
+              <div class="wb-rail-title">话题</div>
+              <div class="topic-toolbar">
+                <t-radio-group v-model="topicSort" variant="default-filled" size="small">
+                  <t-radio-button value="hot">热度</t-radio-button>
+                  <t-radio-button value="latest">最新</t-radio-button>
+                </t-radio-group>
+                <t-button v-if="community.is_member" variant="outline" size="small" @click="openTopicDialog()">+ 新建</t-button>
+              </div>
+              <div v-if="topics.length" class="topic-list">
+                <div v-for="t in topics" :key="t.id" class="topic-item">
+                  <span class="topic-name">#{{ t.name }}</span>
+                  <span class="topic-count">{{ t.post_count }} 帖 · 热度 {{ t.heat_value }}</span>
+                  <div v-if="community.my_member_type === 0 || community.my_member_type === 1" class="topic-ops">
+                    <t-button variant="text" size="small" @click="openTopicDialog(t)">编辑</t-button>
+                    <t-button variant="text" size="small" theme="danger" @click="removeTopic(t)">删除</t-button>
+                  </div>
+                </div>
+              </div>
+              <p v-else class="wb-empty">暂无话题</p>
+            </div>
+
+            <div class="wb-panel">
+              <div class="wb-rail-title">今日热议</div>
+              <div v-if="hotPosts.length" class="hot-list">
+                <button v-for="p in hotPosts" :key="p.id" class="hot-item" @click="openHotPost(p.id)">
+                  <span class="hot-title">{{ p.title }}</span>
+                  <span class="hot-meta">{{ p.like_count }} 赞 · {{ p.comment_count }} 评</span>
+                </button>
+              </div>
+              <p v-else class="wb-empty">暂无热门</p>
+            </div>
+          </aside>
+        </div>
+      </template>
     </div>
     <div v-else class="state">频道不存在</div>
 
@@ -189,8 +299,10 @@ import { communityApi, type Community, type JoinRequestItem, type Member, type T
 import { postApi, type PostItem } from '@/api/post'
 import FeedCard from '@/components/FeedCard.vue'
 import QuickComposer from '@/components/QuickComposer.vue'
+import UserAvatar from '@/components/UserAvatar.vue'
 import SkeletonFeed from '@/components/SkeletonFeed.vue'
 import EmptyState from '@/components/EmptyState.vue'
+import { usePostDrawer } from '@/stores/postDrawer'
 import { request, tokenStore } from '@/api/http'
 import { toast } from '@/utils/toast'
 import { confirmDialog } from '@/utils/confirm'
@@ -205,6 +317,37 @@ const joining = ref(false)
 const activeBoard = ref<number | null>(null)
 const ownerMsg = ref('')
 const statusForm = reactive({ status: 0 })
+
+// 桌面三栏工作台判定（≥1024px）+ 社区切换器（我的频道）
+const isWide = ref(window.innerWidth >= 1024)
+function onResize() {
+  isWide.value = window.innerWidth >= 1024
+}
+const myChannels = ref<Community[]>([])
+async function loadMyChannels() {
+  if (!tokenStore.access) return
+  try {
+    const m = await communityApi.mine()
+    const seen = new Set<number>()
+    myChannels.value = [...m.owned, ...m.managed, ...m.joined].filter((c) => {
+      if (seen.has(c.id)) return false
+      seen.add(c.id)
+      return true
+    })
+  } catch {
+    /* ignore */
+  }
+}
+// 右栏「今日热议」：取频道热门 Top5
+const hotPosts = ref<PostItem[]>([])
+async function loadHotPosts() {
+  try {
+    const data = await postApi.feed(cid, 'hot', null, 5)
+    hotPosts.value = data.items
+  } catch {
+    /* ignore */
+  }
+}
 
 // 管理面板
 const boardForm = reactive({ name: '', description: '' })
@@ -322,6 +465,13 @@ function onQuickPosted() {
   loadFeed(true)
 }
 
+// 右栏「今日热议」点击：桌面打开抽屉，移动端整页跳转
+const postDrawer = usePostDrawer()
+function openHotPost(id: number) {
+  if (window.innerWidth >= 1024) postDrawer.open(id)
+  else router.push(`/p/${id}`)
+}
+
 function switchSort(sort: 'latest' | 'hot') {
   if (feedSort.value === sort) return
   feedSort.value = sort
@@ -353,8 +503,16 @@ onMounted(async () => {
 function onLiveRefresh() {
   if (activeBoard.value) loadFeed(true)
 }
-onMounted(() => window.addEventListener('live:refresh', onLiveRefresh))
-onBeforeUnmount(() => window.removeEventListener('live:refresh', onLiveRefresh))
+onMounted(() => {
+  window.addEventListener('live:refresh', onLiveRefresh)
+  window.addEventListener('resize', onResize)
+  loadMyChannels()
+  loadHotPosts()
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('live:refresh', onLiveRefresh)
+  window.removeEventListener('resize', onResize)
+})
 
 async function onJoin() {
   if (!tokenStore.access) {
@@ -747,5 +905,177 @@ async function onDissolve() {
   display: flex;
   flex-direction: column;
   gap: var(--sp-3);
+}
+/* ===== 三栏宽屏工作台（桌面 ≥1024px） ===== */
+.detail.wb {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+.wb {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr) 300px;
+  height: calc(100vh - var(--nav-height));
+  min-height: 0;
+  border-top: 1px solid var(--border);
+}
+.wb-left {
+  border-right: 1px solid var(--border);
+  background: var(--surface-2);
+  overflow-y: auto;
+  padding: var(--sp-3);
+}
+.wb-main {
+  overflow-y: auto;
+  padding: var(--sp-4);
+}
+.wb-right {
+  border-left: 1px solid var(--border);
+  background: var(--surface-2);
+  overflow-y: auto;
+  padding: var(--sp-3);
+}
+.wb-rail-title {
+  font-size: var(--fs-caption);
+  color: var(--text-3);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  margin: var(--sp-3) 0 var(--sp-2);
+}
+.wb-rail-title:first-child {
+  margin-top: 0;
+}
+.wb-channels {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.wb-channel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius-control);
+  color: var(--text-2);
+  text-decoration: none;
+}
+.wb-channel:hover {
+  background: var(--surface);
+}
+.wb-channel.active {
+  background: var(--brand-weak);
+  color: var(--brand);
+  font-weight: 600;
+}
+.wb-channel-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wb-boards {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.wb-board {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-2);
+  border-radius: var(--radius-control);
+  text-align: left;
+  cursor: pointer;
+}
+.wb-board:hover {
+  background: var(--surface);
+}
+.wb-board.active {
+  background: var(--brand-weak);
+  color: var(--brand);
+  font-weight: 600;
+}
+.wb-board-hash {
+  opacity: 0.5;
+}
+.wb-channel-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+.wb-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-control);
+  object-fit: cover;
+}
+.wb-head-main {
+  flex: 1;
+  min-width: 0;
+}
+.wb-head-name {
+  font-size: var(--fs-page);
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.wb-profile {
+  margin: 4px 0 0;
+  color: var(--text-2);
+  line-height: 1.6;
+}
+.wb-meta {
+  margin-top: 4px;
+  font-size: var(--fs-caption);
+  color: var(--text-3);
+}
+.wb-actions {
+  display: flex;
+  gap: var(--sp-2);
+}
+.wb-feed .feed-toolbar {
+  margin-bottom: var(--sp-3);
+}
+.wb-panel {
+  padding: var(--sp-2) 0;
+}
+.wb-empty {
+  color: var(--text-3);
+  font-size: var(--fs-caption);
+}
+.hot-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.hot-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+  padding: 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  cursor: pointer;
+}
+.hot-item:hover {
+  border-color: var(--brand);
+}
+.hot-title {
+  font-size: var(--fs-body);
+  color: var(--text-1);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.hot-meta {
+  font-size: var(--fs-caption);
+  color: var(--text-3);
 }
 </style>
