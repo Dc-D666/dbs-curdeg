@@ -68,13 +68,13 @@ async function submit() {
   }
   const t = title.value.trim()
   const c = content.value.trim()
-  if (!t && !c) {
-    toast('写点内容再发布吧', 'warning')
+  if (!t) {
+    toast('请先填写标题', 'warning')
     return
   }
   submitting.value = true
   try {
-    await postApi.create(props.cid, props.bid, { title: t, content: c })
+    await postApi.create(props.cid, props.bid, { title: t, content: c || undefined })
     toast('已发布', 'success')
     collapse()
     emit('posted')

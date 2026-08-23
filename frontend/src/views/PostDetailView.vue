@@ -220,7 +220,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { AiIcon, ArrowLeftIcon } from 'tdesign-icons-vue-next'
 import { communityApi } from '@/api/community'
@@ -353,18 +353,38 @@ const canManage = computed(() => {
   return p.author_id === auth.user?.id || myMemberType.value === 0 || myMemberType.value === 1
 })
 
-onMounted(async () => {
+/** 加载帖子：初次 + 独立 /p/:id 切换（组件复用）时重载。 */
+async function loadPost() {
+  const id = pid.value
+  loading.value = true
+  post.value = null
+  summary.value = ''
+  typedSummary.value = ''
+  typing.value = false
+  attachments.value = []
+  comments.value = []
+  commentPage.value = 0
+  commentTotal.value = 0
   try {
-    post.value = await postApi.get(pid.value)
+    post.value = await postApi.get(id)
+    if (pid.value !== id) return // 已切走：丢弃过期响应
     const me = tokenStore.access ? await communityApi.get(post.value.community_id).catch(() => null) : null
     myMemberType.value = me?.my_member_type ?? null
-    postApi.attachments(pid.value).then((list) => (attachments.value = list)).catch(() => {})
+    postApi.attachments(id).then((list) => {
+      if (pid.value === id) attachments.value = list
+    }).catch(() => {})
   } catch (e) {
-    post.value = null
+    if (pid.value === id) post.value = null
   } finally {
-    loading.value = false
+    if (pid.value === id) loading.value = false
   }
-  loadComments(1)
+  if (pid.value === id) loadComments(1)
+}
+
+onMounted(loadPost)
+// 独立 /p/:id 之间切换（如相关帖子/分享短链）：组件复用，需重载
+watch(pid, (n, o) => {
+  if (n !== o) loadPost()
 })
 onBeforeUnmount(() => {
   if (summaryTimer) clearInterval(summaryTimer)
@@ -755,10 +775,12 @@ async function deleteComment(commentId: number) {
   const target = removed
   list.splice(idx, 1)
   post.value.comment_count = Math.max(0, post.value.comment_count - 1)
+  commentTotal.value = Math.max(0, commentTotal.value - 1)
 
   const restore = () => {
     list!.splice(Math.min(idx, list!.length), 0, target)
     post.value && post.value.comment_count++
+    commentTotal.value++
   }
   const commit = async () => {
     try {

@@ -200,7 +200,7 @@
               </div>
             </div>
 
-            <QuickComposer v-if="community.is_member" :cid="cid" :bid="activeBoard ?? 0" @posted="onQuickPosted" />
+            <QuickComposer v-if="community.is_member && activeBoardInfo" :cid="cid" :bid="activeBoard ?? 0" @posted="onQuickPosted" />
 
             <div v-if="activeBoardInfo" class="wb-feed">
               <div class="feed-toolbar">
@@ -310,7 +310,8 @@ import { formatTime } from '@/utils/time'
 
 const route = useRoute()
 const router = useRouter()
-const cid = Number(route.params.id)
+// cid 随路由参数实时响应：三栏左栏切换频道（/c/:id 复用组件）时必须重载
+const cid = computed(() => Number(route.params.id))
 const community = ref<Community | null>(null)
 const loading = ref(true)
 const joining = ref(false)
@@ -338,12 +339,13 @@ async function loadMyChannels() {
     /* ignore */
   }
 }
-// 右栏「今日热议」：取频道热门 Top5
+// 右栏「今日热议」：取频道热门 Top5（带频道竞态保护，避免切换后旧结果覆盖）
 const hotPosts = ref<PostItem[]>([])
 async function loadHotPosts() {
+  const id = cid.value
   try {
-    const data = await postApi.feed(cid, 'hot', null, 5)
-    hotPosts.value = data.items
+    const data = await postApi.feed(id, 'hot', null, 5)
+    if (cid.value === id) hotPosts.value = data.items
   } catch {
     /* ignore */
   }
@@ -365,8 +367,10 @@ const topicSaving = ref(false)
 const topicForm = reactive({ id: 0, name: '', description: '', rules: '' })
 
 async function loadTopics() {
+  const id = cid.value
   try {
-    topics.value = await communityApi.topics(cid, topicSort.value)
+    const data = await communityApi.topics(id, topicSort.value)
+    if (cid.value === id) topics.value = data
   } catch (e) {
     toast(e instanceof Error ? e.message : '加载话题失败', 'error')
   }
@@ -390,14 +394,14 @@ async function saveTopic() {
   topicSaving.value = true
   try {
     if (topicForm.id) {
-      await communityApi.updateTopic(cid, topicForm.id, {
+      await communityApi.updateTopic(cid.value, topicForm.id, {
         name: topicForm.name,
         description: topicForm.description,
         rules: topicForm.rules,
       })
       toast('话题已更新')
     } else {
-      await communityApi.createTopic(cid, {
+      await communityApi.createTopic(cid.value, {
         name: topicForm.name,
         description: topicForm.description,
         rules: topicForm.rules,
@@ -416,7 +420,7 @@ async function saveTopic() {
 async function removeTopic(t: TopicItem) {
   if (!(await confirmDialog('删除话题', `确定删除话题「${t.name}」？`))) return
   try {
-    await communityApi.deleteTopic(cid, t.id)
+    await communityApi.deleteTopic(cid.value, t.id)
     await loadTopics()
     toast('话题已删除')
   } catch (e) {
@@ -437,6 +441,7 @@ const feedLoading = ref(false)
 
 async function loadFeed(reset = false) {
   if (!activeBoard.value || feedLoading.value) return
+  const id = cid.value
   if (reset) {
     feedItems.value = []
     feedCursor.value = null
@@ -444,7 +449,8 @@ async function loadFeed(reset = false) {
   }
   feedLoading.value = true
   try {
-    const data = await postApi.feed(cid, feedSort.value, feedCursor.value, 20, activeBoard.value)
+    const data = await postApi.feed(id, feedSort.value, feedCursor.value, 20, activeBoard.value)
+    if (cid.value !== id) return // 切换频道：丢弃过期结果
     // 按 id 去重：置顶帖每页都会返回，避免"加载更多"后重复
     const seen = new Set(feedItems.value.map((p) => p.id))
     const merged = reset
@@ -486,29 +492,55 @@ watch(activeBoard, (bid) => {
   if (bid) loadFeed(true)
 })
 
-onMounted(async () => {
+// ---------- 频道加载：初次 + 路由参数变化（三栏左栏切换） ----------
+/** 重置并加载指定频道：清空旧数据 → 拉频道/话题/热门 → 选定版块触发信息流。 */
+async function loadAll() {
+  const id = cid.value
+  loading.value = true
+  community.value = null
+  activeBoard.value = null
+  feedItems.value = []
+  feedCursor.value = null
+  feedHasMore.value = false
+  topics.value = []
+  hotPosts.value = []
+  members.value = []
+  requests.value = []
+  membersOpen.value = false
+  requestsOpen.value = false
+  ownerMsg.value = ''
   try {
-    community.value = await communityApi.get(cid)
-    if (community.value.boards.length > 0) {
-      activeBoard.value = community.value.boards[0].id
+    const c = await communityApi.get(id)
+    if (cid.value !== id) return // 已切走：丢弃过期响应
+    community.value = c
+    statusForm.status = c.status
+    if (c.boards.length > 0) {
+      activeBoard.value = c.boards[0].id // 触发 watch(activeBoard) → loadFeed
     }
-    statusForm.status = community.value.status
     loadTopics()
+    loadHotPosts()
+  } catch (e) {
+    if (cid.value === id) {
+      community.value = null
+    }
   } finally {
-    loading.value = false
+    if (cid.value === id) loading.value = false
   }
-})
+}
 
 // P1 ③：收到「新讨论」药丸的查看请求 → 重拉当前版块首屏
 function onLiveRefresh() {
   if (activeBoard.value) loadFeed(true)
 }
+
 onMounted(() => {
+  loadAll()
   window.addEventListener('live:refresh', onLiveRefresh)
   window.addEventListener('resize', onResize)
   loadMyChannels()
-  loadHotPosts()
 })
+// 路由参数变化（如三栏左栏切频道）：组件复用，需重新加载
+watch(cid, () => loadAll())
 onBeforeUnmount(() => {
   window.removeEventListener('live:refresh', onLiveRefresh)
   window.removeEventListener('resize', onResize)
@@ -522,8 +554,8 @@ async function onJoin() {
   if (joining.value) return
   joining.value = true
   try {
-    await communityApi.join(cid)
-    community.value = await communityApi.get(cid)
+    await communityApi.join(cid.value)
+    community.value = await communityApi.get(cid.value)
   } catch (e) {
     toast(e instanceof Error ? e.message : '操作失败', 'error')
   } finally {
@@ -534,8 +566,8 @@ async function onJoin() {
 async function onLeave() {
   if (!(await confirmDialog('退出频道', '确定退出该频道？'))) return
   try {
-    await communityApi.leave(cid)
-    community.value = await communityApi.get(cid)
+    await communityApi.leave(cid.value)
+    community.value = await communityApi.get(cid.value)
   } catch (e) {
     toast(e instanceof Error ? e.message : '操作失败', 'error')
   }
@@ -550,7 +582,7 @@ async function onCoverUpload(e: Event) {
   fd.append('file', file)
   try {
     const up = await request<{ url: string }>({ url: '/uploads', method: 'POST', data: fd })
-    community.value = await communityApi.update(cid, { avatar_url: up.url, cover_url: up.url })
+    community.value = await communityApi.update(cid.value, { avatar_url: up.url, cover_url: up.url })
     ownerMsg.value = '图片已更新'
   } catch (err) {
     ownerMsg.value = err instanceof Error ? err.message : '上传失败'
@@ -560,7 +592,7 @@ async function onCoverUpload(e: Event) {
 async function onStatusSave() {
   ownerMsg.value = ''
   try {
-    community.value = await communityApi.updateStatus(cid, statusForm.status)
+    community.value = await communityApi.updateStatus(cid.value, statusForm.status)
     ownerMsg.value = '状态已保存'
   } catch (err) {
     ownerMsg.value = err instanceof Error ? err.message : '保存失败'
@@ -575,10 +607,10 @@ async function onCreateBoard() {
   boardCreating.value = true
   ownerMsg.value = ''
   try {
-    await communityApi.createBoard(cid, { name: boardForm.name, description: boardForm.description })
+    await communityApi.createBoard(cid.value, { name: boardForm.name, description: boardForm.description })
     boardForm.name = ''
     boardForm.description = ''
-    community.value = await communityApi.get(cid)
+    community.value = await communityApi.get(cid.value)
     if (activeBoard.value === null && community.value.boards.length > 0) {
       activeBoard.value = community.value.boards[0].id
     }
@@ -594,7 +626,7 @@ async function toggleMembers() {
   membersOpen.value = !membersOpen.value
   if (membersOpen.value && members.value.length === 0) {
     try {
-      const data = await communityApi.members(cid, 1, 50)
+      const data = await communityApi.members(cid.value, 1, 50)
       members.value = data.items
     } catch (e) {
       toast(e instanceof Error ? e.message : '加载成员失败', 'error')
@@ -611,7 +643,7 @@ async function toggleRequests() {
 
 async function loadRequests() {
   try {
-    const data = await communityApi.joinRequests(cid, 1, 50)
+    const data = await communityApi.joinRequests(cid.value, 1, 50)
     requests.value = data.items
   } catch (e) {
     toast(e instanceof Error ? e.message : '加载申请失败', 'error')
@@ -620,9 +652,9 @@ async function loadRequests() {
 
 async function handleRequest(r: JoinRequestItem, approve: boolean) {
   try {
-    await communityApi.handleJoinRequest(cid, r.id, approve)
+    await communityApi.handleJoinRequest(cid.value, r.id, approve)
     requests.value = requests.value.filter((x) => x.id !== r.id)
-    community.value = await communityApi.get(cid)
+    community.value = await communityApi.get(cid.value)
     ownerMsg.value = approve ? '已通过申请' : '已驳回申请'
   } catch (e) {
     toast(e instanceof Error ? e.message : '操作失败', 'error')
@@ -636,7 +668,7 @@ function memberTypeName(t: number): string {
 async function onDissolve() {
   if (!(await confirmDialog('解散频道', '确定解散该频道？此操作不可撤销！'))) return
   try {
-    await communityApi.dissolve(cid)
+    await communityApi.dissolve(cid.value)
     router.push('/discover')
   } catch (e) {
     toast(e instanceof Error ? e.message : '解散失败', 'error')
