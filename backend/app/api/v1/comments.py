@@ -15,14 +15,6 @@ from app.ws import events
 
 router = APIRouter(tags=["comments"])
 
-# P1 ③：频道新内容（评论）广播载荷
-def _feed_new_comment(post: Post) -> dict:
-    return {
-        "kind": "comment",
-        "community_id": post.community_id,
-        "post_id": post.id,
-    }
-
 
 @router.post("/posts/{post_id}/comments")
 def create_comment(
@@ -37,7 +29,7 @@ def create_comment(
     result = comment_service.create_comment(
         db, post, user, payload, ip_region=get_client_ip(request),
     )
-    events.push_broadcast(events.EVENT_FEED_NEW, _feed_new_comment(post))
+    events.push_feed_new(db, post.community_id, "comment", post.id, exclude_user_id=user.id)
     return ok(data=result, message="评论成功")
 
 
@@ -78,7 +70,7 @@ def create_reply(
     result = comment_service.create_comment(
         db, post, user, payload, ip_region=get_client_ip(request),
     )
-    events.push_broadcast(events.EVENT_FEED_NEW, _feed_new_comment(post))
+    events.push_feed_new(db, post.community_id, "comment", post.id, exclude_user_id=user.id)
     return ok(data=result, message="回复成功")
 
 

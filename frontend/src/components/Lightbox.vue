@@ -34,7 +34,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -123,7 +123,11 @@ function onKey(e: KeyboardEvent) {
   else if (e.key === '-') zoom(-0.2)
 }
 
-onMounted(() => window.addEventListener('keydown', onKey))
+// 仅当灯箱可见时注册全局键盘，避免每个卡片/实例常驻监听（F1）
+watch(visible, (v) => {
+  if (v) window.addEventListener('keydown', onKey)
+  else window.removeEventListener('keydown', onKey)
+})
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKey)
   document.body.style.overflow = ''

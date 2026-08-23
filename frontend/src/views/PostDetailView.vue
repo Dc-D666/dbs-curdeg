@@ -240,7 +240,7 @@ const props = withDefaults(defineProps<{ postId?: number; embedded?: boolean }>(
   postId: undefined,
   embedded: false,
 })
-const pid = props.postId ?? Number(route.params.id)
+const pid = computed(() => props.postId ?? Number(route.params.id))
 const auth = useAuthStore()
 const interaction = useInteractionStore()
 
@@ -344,10 +344,10 @@ const canManage = computed(() => {
 
 onMounted(async () => {
   try {
-    post.value = await postApi.get(pid)
+    post.value = await postApi.get(pid.value)
     const me = tokenStore.access ? await communityApi.get(post.value.community_id).catch(() => null) : null
     myMemberType.value = me?.my_member_type ?? null
-    postApi.attachments(pid).then((list) => (attachments.value = list)).catch(() => {})
+    postApi.attachments(pid.value).then((list) => (attachments.value = list)).catch(() => {})
   } catch (e) {
     post.value = null
   } finally {
@@ -360,7 +360,7 @@ async function loadComments(page: number) {
   if (commentsLoading.value) return
   commentsLoading.value = true
   try {
-    const data = await postApi.comments(pid, page)
+    const data = await postApi.comments(pid.value, page)
     comments.value = page === 1 ? data.items : [...comments.value, ...data.items]
     commentPage.value = page
     commentTotal.value = data.total
@@ -542,7 +542,7 @@ async function submitComment() {
   sending.value = true
   try {
     // 顶层评论：无刷新追加 + 高亮闪烁，保持当前阅读位置
-    const item = await postApi.createComment(pid, text)
+    const item = await postApi.createComment(pid.value, text)
     if (post.value) post.value.comment_count += 1
     commentTotal.value += 1
     comments.value = [...comments.value, item]

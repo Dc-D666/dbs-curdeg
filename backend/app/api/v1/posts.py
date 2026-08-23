@@ -39,13 +39,8 @@ def create_post(
     """发帖（需频道成员，校验版块发帖权限）。"""
     community, board = _get_community_board(db, community_id, board_id)
     post = post_service.create_post(db, community, board, user, payload)
-    # P1 ③：向在线用户广播频道新内容，触发前端「有 N 条新讨论」浮动药丸
-    events.push_broadcast(events.EVENT_FEED_NEW, {
-        "kind": "post",
-        "community_id": community.id,
-        "post_id": post.id,
-        "title": post.title or "",
-    })
+    # P1 ③：向频道在线成员广播新内容（仅成员、排除作者），触发前端「有 N 条新讨论」药丸
+    events.push_feed_new(db, community.id, "post", post.id, exclude_user_id=user.id)
     return ok(data=post, message="发帖成功")
 
 

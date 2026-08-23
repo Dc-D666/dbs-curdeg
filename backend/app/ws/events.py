@@ -17,6 +17,10 @@ import asyncio
 import logging
 from typing import Any
 
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.models.member import Member
 from app.ws.manager import manager
 
 logger = logging.getLogger(__name__)
@@ -60,15 +64,39 @@ def push_event(user_id: int, event: str, data: dict[str, Any]) -> None:
         pass
 
 
-def push_broadcast(event: str, data: dict[str, Any]) -> None:
-    """向所有在线连接广播（P1 ③：频道新内容实时推送）；失败/无主循环静默。"""
+def push_to_members(user_ids: list[int], event: str, data: dict[str, Any]) -> None:
+    """向一组用户广播（仅在线连接会收到）；无主循环则静默。"""
     loop = _ws_loop
     if loop is None or loop.is_closed():
         return
     try:
-        asyncio.run_coroutine_threadsafe(manager.broadcast({"type": event, "data": data}), loop)
+        asyncio.run_coroutine_threadsafe(
+            manager.send_to_many(user_ids, {"type": event, "data": data}), loop
+        )
     except RuntimeError:
         pass
+
+
+def push_feed_new(
+    db: Session,
+    community_id: int,
+    kind: str,
+    post_id: int,
+    exclude_user_id: int | None = None,
+) -> None:
+    """P1 ③：向该频道在线成员广播新内容，且只推给成员（避免泄露给非成员），
+    默认排除作者本人。载荷不含正文/标题，仅用于前端浮动药丸计数。"""
+    stmt = select(Member.user_id).where(
+        Member.community_id == community_id, Member.is_blocked.is_(False)
+    )
+    member_ids = [uid for (uid,) in db.execute(stmt).all()]
+    if exclude_user_id is not None:
+        member_ids = [uid for uid in member_ids if uid != exclude_user_id]
+    push_to_members(
+        member_ids,
+        EVENT_FEED_NEW,
+        {"kind": kind, "community_id": community_id, "post_id": post_id},
+    )
 
 
 def notification_payload(n) -> dict[str, Any]:

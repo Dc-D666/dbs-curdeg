@@ -1,15 +1,40 @@
 <template>
   <Transition name="pill">
-    <button v-if="live.count > 0" class="new-pill" @click="view">
+    <button v-if="show" class="new-pill" @click="view">
       <span class="pill-dot" />有 {{ live.count }} 条新讨论，点击查看
     </button>
   </Transition>
 </template>
 
 <script setup lang="ts">
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { useLiveStore } from '@/stores/live'
 
+const route = useRoute()
 const live = useLiveStore()
+
+// 仅在信息流页顶部显示（首页/发现/频道/关注），避免设置页也弹
+const FEED_ROUTES = new Set(['home', 'discover', 'community', 'my-feed'])
+const isFeedRoute = computed(() => FEED_ROUTES.has(route.name as string))
+const show = computed(() => isFeedRoute.value && live.count > 0)
+
+// 自动消失：出现后 8s 若无点击则清零（F2）
+const autoDismiss = ref<ReturnType<typeof setTimeout> | null>(null)
+watch(
+  () => live.count,
+  (v) => {
+    if (autoDismiss.value) clearTimeout(autoDismiss.value)
+    if (v > 0) {
+      autoDismiss.value = setTimeout(() => {
+        live.reset()
+      }, 8000)
+    }
+  },
+)
+onBeforeUnmount(() => {
+  if (autoDismiss.value) clearTimeout(autoDismiss.value)
+})
 
 function view() {
   live.reset()

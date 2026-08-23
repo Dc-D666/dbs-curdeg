@@ -49,19 +49,19 @@ class ConnectionManager:
                 await self.disconnect(user_id, ws)
         return sent
 
-    async def broadcast(self, message: dict[str, Any]) -> None:
-        """向所有在线连接广播（P1 ③：频道新内容实时推送）。
+    async def send_to_many(self, user_ids: list[int], message: dict[str, Any]) -> None:
+        """并行向多个用户广播（P1 ③：频道新内容，仅在线成员）。
 
-        单 worker 进程内广播；跨进程需 Redis Pub/Sub（方案 D4，此处未启用）。
-        发送失败的连接即时清理。
+        每个用户与其多连接用 send_to_user 推送；gather 并行避免单个慢连接
+        阻塞整体广播；send_to_user 内部已捕获发送异常并清理坏连接，
+        return_exceptions=True 作为兜底。
         """
-        async with self._lock:
-            items = [(uid, ws) for uid, conns in self._connections.items() for ws in list(conns)]
-        for uid, ws in items:
-            try:
-                await ws.send_json(message)
-            except Exception:
-                await self.disconnect(uid, ws)
+        if not user_ids:
+            return
+        await asyncio.gather(
+            *(self.send_to_user(uid, message) for uid in user_ids),
+            return_exceptions=True,
+        )
 
     def online_count(self) -> int:
         return sum(len(v) for v in self._connections.values())

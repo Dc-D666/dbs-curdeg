@@ -67,12 +67,11 @@ export function useGlobalShortcuts() {
     if (k === '/') {
       e.preventDefault()
       focusSearch()
-    } else if (k === 'j') {
+    } else if (k === 'j' || k === 'k') {
+      // 抽屉/灯箱打开时不触发 J/K，避免滚动背后的隐藏信息流（F3）
+      if (document.querySelector('.pd-mask') || document.querySelector('.lightbox')) return
       e.preventDefault()
-      navFeed(1)
-    } else if (k === 'k') {
-      e.preventDefault()
-      navFeed(-1)
+      navFeed(k === 'j' ? 1 : -1)
     }
   }
 
