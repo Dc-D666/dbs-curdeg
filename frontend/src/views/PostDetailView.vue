@@ -75,10 +75,12 @@
         </div>
 
         <div class="post-extra">
-          <t-button v-if="!summary" variant="text" size="small" :loading="summarizing" @click="genSummary">
-            <template #icon><AiIcon /></template> AI 摘要
+          <t-button v-if="!summary && canSummarize" variant="text" size="small" :loading="summarizing" @click="genSummary">
+            <template #icon><AiIcon /></template> 生成 AI 核心摘要
           </t-button>
-          <p v-else class="ai-summary"><b>AI 摘要：</b>{{ summary }}</p>
+          <div v-else-if="summary" class="ai-summary">
+            <b>✨ 核心摘要：</b><span class="ai-summary-text">{{ typedSummary }}<span v-if="typing" class="ai-cursor">▍</span></span>
+          </div>
         </div>
 
         <div v-if="attachments.length" class="attachments">
@@ -218,7 +220,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { AiIcon, ArrowLeftIcon } from 'tdesign-icons-vue-next'
 import { communityApi } from '@/api/community'
@@ -272,6 +274,13 @@ const reportDialog = ref(false)
 const reportSending = ref(false)
 const reportReason = ref('违规')
 const reportDetail = ref('')
+
+// AI 伴读（B）：长帖(>500字)一键生成核心摘要 + 打字机流式效果
+const bodyLen = computed(() => (post.value?.source_markdown ?? '').length)
+const canSummarize = computed(() => bodyLen.value > 500)
+const typedSummary = ref('')
+const typing = ref(false)
+let summaryTimer: ReturnType<typeof setInterval> | null = null
 
 // 评论
 const comments = ref<CommentItem[]>([])
@@ -356,6 +365,9 @@ onMounted(async () => {
     loading.value = false
   }
   loadComments(1)
+})
+onBeforeUnmount(() => {
+  if (summaryTimer) clearInterval(summaryTimer)
 })
 
 async function loadComments(page: number) {
@@ -525,6 +537,23 @@ async function genSummary() {
   try {
     const r = await postApi.aiSummary(post.value.id)
     summary.value = r.summary
+    // 打字机流式呈现摘要
+    typedSummary.value = ''
+    typing.value = true
+    if (summaryTimer) clearInterval(summaryTimer)
+    let i = 0
+    const text = r.summary
+    summaryTimer = setInterval(() => {
+      i += 1
+      typedSummary.value = text.slice(0, i)
+      if (i >= text.length) {
+        if (summaryTimer) {
+          clearInterval(summaryTimer)
+          summaryTimer = null
+        }
+        typing.value = false
+      }
+    }, 28)
   } catch (e) {
     toast(e instanceof Error ? e.message : '生成摘要失败', 'error')
   } finally {
@@ -919,6 +948,22 @@ async function onDeletePost() {
   font-size: var(--fs-caption);
   line-height: 1.6;
   color: var(--text-2);
+}
+.ai-summary-text {
+  word-break: break-word;
+}
+.ai-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 12px;
+  background: currentColor;
+  vertical-align: -2px;
+  animation: ai-blink 0.8s steps(1) infinite;
+}
+@keyframes ai-blink {
+  50% {
+    opacity: 0;
+  }
 }
 .attachments {
   margin-top: var(--sp-3);
