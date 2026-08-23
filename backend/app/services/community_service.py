@@ -74,9 +74,17 @@ def create_community(db: Session, user: User, payload: CreateCommunityRequest) -
     return community_out(db, community, current_user_id=user.id)
 
 
-def list_communities(db: Session, page: int, page_size: int, current_user_id: int | None) -> dict:
-    """频道列表（含我加入的标记）。"""
-    stmt = select(Community).where(Community.status == 0).order_by(Community.id.desc())
+def list_communities(
+    db: Session, page: int, page_size: int, current_user_id: int | None, sort: str = "latest"
+) -> dict:
+    """频道列表（含我加入的标记）。sort=latest 按创建倒序；sort=hot 按热度（成员数+帖子数）倒序。"""
+    base = select(Community).where(Community.status == 0)
+    if sort == "hot":
+        stmt = base.order_by(
+            (Community.member_count + Community.post_count).desc(), Community.id.desc()
+        )
+    else:
+        stmt = base.order_by(Community.id.desc())
     total = db.execute(select(Community.id).where(Community.status == 0)).scalars().count() if False else len(
         db.execute(select(Community.id).where(Community.status == 0)).scalars().all()
     )

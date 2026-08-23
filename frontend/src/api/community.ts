@@ -108,8 +108,8 @@ export interface MyChannels {
 }
 
 export const communityApi = {
-  list(page = 1, pageSize = 20) {
-    return request<Page<Community>>({ url: '/communities', params: { page, page_size: pageSize } })
+  list(page = 1, pageSize = 20, sort: 'latest' | 'hot' = 'latest') {
+    return request<Page<Community>>({ url: '/communities', params: { page, page_size: pageSize, sort } })
   },
   mine() {
     return request<MyChannels>({ url: '/communities/mine' })

@@ -27,12 +27,13 @@ def create_community(
 def list_communities(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=50),
+    sort: str = Query("latest", pattern="^(latest|hot)$"),
     user: User | None = Depends(get_current_user_optional),
     db: Session = Depends(get_db),
 ):
-    """频道列表（公开，含我加入标记）。"""
+    """频道列表（公开，含我加入标记）。sort=hot 按热度倒序。"""
     uid = user.id if user else None
-    return ok(data=community_service.list_communities(db, page, page_size, uid))
+    return ok(data=community_service.list_communities(db, page, page_size, uid, sort))
 
 
 @router.get("/mine")
