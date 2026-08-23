@@ -62,7 +62,8 @@ export function useGlobalShortcuts() {
   }
 
   function onKeydown(e: KeyboardEvent) {
-    if (isEditable(e.target)) return
+    // 输入态/IME 组合期间不触发全局快捷键（J/K// 等字符正常输入）
+    if (e.isComposing || isEditable(e.target)) return
     const k = e.key
     if (k === '/') {
       e.preventDefault()

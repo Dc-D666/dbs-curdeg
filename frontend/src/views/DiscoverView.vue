@@ -10,7 +10,7 @@
       <t-input
         v-model="searchQ"
         class="search-input"
-        placeholder="搜索帖子（支持中文关键词）"
+        placeholder="搜索帖子、话题或用户…"
         maxlength="64"
         clearable
         @enter="doSearch()"

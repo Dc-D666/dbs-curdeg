@@ -21,6 +21,9 @@
     <!-- 实时新内容浮动药丸（P1 ③） -->
     <NewPostsPill />
 
+    <!-- 断网/离线横幅（Step 3） -->
+    <NetworkBanner />
+
     <!-- 帖子阅读右侧抽屉（P1 ①：保持一致上下文） -->
     <PostDrawer />
   </div>
@@ -37,6 +40,7 @@ import { useGlobalShortcuts } from '@/composables/useGlobalShortcuts'
 import AiBot from '@/components/AiBot.vue'
 import PostDrawer from '@/components/PostDrawer.vue'
 import NewPostsPill from '@/components/NewPostsPill.vue'
+import NetworkBanner from '@/components/NetworkBanner.vue'
 
 const route = useRoute()
 const notif = useNotificationStore()

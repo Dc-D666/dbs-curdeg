@@ -19,10 +19,20 @@
   --text-1: rgba(0, 0, 0, 0.9); /* 主文字 */
   --text-2: rgba(0, 0, 0, 0.6); /* 次级文字 */
   --text-3: rgba(0, 0, 0, 0.4); /* 弱文字/占位 */
-  --bg-page: #f3f3f3;
+  --bg-page: #f8fafc;
   --bg-card: #ffffff;
   --bg-secondary: #f3f3f3; /* 次级容器（评论回复区等） */
   --border: #e7e7e7; /* 1px 细分割线 */
+
+  /* 分层表面色（现代 UI slate 系） */
+  --surface-page: #f8fafc;
+  --surface: #ffffff;
+  --surface-2: #f3f3f3;
+  --surface-elevated: #ffffff; /* 抽屉/弹窗/浮层 */
+
+  /* 微边框（带透明度，避免生硬纯灰） */
+  --border-soft: rgba(15, 23, 42, 0.08);
+  --border-strong: rgba(15, 23, 42, 0.16);
 
   /* 功能色（克制使用） */
   --danger: #d54941;
@@ -33,6 +43,11 @@
   --radius-btn: 6px;
   --radius-card: 12px;
   --radius-overlay: 16px;
+
+  /* 圆角层级：容器 rounded-2xl / 控件 rounded-xl / 徽章 rounded-full */
+  --radius-container: 16px;
+  --radius-control: 12px;
+  --radius-pill: 999px;
 
   /* 间距 token（8px 基数） */
   --sp-1: 4px;
@@ -53,6 +68,10 @@
     0 2px 4px -1px rgba(0, 0, 0, 0.12);
   --shadow-overlay: 0 3px 14px 2px rgba(0, 0, 0, 0.05),
     0 8px 10px 1px rgba(0, 0, 0, 0.06), 0 5px 5px -3px rgba(0, 0, 0, 0.1);
+
+  /* 阴影层级：平滑弥散（hover 用 --shadow-md） */
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06), 0 1px 3px rgba(15, 23, 42, 0.1);
+  --shadow-md: 0 2px 6px rgba(15, 23, 42, 0.1), 0 4px 16px rgba(15, 23, 42, 0.08);
 
   /* 动效（TDesign easing） */
   --anim-ease: cubic-bezier(0.38, 0, 0.24, 1);

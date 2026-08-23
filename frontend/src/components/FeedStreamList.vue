@@ -32,7 +32,9 @@ import { toast } from '@/utils/toast'
 const props = defineProps<{ view: 'all' | 'hot' | 'mine' }>()
 
 const emptyText =
-  props.view === 'mine' ? '关注的频道还没有动态' : '还没有帖子'
+  props.view === 'mine'
+    ? '你关注的频道还没有新动态，去发现更多好内容吧！'
+    : '这里还没有任何讨论，成为第一个开帖分享的人吧！'
 
 const items = ref<PostItem[]>([])
 const cursor = ref<string | null>(null)

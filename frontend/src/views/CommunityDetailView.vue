@@ -82,7 +82,7 @@
         </div>
 
         <SkeletonFeed v-if="feedLoading && feedItems.length === 0" :count="2" />
-        <EmptyState v-else-if="feedItems.length === 0" text="暂无帖子" />
+        <EmptyState v-else-if="feedItems.length === 0" text="这里还没有任何讨论，成为第一个开帖分享的人吧！" />
         <div v-else class="feed-list">
           <FeedCard v-for="p in feedItems" :key="p.id" :post="p" />
         </div>

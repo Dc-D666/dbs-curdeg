@@ -787,8 +787,9 @@ async function onDeletePost() {
 }
 .post-text {
   margin: 0 0 var(--sp-2);
-  font-size: var(--fs-body);
+  font-size: 15px;
   line-height: 1.7;
+  letter-spacing: 0.01em;
   white-space: pre-wrap;
   word-break: break-word;
 }

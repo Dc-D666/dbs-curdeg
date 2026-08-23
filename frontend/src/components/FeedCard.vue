@@ -186,8 +186,8 @@ async function toggleLike() {
 <style scoped>
 .feed-card {
   background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-container);
   padding: var(--sp-4);
   cursor: pointer;
   transition: box-shadow var(--anim-duration) var(--anim-ease),
@@ -195,7 +195,7 @@ async function toggleLike() {
 }
 .feed-card:hover {
   border-color: var(--brand);
-  box-shadow: var(--shadow-1);
+  box-shadow: var(--shadow-md);
 }
 .fc-head {
   display: flex;

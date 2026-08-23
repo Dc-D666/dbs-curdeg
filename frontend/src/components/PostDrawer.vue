@@ -29,11 +29,18 @@ const postId = computed(() => drawer.postId)
 
 function close() {
   drawer.close()
+  // 弹出打开时推入的历史标记：让浏览器返回键不再滞留一层“幽灵”历史
+  if (window.history.state?.postDrawer) {
+    window.history.back()
+  }
 }
 
-// 打开抽屉时锁定页面滚动（避免背景信息流滚动），关闭时恢复
-watch(postId, (v) => {
+// 打开抽屉：锁定页面滚动 + 推入历史标记（浏览器返回键可关闭抽屉）
+watch(postId, (v, old) => {
   document.body.style.overflow = v ? 'hidden' : ''
+  if (v !== null && old === null) {
+    window.history.pushState({ postDrawer: true }, '')
+  }
 })
 
 // Esc 关闭抽屉（若灯箱开着则交给灯箱，避免误关）
@@ -42,8 +49,20 @@ function onKey(e: KeyboardEvent) {
   if (document.querySelector('.lightbox')) return
   if (postId.value) close()
 }
-onMounted(() => window.addEventListener('keydown', onKey))
-onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
+
+// 浏览器返回/侧滑返回：关闭抽屉而不是退回上一页
+function onPopstate() {
+  if (postId.value !== null) drawer.close()
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', onKey)
+  window.addEventListener('popstate', onPopstate)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKey)
+  window.removeEventListener('popstate', onPopstate)
+})
 </script>
 
 <style scoped>

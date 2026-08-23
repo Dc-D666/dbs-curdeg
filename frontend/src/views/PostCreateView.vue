@@ -10,7 +10,7 @@
     <section class="panel">
       <div class="field">
         <label class="field-label">标题</label>
-        <t-input v-model.trim="form.title" size="large" maxlength="128" placeholder="一句话说清楚" clearable />
+        <t-input v-model.trim="form.title" size="large" maxlength="128" placeholder="用一句话概括你的核心观点/疑问（如：如何在 Vue 3 中做性能调优？）" clearable />
         <div class="ai-bar">
           <span class="ai-bar-label"><AiIcon class="ai-bar-cal-icon" /> AI 帮写</span>
           <t-button size="small" variant="outline" :loading="aiBusy === 'title'" :disabled="!!aiBusy" @click="aiRun('title')">
