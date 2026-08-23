@@ -1,6 +1,6 @@
 <template>
   <main class="detail" :class="{ wb: isWide }">
-    <header class="page-header">
+    <header v-if="!isWide" class="page-header">
       <router-link to="/discover" class="back">
         <ArrowLeftIcon class="back-icon" /> 发现
       </router-link>
@@ -166,7 +166,7 @@
 
       <!-- 三栏宽屏工作台（桌面 ≥1024px） -->
       <template v-else>
-        <div class="wb">
+        <div class="wb-grid">
           <!-- 左栏：社区切换 + 版块树 -->
           <aside class="wb-left">
             <div class="wb-rail-title">我的频道</div>
@@ -938,7 +938,7 @@ async function onDissolve() {
   margin: 0;
   padding: 0;
 }
-.wb {
+.wb-grid {
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr) 300px;
   height: calc(100vh - var(--nav-height));
