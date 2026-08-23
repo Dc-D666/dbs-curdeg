@@ -8,8 +8,8 @@
     <EmptyState
       v-else-if="items.length === 0 && !loading"
       :text="emptyText"
-      action-text="去发现频道"
-      to="/discover"
+      :action-text="emptyActionText"
+      :to="emptyActionTo"
     />
     <div v-else class="feed-list">
       <FeedCard v-for="p in items" :key="p.id" :post="p" show-community />
@@ -22,19 +22,32 @@
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import FeedCard from '@/components/FeedCard.vue'
 import SkeletonFeed from '@/components/SkeletonFeed.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import { postApi, type PostItem } from '@/api/post'
 import { toast } from '@/utils/toast'
 
-const props = defineProps<{ view: 'all' | 'hot' | 'mine' }>()
+const props = withDefaults(
+  defineProps<{
+    view: 'all' | 'hot' | 'mine' | 'joined'
+    emptyText?: string
+    emptyActionText?: string
+    emptyActionTo?: string
+  }>(),
+  { emptyText: '', emptyActionText: '', emptyActionTo: '' },
+)
 
-const emptyText =
-  props.view === 'mine'
-    ? '你关注的频道还没有新动态，去发现更多好内容吧！'
-    : '这里还没有任何讨论，成为第一个开帖分享的人吧！'
+const emptyText = computed(
+  () =>
+    props.emptyText ||
+    (props.view === 'mine' || props.view === 'joined'
+      ? '你加入/关注的频道还没有新动态，去发现更多好内容吧！'
+      : '这里还没有任何讨论，成为第一个开帖分享的人吧！'),
+)
+const emptyActionText = computed(() => props.emptyActionText || '去发现频道')
+const emptyActionTo = computed(() => props.emptyActionTo || '/discover')
 
 const items = ref<PostItem[]>([])
 const cursor = ref<string | null>(null)
@@ -61,6 +74,7 @@ function onLiveRefresh() {
 function currentFeed(cursorValue: string | null, pageSize = 20) {
   if (props.view === 'hot') return postApi.globalFeed('hot', cursorValue, pageSize)
   if (props.view === 'mine') return postApi.meFeed(cursorValue, pageSize)
+  if (props.view === 'joined') return postApi.myJoinedFeed(cursorValue, pageSize)
   return postApi.globalFeed('latest', cursorValue, pageSize)
 }
 

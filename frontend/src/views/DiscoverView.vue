@@ -83,7 +83,7 @@
       <t-tabs v-model="activeTab" class="feed-tabs" lazy>
         <t-tab-panel value="mine" label="已加入的最新">
           <template v-if="tokenStore.access">
-            <FeedStreamList view="mine" />
+            <FeedStreamList view="joined" empty-text="你还没有加入频道，从热门榜挑一个吧" />
           </template>
           <EmptyState v-else text="登录后查看你加入频道的动态" action-text="去登录" to="/login" />
         </t-tab-panel>

@@ -469,6 +469,7 @@ async function onJoin() {
   try {
     await communityApi.join(props.cid)
     community.value = await communityApi.get(props.cid)
+    loadMyChannels() // 刷新左栏/顶部我的频道列表
   } catch (e) {
     toast(e instanceof Error ? e.message : '操作失败', 'error')
   } finally {
@@ -481,6 +482,7 @@ async function onLeave() {
   try {
     await communityApi.leave(props.cid)
     community.value = await communityApi.get(props.cid)
+    loadMyChannels() // 退出后从我的频道列表移除
   } catch (e) {
     toast(e instanceof Error ? e.message : '操作失败', 'error')
   }

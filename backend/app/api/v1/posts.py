@@ -84,6 +84,17 @@ def my_feed(
     return ok(data=post_service.my_feed(db, user, cursor, page_size))
 
 
+@router.get("/me/joined-feed")
+def my_joined_feed(
+    cursor: str | None = Query(None),
+    page_size: int = Query(20, ge=1, le=50),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """我加入的频道的帖子流（latest，按成员关系）。"""
+    return ok(data=post_service.my_joined_feed(db, user, cursor, page_size))
+
+
 @router.get("/posts/{post_id}")
 def get_post(
     post_id: int,

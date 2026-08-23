@@ -321,6 +321,42 @@ def my_feed(
     }
 
 
+def my_joined_feed(
+    db: Session,
+    user: User,
+    cursor: str | None,
+    page_size: int,
+) -> dict:
+    """我加入的频道的帖子流（latest，按成员关系，非关注关系）。"""
+    last_id = int(cursor) if cursor and cursor.isdigit() else None
+    joined = db.execute(
+        select(Member.community_id).where(
+            Member.user_id == user.id,
+            Member.is_blocked.is_(False),
+        )
+    ).scalars().all()
+    if not joined:
+        return {"items": [], "next_cursor": None, "has_more": False}
+    stmt = (
+        select(Post)
+        .where(
+            Post.community_id.in_(joined),
+            Post.status == POST_STATUS_NORMAL,
+        )
+    )
+    if last_id:
+        stmt = stmt.where(Post.id < last_id)
+    stmt = stmt.order_by(Post.id.desc())
+    posts = db.execute(stmt.limit(page_size)).scalars().all()
+    has_more = len(posts) == page_size
+    next_cursor = str(posts[-1].id) if has_more and posts else None
+    return {
+        "items": post_outs(db, posts, user.id),
+        "next_cursor": next_cursor,
+        "has_more": has_more,
+    }
+
+
 # ---------- 组装 ----------
 
 

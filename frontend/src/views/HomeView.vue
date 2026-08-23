@@ -1,5 +1,5 @@
 <template>
-  <main class="home">
+  <main class="home" :class="{ wide: isWide }">
     <header class="home-header">
       <h1 class="brand">SDUdiscord</h1>
       <nav v-if="auth.user" class="nav">
@@ -35,7 +35,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import ChannelWorkspace from '@/components/ChannelWorkspace.vue'
 import { communityApi } from '@/api/community'
@@ -49,6 +49,12 @@ const router = useRouter()
 // 首页更新时间：构建时由 Vite define 注入（__BUILD_TIME__），显示为北京时间。
 // 服务器 cron 每次 push 都会重编前端，因此该时间可用于确认部署是否生效。
 const buildTime = ref(formatBeijing(__BUILD_TIME__))
+
+// 桌面宽屏判定：≥1024px 时三栏工作台全宽铺开
+const isWide = ref(window.innerWidth >= 1024)
+function onResize() {
+  isWide.value = window.innerWidth >= 1024
+}
 
 // 工作台默认频道：最近访问记忆 → 无则我加入的第一个
 const LAST_CHANNEL_KEY = 'sdu_last_channel_id'
@@ -86,6 +92,10 @@ function onChangeChannel(id: number) {
 onMounted(() => {
   auth.fetchMe()
   pickDefault()
+  window.addEventListener('resize', onResize)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', onResize)
 })
 
 function onLogout() {
@@ -99,6 +109,19 @@ function onLogout() {
   max-width: var(--page-max);
   margin: 0 auto;
   padding: 0 var(--sp-4) var(--sp-6);
+}
+/* 桌面宽屏：三栏工作台全宽铺开，header/更新时间保持居中 */
+.home.wide {
+  max-width: none;
+  padding: 0;
+}
+.home.wide .home-header,
+.home.wide .deploy-time {
+  max-width: var(--page-max);
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: var(--sp-4);
+  padding-right: var(--sp-4);
 }
 .home-header {
   display: flex;

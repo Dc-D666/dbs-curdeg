@@ -92,6 +92,9 @@ export const postApi = {
   meFeed(cursor?: string | null, pageSize = 20) {
     return request<FeedResult>({ url: '/me/feed', params: { cursor: cursor ?? undefined, page_size: pageSize } })
   },
+  myJoinedFeed(cursor?: string | null, pageSize = 20) {
+    return request<FeedResult>({ url: '/me/joined-feed', params: { cursor: cursor ?? undefined, page_size: pageSize } })
+  },
   // 帖子
   get(id: number) {
     return request<PostItem>({ url: `/posts/${id}` })
