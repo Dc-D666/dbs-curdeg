@@ -450,12 +450,19 @@ async function loadAll() {
 
 watch(() => props.cid, () => loadAll())
 
+// P1 ③：收到「新讨论」药丸的查看请求 → 重拉当前版块首屏
+function onLiveRefresh() {
+  if (activeBoard.value) loadFeed(true)
+}
+
 onMounted(() => {
   loadAll()
   loadMyChannels()
+  window.addEventListener('live:refresh', onLiveRefresh)
   window.addEventListener('resize', onResize)
 })
 onBeforeUnmount(() => {
+  window.removeEventListener('live:refresh', onLiveRefresh)
   window.removeEventListener('resize', onResize)
 })
 

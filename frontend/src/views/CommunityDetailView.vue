@@ -478,12 +478,6 @@ function openHotPost(id: number) {
   else router.push(`/p/${id}`)
 }
 
-function switchSort(sort: 'latest' | 'hot') {
-  if (feedSort.value === sort) return
-  feedSort.value = sort
-  loadFeed(true)
-}
-
 watch(feedSort, (s) => {
   loadFeed(true)
 })
