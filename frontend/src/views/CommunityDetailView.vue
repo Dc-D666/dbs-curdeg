@@ -68,6 +68,12 @@
       </section>
 
       <section v-if="activeBoardInfo" class="panel feed-panel">
+        <QuickComposer
+          v-if="community.is_member"
+          :cid="cid"
+          :bid="activeBoard ?? 0"
+          @posted="onQuickPosted"
+        />
         <div class="feed-toolbar">
           <t-radio-group v-model="feedSort" variant="default-filled" size="small">
             <t-radio-button value="latest">最新</t-radio-button>
@@ -182,6 +188,7 @@ import { ArrowLeftIcon } from 'tdesign-icons-vue-next'
 import { communityApi, type Community, type JoinRequestItem, type Member, type TopicItem } from '@/api/community'
 import { postApi, type PostItem } from '@/api/post'
 import FeedCard from '@/components/FeedCard.vue'
+import QuickComposer from '@/components/QuickComposer.vue'
 import SkeletonFeed from '@/components/SkeletonFeed.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import { request, tokenStore } from '@/api/http'
@@ -308,6 +315,11 @@ async function loadFeed(reset = false) {
   } finally {
     feedLoading.value = false
   }
+}
+
+// Quick Composer 发布成功后重拉当前版块首屏
+function onQuickPosted() {
+  loadFeed(true)
 }
 
 function switchSort(sort: 'latest' | 'hot') {

@@ -229,6 +229,7 @@ import { tokenStore } from '@/api/http'
 import { request } from '@/api/http'
 import { useAuthStore } from '@/stores/auth'
 import { useInteractionStore } from '@/stores/interaction'
+import { useUndoStore } from '@/stores/undo'
 import { toast } from '@/utils/toast'
 import { confirmDialog } from '@/utils/confirm'
 import { formatTime } from '@/utils/time'
@@ -243,6 +244,7 @@ const props = withDefaults(defineProps<{ postId?: number; embedded?: boolean }>(
 const pid = computed(() => props.postId ?? Number(route.params.id))
 const auth = useAuthStore()
 const interaction = useInteractionStore()
+const undo = useUndoStore()
 
 const post = ref<PostItem | null>(null)
 const loading = ref(true)
@@ -421,6 +423,17 @@ async function toggleFollow() {
       request: () => (wasFollowed ? postApi.unfollow(p.community_id) : postApi.follow(p.community_id)),
       onSuccess: (r) => {
         p.is_followed = r.followed
+        // 取消关注：提供 5s 撤销（立即执行型）
+        if (wasFollowed) {
+          undo.notify('已取消关注频道', async () => {
+            try {
+              const rr = await postApi.follow(p.community_id)
+              p.is_followed = rr.followed
+            } catch (e) {
+              toast(e instanceof Error ? e.message : '恢复关注失败', 'error')
+            }
+          })
+        }
       },
     })
   } catch (e) {
@@ -686,14 +699,48 @@ function canDeleteComment(c: CommentItem): boolean {
 }
 
 async function deleteComment(commentId: number) {
-  if (!(await confirmDialog('删除评论', '确定删除该评论？'))) return
-  try {
-    await postApi.deleteComment(commentId)
-    if (post.value) post.value.comment_count = Math.max(0, post.value.comment_count - 1)
-    await loadComments(1)
-  } catch (e) {
-    toast(e instanceof Error ? e.message : '删除失败', 'error')
+  if (!post.value) return
+  // 定位评论：顶层 or 楼中楼，记录位置以便撤销恢复
+  let list: CommentItem[] | null = null
+  let idx = -1
+  let removed: CommentItem | undefined
+  const topIdx = comments.value.findIndex((c) => c.id === commentId)
+  if (topIdx >= 0) {
+    list = comments.value
+    idx = topIdx
+    removed = comments.value[topIdx]
+  } else {
+    for (const st of replyMap.value.values()) {
+      const i = st.items.findIndex((r) => r.id === commentId)
+      if (i >= 0) {
+        list = st.items
+        idx = i
+        removed = st.items[i]
+        break
+      }
+    }
   }
+  if (!list || !removed || idx < 0) return
+
+  // 延迟执行型：先移除 UI + 减计数，5s 内可撤销（不调 API），超时才真正删除
+  const target = removed
+  list.splice(idx, 1)
+  post.value.comment_count = Math.max(0, post.value.comment_count - 1)
+
+  const restore = () => {
+    list!.splice(Math.min(idx, list!.length), 0, target)
+    post.value && post.value.comment_count++
+  }
+  const commit = async () => {
+    try {
+      await postApi.deleteComment(target.id)
+    } catch (e) {
+      toast(e instanceof Error ? e.message : '删除失败', 'error')
+    }
+  }
+  undo.notify('已删除评论', restore, () => {
+    void commit()
+  })
 }
 
 async function onToggleTop() {
