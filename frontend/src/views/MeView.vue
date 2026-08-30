@@ -13,8 +13,8 @@
         <template #icon>{{ initial }}</template>
       </t-avatar>
       <div class="profile-main">
-        <p class="nickname">{{ auth.user?.nickname || auth.user?.username }}</p>
-        <p class="meta">@{{ auth.user?.username }} · 注册于 {{ createdDate }}</p>
+        <p class="nickname">{{ accountName }}</p>
+        <p class="meta">@{{ accountName }} · 注册于 {{ createdDate || '—' }}</p>
       </div>
     </section>
 
@@ -95,7 +95,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { ArrowLeftIcon, ChatIcon, ChevronRightIcon, DashboardIcon, KeyIcon, NotificationIcon, StarIcon, UserIcon, UsergroupIcon } from 'tdesign-icons-vue-next'
 import { useAuthStore } from '@/stores/auth'
 import { confirmDialog } from '@/utils/confirm'
@@ -103,7 +103,13 @@ import { toast } from '@/utils/toast'
 
 const auth = useAuthStore()
 const initial = computed(() => (auth.user?.nickname || auth.user?.username || 'U').slice(0, 1).toUpperCase())
+const accountName = computed(() => auth.user?.nickname || auth.user?.username || '未登录')
 const createdDate = computed(() => (auth.user?.created_at || '').slice(0, 10))
+
+// 进入个人中心时确保用户态已拉取，避免账号卡片显示空白
+onMounted(() => {
+  if (!auth.loaded) auth.fetchMe()
+})
 
 async function onLogout() {
   if (!(await confirmDialog('退出登录', '确定退出当前账号？'))) return

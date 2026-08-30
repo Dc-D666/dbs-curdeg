@@ -26,11 +26,12 @@ def list_members(
     community_id: int,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=50),
+    keyword: str | None = Query(None, max_length=64, description="按用户名或昵称模糊搜索"),
     db: Session = Depends(get_db),
 ):
-    """成员列表（公开）。"""
+    """成员列表（公开；支持按用户名/昵称模糊搜索）。"""
     community = _get_community(db, community_id)
-    return ok(data=community_service.list_members(db, community, page, page_size))
+    return ok(data=community_service.list_members(db, community, page, page_size, keyword))
 
 
 @router.get("/join-requests")

@@ -302,6 +302,28 @@ async function loadHotPosts() {
   }
 }
 
+/**
+ * 默认版块选择：优先挑"第一个当前用户能看到帖子的版块"，
+ * 避免落点撞上无内容的空版块（空态），造成信息流空白但「今日热议」有帖的割裂体验。
+ * 仅在频道已切换、且首次加载时探测一次，探测失败回退第一个版块。
+ */
+async function pickDefaultBoard(c: Community): Promise<number> {
+  const boards = c.boards
+  const probeN = Math.min(boards.length, 6)
+  const orders = boards
+    .slice(0, probeN)
+    .filter((b) => b.status !== 1) // 跳过已下架版块
+  for (const b of orders) {
+    try {
+      const data = await postApi.feed(c.id, 'latest', null, 1, b.id)
+      if (data.items.length > 0) return b.id
+    } catch {
+      /* ignore，继续探测下一个 */
+    }
+  }
+  return orders[0]?.id ?? boards[0].id
+}
+
 // 话题
 const topics = ref<TopicItem[]>([])
 const topicSort = ref<'hot' | 'latest'>('hot')
@@ -438,7 +460,7 @@ async function loadAll() {
     const c = await communityApi.get(id)
     if (props.cid !== id) return
     community.value = c
-    if (c.boards.length > 0) activeBoard.value = c.boards[0].id
+    if (c.boards.length > 0) activeBoard.value = await pickDefaultBoard(c)
     loadTopics()
     loadHotPosts()
   } catch {

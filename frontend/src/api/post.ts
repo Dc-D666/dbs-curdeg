@@ -95,6 +95,10 @@ export const postApi = {
   myJoinedFeed(cursor?: string | null, pageSize = 20) {
     return request<FeedResult>({ url: '/me/joined-feed', params: { cursor: cursor ?? undefined, page_size: pageSize } })
   },
+  // 他人主页「TA 的帖子」
+  userPosts(userId: number, cursor?: string | null, pageSize = 20) {
+    return request<FeedResult>({ url: `/users/${userId}/posts`, params: { cursor: cursor ?? undefined, page_size: pageSize } })
+  },
   // 帖子
   get(id: number) {
     return request<PostItem>({ url: `/posts/${id}` })

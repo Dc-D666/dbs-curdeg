@@ -141,8 +141,8 @@ export const communityApi = {
   createBoard(cid: number, data: { name: string; description?: string; sort?: number }) {
     return request<Board>({ url: `/communities/${cid}/boards`, method: 'POST', data })
   },
-  members(cid: number, page = 1, pageSize = 50) {
-    return request<Page<Member>>({ url: `/communities/${cid}/members`, params: { page, page_size: pageSize } })
+  members(cid: number, page = 1, pageSize = 50, keyword?: string) {
+    return request<Page<Member>>({ url: `/communities/${cid}/members`, params: { page, page_size: pageSize, keyword: keyword || undefined } })
   },
   joinRequests(cid: number, page = 1, pageSize = 20) {
     return request<Page<JoinRequestItem>>({ url: `/communities/${cid}/join-requests`, params: { page, page_size: pageSize } })

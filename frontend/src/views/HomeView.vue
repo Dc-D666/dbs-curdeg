@@ -14,7 +14,8 @@
       </nav>
     </header>
 
-    <p v-if="buildTime" class="deploy-time" title="前端构建/部署时间，每次 push 由 cron 自动更新">
+    <!-- 部署时间：仅当 URL 带 ?debug=1 时对开发者显示，避免暴露给终端用户 -->
+    <p v-if="isDebug && buildTime" class="deploy-time" title="前端构建/部署时间，每次 push 由 cron 自动更新">
       更新时间：{{ buildTime }}
     </p>
 
@@ -49,6 +50,8 @@ const router = useRouter()
 // 首页更新时间：构建时由 Vite define 注入（__BUILD_TIME__），显示为北京时间。
 // 服务器 cron 每次 push 都会重编前端，因此该时间可用于确认部署是否生效。
 const buildTime = ref(formatBeijing(__BUILD_TIME__))
+// 仅在本机开发者调试（URL 带 ?debug=1）时展示部署时间，避免面向终端用户暴露
+const isDebug = /[?&]debug=1/.test(window.location.search)
 
 // 桌面宽屏判定：≥1024px 时三栏工作台全宽铺开
 const isWide = ref(window.innerWidth >= 1024)

@@ -34,6 +34,24 @@
         📍 {{ user.province }} {{ user.city }}
       </p>
       <p class="follow-stats">关注 <b>{{ followCount }}</b> 人</p>
+
+      <t-tabs v-model="profileTab" class="profile-tabs" lazy>
+        <t-tab-panel value="posts" label="TA 的帖子">
+          <div v-if="postsLoading" class="state">加载中…</div>
+          <EmptyState v-else-if="posts.length === 0" text="TA 还没有发布帖子" />
+          <div v-else class="post-list">
+            <FeedCard v-for="p in posts" :key="p.id" :post="p" show-community @updated="reloadPosts" />
+          </div>
+          <t-button
+            v-if="postsHasMore"
+            variant="outline"
+            block
+            class="load-more"
+            :loading="postsLoading"
+            @click="loadMorePosts()"
+          >{{ postsLoading ? '加载中…' : '加载更多帖子' }}</t-button>
+        </t-tab-panel>
+      </t-tabs>
     </section>
 
     <div v-else class="state">用户不存在</div>
@@ -45,8 +63,11 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeftIcon } from 'tdesign-icons-vue-next'
 import { userApi, type PublicUser } from '@/api/user'
+import { postApi, type PostItem } from '@/api/post'
 import { useAuthStore } from '@/stores/auth'
 import { tokenStore } from '@/api/http'
+import FeedCard from '@/components/FeedCard.vue'
+import EmptyState from '@/components/EmptyState.vue'
 import { toast } from '@/utils/toast'
 
 const route = useRoute()
@@ -59,8 +80,46 @@ const following = ref(false)
 const followBusy = ref(false)
 const followCount = ref(0)
 
+// TA 的帖子
+const profileTab = ref<'posts'>('posts')
+const posts = ref<PostItem[]>([])
+const postsLoading = ref(false)
+const postsCursor = ref<string | null>(null)
+const postsHasMore = ref(false)
+
 const initial = computed(() => (user.value?.nickname || user.value?.username || 'U').slice(0, 1).toUpperCase())
 const createdDate = computed(() => (user.value?.created_at || '').slice(0, 10))
+
+async function loadPosts(reset = false) {
+  if (postsLoading.value) return
+  if (reset) {
+    posts.value = []
+    postsCursor.value = null
+    postsHasMore.value = false
+  }
+  postsLoading.value = true
+  try {
+    const data = await postApi.userPosts(uid, postsCursor.value, 20)
+    const seen = new Set(posts.value.map((p) => p.id))
+    posts.value = reset
+      ? data.items
+      : [...posts.value, ...data.items.filter((p) => !seen.has(p.id))]
+    postsCursor.value = data.next_cursor
+    postsHasMore.value = data.has_more
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '加载帖子失败', 'error')
+  } finally {
+    postsLoading.value = false
+  }
+}
+
+function loadMorePosts() {
+  loadPosts(false)
+}
+
+async function reloadPosts() {
+  await loadPosts(true)
+}
 
 onMounted(async () => {
   try {
@@ -70,6 +129,7 @@ onMounted(async () => {
   } finally {
     loading.value = false
   }
+  loadPosts(true)
   if (tokenStore.access && auth.user?.id !== uid) {
     userApi.followStatus(uid).then((r) => (following.value = r.following)).catch(() => {})
   }
@@ -169,6 +229,20 @@ async function toggleFollow() {
   margin: var(--sp-2) 0 0;
   font-size: var(--fs-caption);
   color: var(--text-3);
+}
+.profile-tabs {
+  margin-top: var(--sp-4);
+}
+.profile-tabs :deep(.t-tabs__panel) {
+  padding: 0;
+}
+.post-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+.load-more {
+  margin-top: var(--sp-3);
 }
 .t-active {
   color: var(--td-brand-color);

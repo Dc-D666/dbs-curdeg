@@ -138,8 +138,8 @@ import { timeAgo } from '@/utils/time'
 
 const router = useRouter()
 
-// 双 Tab：已加入的最新 / 全站热门
-const activeTab = ref<'mine' | 'hot'>('mine')
+// 双 Tab：已加入的最新 / 全站热门；游客无登录态，默认落到「全站热门」避免空态
+const activeTab = ref<'mine' | 'hot'>(tokenStore.access ? 'mine' : 'hot')
 
 // 全站最热门频道 Top10（横滑条）
 const hotChannels = ref<Community[]>([])

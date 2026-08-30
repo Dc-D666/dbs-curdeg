@@ -11,6 +11,17 @@
       <!-- 成员管理 -->
       <t-tab-panel value="members" label="成员管理">
         <div class="panel">
+          <div class="members-toolbar">
+            <t-input
+              v-model="memberKeyword"
+              class="member-search"
+              placeholder="按用户名 / 昵称搜索成员"
+              clearable
+              @enter="onMemberSearch"
+              @clear="onMemberSearch"
+            />
+            <t-button variant="outline" size="small" :loading="membersLoading" @click="onMemberSearch">搜索</t-button>
+          </div>
           <div class="member-row" v-for="m in members" :key="m.id">            <t-avatar :image="m.avatar_url || undefined" size="36px">
               <template #icon>{{ (m.user_nickname || m.nickname).slice(0, 1) }}</template>
             </t-avatar>
@@ -202,6 +213,8 @@ const members = ref<Member[]>([])
 const membersPage = ref(1)
 const membersTotal = ref(0)
 const membersHasMore = computed(() => members.value.length < membersTotal.value)
+const membersLoading = ref(false)
+const memberKeyword = ref('')
 const roles = ref<RoleItem[]>([])
 const ops = ref<OpLogItem[]>([])
 const msg = ref('')
@@ -265,10 +278,15 @@ function canManage(m: Member): boolean {
 
 async function loadMembers(page: number, append = false) {
   // 后端 members 接口 page_size 上限 50，超出返回 400 —— 分页拉取
-  const data = await communityApi.members(cid, page, 50)
-  members.value = append ? [...members.value, ...data.items] : data.items
-  membersTotal.value = data.total
-  for (const m of data.items) roleSel[m.user_id] = m.role_id ?? 0
+  membersLoading.value = true
+  try {
+    const data = await communityApi.members(cid, page, 50, memberKeyword.value.trim() || undefined)
+    members.value = append ? [...members.value, ...data.items] : data.items
+    membersTotal.value = data.total
+    for (const m of data.items) roleSel[m.user_id] = m.role_id ?? 0
+  } finally {
+    membersLoading.value = false
+  }
 }
 
 async function reloadMembers() {
@@ -279,6 +297,11 @@ async function reloadMembers() {
 async function loadMoreMembers() {
   membersPage.value += 1
   await loadMembers(membersPage.value, true)
+}
+
+async function onMemberSearch() {
+  membersPage.value = 1
+  await loadMembers(1)
 }
 
 onMounted(async () => {
@@ -527,6 +550,15 @@ async function exportOps() {
 .msg {
   color: var(--td-error-color);
   font-size: var(--fs-caption);
+}
+.members-toolbar {
+  display: flex;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
+.member-search {
+  flex: 1;
+  min-width: 0;
 }
 .member-row {
   display: flex;
