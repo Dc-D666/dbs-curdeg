@@ -1,5 +1,5 @@
-"""RAG 问答（阶段 6，POST /ai/qa）：帖子 embedding（存 posts.embedding JSON 列）
-+ 应用层余弦相似度召回 TopK → GLM 带引用回答。
+"""RAG 问答（阶段 6，POST /ai/qa）：帖子 embedding（存 post_embeddings 独立表，
+优化 08-29 从 posts.embedding JSON 列拆出）+ 应用层余弦相似度召回 TopK → GLM 带引用回答。
 
 - MySQL 5.7 无 VECTOR 类型 → JSON 数组 + Python 余弦（课设规模足够）
 - 懒构建：问答时对最近的候选帖子构建 embedding（无则调 API，缓存列）
@@ -17,6 +17,8 @@ from sqlalchemy.orm import Session
 
 from app.ai import llm_gateway
 from app.models.post import Post, POST_STATUS_NORMAL
+from app.models.post_content import PostContent
+from app.models.post_embedding import PostEmbedding
 
 logger = logging.getLogger(__name__)
 
@@ -26,11 +28,13 @@ MIN_SIM = 0.2             # 最小相似度阈值：低于此值的候选不进�
 TOP_K = 5
 
 
-def _embed_text(post: Post) -> list[float] | None:
-    """取帖子向量（已缓存直接用；否则调 API 并缓存到列）。"""
-    if post.embedding:
-        return post.embedding
-    text = f"{post.title}\n{post.source_markdown or ''}"[:EMBED_TEXT_LIMIT]
+def _embed_text(db: Session, post: Post) -> list[float] | None:
+    """取帖子向量（已缓存直接用；否则调 API 并缓存到 post_embeddings 表）。"""
+    row = db.get(PostEmbedding, post.id)
+    if row is not None and row.vector:
+        return row.vector
+    pc = db.get(PostContent, post.id)  # 08-29 垂直拆分：正文在 post_contents
+    text = f"{post.title}\n{(pc.source_markdown if pc else '') or ''}"[:EMBED_TEXT_LIMIT]
     if not text.strip():
         return None
     try:
@@ -38,7 +42,10 @@ def _embed_text(post: Post) -> list[float] | None:
     except Exception:
         logger.exception("embedding 构建失败 post_id=%s", post.id)
         return None
-    post.embedding = emb
+    if row is None:
+        db.add(PostEmbedding(post_id=post.id, vector=emb))
+    else:
+        row.vector = emb
     return emb
 
 
@@ -75,7 +82,7 @@ def qa(db: Session, question: str, community_id: int | None = None) -> dict:
 
     scored = []
     for p in _candidates(db, community_id):
-        emb = _embed_text(p)
+        emb = _embed_text(db, p)
         if emb:
             scored.append((_cosine(q_emb, emb), p))
     scored.sort(key=lambda x: x[0], reverse=True)
@@ -86,8 +93,14 @@ def qa(db: Session, question: str, community_id: int | None = None) -> dict:
     if not top:
         return {"answer": "暂无可参考的帖子内容，换个问题试试。", "references": []}
 
+    content_map = {
+        pc.post_id: (pc.source_markdown or "")
+        for pc in db.execute(
+            select(PostContent).where(PostContent.post_id.in_([p.id for _, p in top]))
+        ).scalars().all()
+    }
     context = "\n".join(
-        f"[{i + 1}]《{p.title}》(id={p.id}): {(p.source_markdown or '')[:300]}"
+        f"[{i + 1}]《{p.title}》(id={p.id}): {content_map.get(p.id, '')[:300]}"
         for i, (_, p) in enumerate(top)
     )
     messages = [
@@ -132,7 +145,7 @@ async def qa_stream(db: Session, question: str, community_id: int | None = None)
     scored: list[tuple[float, Post]] = []
     for i, p in enumerate(candidates, 1):
         # embedding 构建走线程池，避免阻塞事件循环；逐篇 yield 让进度实时刷出
-        emb = await asyncio.to_thread(_embed_text, p)
+        emb = await asyncio.to_thread(_embed_text, db, p)
         if emb:
             scored.append((_cosine(q_emb, emb), p))
         yield {"type": "progress", "stage": "embed", "done": i, "total": total}
@@ -150,8 +163,14 @@ async def qa_stream(db: Session, question: str, community_id: int | None = None)
     # embedding 阶段结束、LLM 生成前的空窗提示（否则前端会一直停在"N/N"直到答案出现）
     yield {"type": "progress", "stage": "answer"}
 
+    content_map = {
+        pc.post_id: (pc.source_markdown or "")
+        for pc in db.execute(
+            select(PostContent).where(PostContent.post_id.in_([p.id for _, p in top]))
+        ).scalars().all()
+    }
     context = "\n".join(
-        f"[{i + 1}]《{p.title}》(id={p.id}): {(p.source_markdown or '')[:300]}"
+        f"[{i + 1}]《{p.title}》(id={p.id}): {content_map.get(p.id, '')[:300]}"
         for i, (_, p) in enumerate(top)
     )
     messages = [

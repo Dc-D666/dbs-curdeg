@@ -35,7 +35,7 @@ def log_ai_call(
                     completion_tokens=completion_tokens,
                     latency_ms=latency_ms,
                     status=status[:16],
-                    error=error[:255],
+                    error=error[:512],
                 )
             )
             db.commit()

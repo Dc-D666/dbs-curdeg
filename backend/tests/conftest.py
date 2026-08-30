@@ -4,9 +4,15 @@
 - CI（无 MySQL/Redis）只跑 test_smoke.py + test_security.py（纯逻辑），其余自动 skip；
 - 本地集成测试：guild_test 库 **session 级建表一次**，每个测试外层事务 + savepoint 回滚。
 """
+import os
+
 import pytest
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import sessionmaker
+
+# 必须在导入 app 之前设置：测试环境关闭后台任务（清理/统计/审核循环），
+# 否则 while True 任务阻塞 TestClient 事件循环关闭导致 teardown 挂起
+os.environ.setdefault("BACKGROUND_TASKS_ENABLED", "false")
 
 from app.core.config import settings
 
@@ -63,8 +69,18 @@ def test_engine():
     from app.db import Base
     import app.models  # noqa: F401
 
-    Base.metadata.drop_all(engine)
-    Base.metadata.create_all(engine)
+    # FK 护栏：模型变更后残留的旧外键可能让 drop_all 拓扑序失效（1217），
+    # 关闭 FK 检查后按 metadata 顺序 drop/create，新建表仍带完整外键
+    with engine.connect() as conn:
+        conn.execute(text("SET FOREIGN_KEY_CHECKS=0"))
+        conn.commit()
+    try:
+        Base.metadata.drop_all(engine)
+        Base.metadata.create_all(engine)
+    finally:
+        with engine.connect() as conn:
+            conn.execute(text("SET FOREIGN_KEY_CHECKS=1"))
+            conn.commit()
     yield engine
     engine.dispose()
 
@@ -170,7 +186,7 @@ def _mock_llm_gateway(monkeypatch):
     from app.ai import llm_gateway
     from app.core.config import settings
 
-    def fake_chat(messages, model="", max_tokens=1024, temperature=0.7):
+    def fake_chat(messages, model="", max_tokens=1024, temperature=0.7, feature="chat", user_id=None):
         text = " ".join(str(m.get("content", "")) for m in messages)
         if "内容审核员" in text:
             return '{"pass": true, "type": "", "detail": ""}'
@@ -178,10 +194,10 @@ def _mock_llm_gateway(monkeypatch):
             return '{"decision": "pass", "detail": "测试复审通过"}'
         return "这是 AI 生成的测试回复。"
 
-    def fake_stream(messages, model="", max_tokens=2048, temperature=0.7):
+    def fake_stream(messages, model="", max_tokens=2048, temperature=0.7, feature="chat"):
         return iter(["AI 生成", " 的测试", "内容"])
 
-    def fake_embed(text):
+    def fake_embed(text, feature="embed", user_id=None):
         # 确定性伪向量：基于文本哈希
         import hashlib
 

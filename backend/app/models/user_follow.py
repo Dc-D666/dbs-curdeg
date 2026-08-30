@@ -5,7 +5,7 @@
 """
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, UniqueConstraint, func
+from sqlalchemy import BigInteger, DateTime, ForeignKey, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -16,6 +16,10 @@ class UserFollow(Base):
     __table_args__ = (UniqueConstraint("user_id", "target_user_id", name="uq_ufollow_uv"),)
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)  # 关注者
-    target_user_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)  # 被关注者
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )  # 关注者；单列索引被 uq_ufollow_uv 左前缀覆盖（优化 08-29）
+    target_user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )  # 被关注者
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

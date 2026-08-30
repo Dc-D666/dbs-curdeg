@@ -132,7 +132,7 @@ class BoardOut(BaseModel):
     name: str
     description: str
     sort: int
-    allow_post_role_ids: list
+    allow_post_role_ids: list = Field(default_factory=list)  # 由 board_role_perms 关系表聚合回填
     allow_anonymous: bool
     status: int
 

@@ -4,6 +4,7 @@ import pytest
 
 from app.core.config import settings
 from app.models.short_link import ShortLink
+from app.models.user import User
 from app.services.email_service import CODE_PREFIX
 
 
@@ -125,8 +126,12 @@ def test_resolve_expired_share_404(db_session):
     from app.core.response import NotFoundError
     from app.services.share_service import resolve_share
 
+    # FK 整改：creator_id 必须指向真实用户（原 creator_id=1 是不存在的哨兵）
+    creator = User(username="shareuser1", email="shareuser1@test.com", password_hash="x")
+    db_session.add(creator)
+    db_session.flush()
     db_session.add(ShortLink(
-        code="Expired1", target_type=2, target_id=1, creator_id=1,
+        code="Expired1", target_type=2, target_id=1, creator_id=creator.id,
         expires_at=datetime.now() - timedelta(hours=1),
     ))
     db_session.commit()
@@ -157,9 +162,12 @@ def test_cleanup_expired(db_session):
 
     from app.services.share_service import cleanup_expired
 
-    db_session.add(ShortLink(code="CleanUp1", target_type=2, target_id=1, creator_id=1,
+    creator = User(username="shareuser2", email="shareuser2@test.com", password_hash="x")
+    db_session.add(creator)
+    db_session.flush()
+    db_session.add(ShortLink(code="CleanUp1", target_type=2, target_id=1, creator_id=creator.id,
                              expires_at=datetime.now() - timedelta(hours=2)))
-    db_session.add(ShortLink(code="KeepAlive", target_type=2, target_id=1, creator_id=1,
+    db_session.add(ShortLink(code="KeepAlive", target_type=2, target_id=1, creator_id=creator.id,
                              expires_at=datetime.now() + timedelta(hours=2)))
     db_session.commit()
     n = cleanup_expired(db_session)

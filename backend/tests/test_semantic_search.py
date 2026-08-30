@@ -54,9 +54,9 @@ def test_semantic_recall_fills_keyword_gap(actx, monkeypatch):
         headers=_auth(owner),
     )
     pid = res.json()["data"]["id"]
-    # 直接给帖子设置 embedding 向量 [1,0,0]（模拟已构建）
-    post = db.get(Post, pid)
-    post.embedding = [1.0, 0.0, 0.0]
+    # 直接给帖子写入 embedding 向量 [1,0,0]（模拟已构建；优化 08-29 后向量在独立表）
+    from app.models.post_embedding import PostEmbedding
+    db.add(PostEmbedding(post_id=pid, vector=[1.0, 0.0, 0.0]))
     db.commit()
 
     # query 向量与帖子相同 → 余弦 = 1.0

@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.response import NotFoundError
 from app.models.post import Post, POST_STATUS_NORMAL
+from app.models.post_content import PostContent
 
 SUMMARY_PROMPT = (
     "你是社区内容摘要助手。用一句话（不超过 60 字）概括下面帖子的核心内容，"
@@ -20,7 +21,8 @@ def summarize_post(db: Session, post_id: int) -> str:
         raise NotFoundError("帖子不存在")
     from app.ai import llm_gateway
 
-    text = (post.source_markdown or "")[:1200]
+    pc = db.get(PostContent, post.id)  # 08-29 垂直拆分：正文在 post_contents
+    text = ((pc.source_markdown if pc else "") or "")[:1200]
     raw = llm_gateway.chat(
         [{"role": "user", "content": SUMMARY_PROMPT.format(title=post.title or "", content=text)}],
         max_tokens=120, temperature=0.3, feature="summary",

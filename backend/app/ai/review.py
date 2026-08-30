@@ -24,6 +24,7 @@ from app.core.config import settings
 from app.core.response import NotFoundError, ParamError, PermissionError_
 from app.models.comment import Comment
 from app.models.post import Post, POST_STATUS_BANNED, POST_STATUS_DELETED, POST_STATUS_NORMAL
+from app.models.post_content import PostContent
 from app.models.review import (
     CONTENT_COMMENT,
     CONTENT_POST,
@@ -143,7 +144,8 @@ def _review_post(db: Session, post_id: int) -> Review | None:
     if existing is not None:
         return None
 
-    text = (post.title or "") + "\n" + (post.source_markdown or "")
+    pc = db.get(PostContent, post.id)  # 08-29 垂直拆分：正文在 post_contents
+    text = (post.title or "") + "\n" + ((pc.source_markdown if pc else "") or "")
     from app.ai import llm_gateway
 
     raw = llm_gateway.chat(
@@ -168,7 +170,7 @@ def _review_post(db: Session, post_id: int) -> Review | None:
         notify(
             db, post.author_id, "system", "你的帖子未通过内容审核",
             summary=detail or "内容疑似违规，已自动下架，可在通知中点击申诉",
-            ref_id=post.id, community_id=post.community_id,
+            ref_id=post.id, ref_type="post", community_id=post.community_id,
         )
     db.add(review)
     db.commit()
@@ -215,7 +217,7 @@ def _review_comment(db: Session, comment_id: int) -> Review | None:
         notify(
             db, comment.author_id, "system", "你的评论未通过内容审核",
             summary=detail or "评论疑似违规，已被下架",
-            ref_id=comment.post_id,
+            ref_id=comment.post_id, ref_type="post",
         )
     db.add(review)
     db.commit()
@@ -258,7 +260,12 @@ def appeal(db: Session, user: User, review_id: int) -> Review:
 
     from app.ai import llm_gateway
 
-    text = f"{getattr(target, 'title', '') or ''}\n{getattr(target, 'source_markdown', None) or getattr(target, 'content', '') or ''}"
+    if review.content_type == CONTENT_POST:  # 08-29 垂直拆分：帖子正文在 post_contents
+        pc = db.get(PostContent, review.content_id)
+        body = ((pc.source_markdown if pc else "") or "")
+    else:
+        body = getattr(target, "content", "") or ""
+    text = f"{getattr(target, 'title', '') or ''}\n{body}"
     raw = llm_gateway.chat(
         [{"role": "user", "content": APPEAL_PROMPT.format(
             vtype=review.violation_type, detail=review.violation_detail,
@@ -276,7 +283,8 @@ def appeal(db: Session, user: User, review_id: int) -> Review:
         else:
             review.result = "AI 复审通过，评论已恢复"
             target.status = 0
-        notify(db, user.id, "system", "你的内容已通过复审", summary="内容已恢复可见", ref_id=getattr(target, "post_id", None) or review.content_id)
+        notify(db, user.id, "system", "你的内容已通过复审", summary="内容已恢复可见",
+               ref_id=getattr(target, "post_id", None) or review.content_id, ref_type="post")
     elif decision == "manual":
         review.status = REVIEW_MANUAL
         review.result = "转人工复审：" + detail

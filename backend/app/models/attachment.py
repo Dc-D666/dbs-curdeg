@@ -5,7 +5,7 @@
 """
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, Integer, String, func
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -19,7 +19,9 @@ class Attachment(Base):
     __tablename__ = "attachments"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    post_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    post_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("posts.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     media_type: Mapped[int] = mapped_column(Integer, default=ATTACH_IMAGE)  # 1图片 2视频 3文件
     url: Mapped[str] = mapped_column(String(255), nullable=False)
     thumb_url: Mapped[str] = mapped_column(String(255), default="")   # 缩略图/封面

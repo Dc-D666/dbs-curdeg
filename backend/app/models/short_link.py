@@ -5,7 +5,7 @@ target_type：1频道 2帖子 3用户
 """
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, Integer, String, func
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -21,8 +21,10 @@ class ShortLink(Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     code: Mapped[str] = mapped_column(String(16), nullable=False, unique=True, index=True)
     target_type: Mapped[int] = mapped_column(Integer, nullable=False)  # 1频道 2帖子 3用户
-    target_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    creator_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    target_id: Mapped[int] = mapped_column(BigInteger, nullable=False)  # 多态引用（无法挂 FK）
+    creator_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
     visit_count: Mapped[int] = mapped_column(Integer, default=0)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

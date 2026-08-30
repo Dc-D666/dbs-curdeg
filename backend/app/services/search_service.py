@@ -6,7 +6,7 @@
   3. 两路结果按 id 去重合并，再分页；
   4. 每次搜索写 search_records（热门词统计来源）。
 
-语义召回（embedding 余弦双路融合）为阶段 6 挂点：_semantic_recall() 默认返回空。
+语义召回（embedding 余弦双路融合，向量存 post_embeddings 表）：_semantic_recall() 默认返回空。
 """
 import html
 from datetime import datetime, timedelta
@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from app.core.response import ParamError
 from app.models.community import Community
 from app.models.post import Post, POST_STATUS_NORMAL
+from app.models.post_content import PostContent
 from app.models.search_record import SearchRecord
 from app.schemas.post import SearchPostOut
 
@@ -74,7 +75,7 @@ def search_posts(
         by_id = {p.id: p for p in posts}
         posts = [by_id[i] for i in page_ids if i in by_id]
 
-    # 语义召回挂点（阶段 6 接入 embedding 后融合）
+    # 语义召回挂点（阶段 6 接入 embedding 后融合，向量读 post_embeddings 表）
     # semantic_ids = _semantic_recall(db, q, community_id)
 
     items = _search_outs(db, posts, q)
@@ -116,9 +117,13 @@ def hot_keywords(db: Session, limit: int = HOT_LIMIT) -> list[dict]:
 
 def _fulltext_ids(db: Session, q: str, community_id: int | None) -> list[int]:
     """FULLTEXT MATCH...AGAINST（ngram 解析器）；无索引（测试库）时静默降级。"""
+    # 08-29 垂直拆分后正文在 post_contents：标题/正文两路 FULLTEXT UNION
     sql = (
         "SELECT id FROM posts "
-        "WHERE MATCH(title, source_markdown) AGAINST (:q IN NATURAL LANGUAGE MODE) AND status = 0"
+        "WHERE MATCH(title) AGAINST (:q IN NATURAL LANGUAGE MODE) AND status = 0 "
+        "UNION "
+        "SELECT post_id FROM post_contents "
+        "WHERE MATCH(source_markdown) AGAINST (:q IN NATURAL LANGUAGE MODE)"
     )
     params: dict = {"q": q}
     if community_id is not None:
@@ -142,9 +147,10 @@ def _like_posts(db: Session, q: str, community_id: int | None) -> list[Post]:
     like = f"%{escaped}%"
     stmt = (
         select(Post)
+        .join(PostContent, PostContent.post_id == Post.id)
         .where(
             Post.status == POST_STATUS_NORMAL,
-            or_(Post.title.like(like), Post.source_markdown.like(like)),
+            or_(Post.title.like(like), PostContent.source_markdown.like(like)),
         )
         .order_by(Post.id.desc())
         .limit(_MATCH_MAX)
@@ -175,26 +181,28 @@ def _semantic_recall(db: Session, q: str, community_id: int | None) -> list[int]
     """语义召回（阶段 7）：query embedding → 已构建 embedding 的帖子余弦 TopK。
 
     只召回过 embedding 的帖子（不在此处懒构建，避免搜索链路调外部 API）；
-    需要先通过问答/其他路径构建（posts.embedding 列）。GLM 不可用或相似度
+    需要先通过问答/其他路径构建（post_embeddings 表）。GLM 不可用或相似度
     低于阈值时返回空（不影响关键词路径）。
     """
     from app.ai.rag import _cosine
+    from app.models.post_embedding import PostEmbedding
 
     cached = _cached_embed(q)
     if cached is None:
         return []  # embedding 不可用，跳过语义召回
     q_emb = cached[0]
     stmt = (
-        select(Post)
-        .where(Post.status == POST_STATUS_NORMAL, Post.embedding.is_not(None))
+        select(Post, PostEmbedding.vector)
+        .join(PostEmbedding, PostEmbedding.post_id == Post.id)
+        .where(Post.status == POST_STATUS_NORMAL)
         .order_by(Post.id.desc())
         .limit(50)
     )
     if community_id is not None:
         stmt = stmt.where(Post.community_id == community_id)
     scored = []
-    for p in db.execute(stmt).scalars().all():
-        score = _cosine(q_emb, p.embedding)
+    for p, vector in db.execute(stmt).all():
+        score = _cosine(q_emb, vector)
         if score > 0.5:
             scored.append((score, p.id))
     scored.sort(key=lambda x: x[0], reverse=True)

@@ -127,6 +127,7 @@ def handle_report(
     notify(
         db, report.reporter_id, "report_feedback", msg,
         summary=report.result or msg, ref_id=report.target_id,
+        ref_type={TARGET_POST: "post", TARGET_COMMENT: "comment", TARGET_USER: "user"}.get(report.target_type),
         actor_id=handler.id,
     )
     return report

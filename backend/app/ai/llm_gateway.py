@@ -13,11 +13,51 @@ import logging
 import time
 
 from openai import OpenAI, Timeout
+from sqlalchemy import select
 
 from app.core.config import settings
+from app.core.response import FeatureDisabledError
 from app.services.ai_call_log_service import log_ai_call
 
 logger = logging.getLogger(__name__)
+
+# 管理端 AI 开关缓存（ai_configs.enabled）：60s 进程内缓存，空表/无记录 = 默认开启
+_FEATURE_TTL = 60
+_feature_cache: dict[str, tuple[bool, float]] = {}
+
+
+def _ensure_feature_enabled(feature: str) -> None:
+    """消费 ai_configs.enabled（08-29 整改：此前管理端改配置不生效）。
+
+    - 无记录 → 默认开启（兼容历史行为，测试库空表不受影响）
+    - enabled=0 → 抛 FeatureDisabledError（403 友好提示）
+    - 读配置失败不阻断主流程
+    """
+    now = time.monotonic()
+    cached = _feature_cache.get(feature)
+    if cached and now - cached[1] < _FEATURE_TTL:
+        if not cached[0]:
+            raise FeatureDisabledError()
+        return
+    enabled = True
+    try:
+        from app.db import SessionLocal
+        from app.models.ai_config import AiConfig
+
+        db = SessionLocal()
+        try:
+            row = db.execute(
+                select(AiConfig.enabled).where(AiConfig.feature == feature)
+            ).scalar_one_or_none()
+        finally:
+            db.close()
+        if row is not None:
+            enabled = bool(row)
+    except Exception:
+        logger.exception("ai_configs 开关读取失败 feature=%s，按开启处理", feature)
+    _feature_cache[feature] = (enabled, now)
+    if not enabled:
+        raise FeatureDisabledError()
 
 
 def _zhipu() -> OpenAI:
@@ -44,15 +84,25 @@ def chat(
     feature: str = "chat",
     user_id: int | None = None,
 ) -> str:
-    """单轮补全（智谱主 → DeepSeek 兜底），自动记录调用日志。"""
+    """单轮补全（智谱主 → DeepSeek 兜底），自动记录调用日志。
+
+    优化 08-29：回填 response.usage 的 token 计量；主模型失败后兜底成功
+    记 status='degraded'（区分"最终成功"与"发生过降级/限流"）。
+    """
     m = model or settings.ZHIPU_MODEL
     start = time.monotonic()
+    _ensure_feature_enabled(feature)
     try:
         resp = _zhipu().chat.completions.create(
             model=m, messages=messages, max_tokens=max_tokens, temperature=temperature
         )
         text = resp.choices[0].message.content or ""
-        log_ai_call(feature, user_id, m, int((time.monotonic() - start) * 1000), "ok")
+        usage = getattr(resp, "usage", None)
+        log_ai_call(
+            feature, user_id, m, int((time.monotonic() - start) * 1000), "ok",
+            prompt_tokens=getattr(usage, "prompt_tokens", 0) or 0,
+            completion_tokens=getattr(usage, "completion_tokens", 0) or 0,
+        )
         return text
     except Exception as e:  # 主模型异常：切兜底
         logger.warning("GLM 调用失败(%s)，切换 DeepSeek 兜底", e)
@@ -60,7 +110,7 @@ def chat(
         log_ai_call(
             feature, user_id, settings.DEEPSEEK_MODEL,
             int((time.monotonic() - start) * 1000),
-            "ok" if text else "error", str(e)[:255],
+            "degraded" if text else "error", str(e)[:512],
         )
         return text
 
@@ -78,6 +128,7 @@ def stream(
     流式生成过程。
     """
     m = model or settings.ZHIPU_MODEL
+    _ensure_feature_enabled(feature)
     try:
         resp = _zhipu().chat.completions.create(
             model=m, messages=messages, max_tokens=max_tokens,
@@ -127,14 +178,19 @@ def _iter_text(resp) -> iter:
 def embed(text: str, feature: str = "embed", user_id: int | None = None) -> list[float]:
     """文本向量（GLM Embedding-3），自动记录调用日志。"""
     start = time.monotonic()
+    _ensure_feature_enabled(feature)
     try:
         resp = _zhipu().embeddings.create(model=settings.ZHIPU_EMBED_MODEL, input=text)
         result = resp.data[0].embedding
-        log_ai_call(feature, user_id, settings.ZHIPU_EMBED_MODEL, int((time.monotonic() - start) * 1000))
+        usage = getattr(resp, "usage", None)
+        log_ai_call(
+            feature, user_id, settings.ZHIPU_EMBED_MODEL, int((time.monotonic() - start) * 1000),
+            "ok", prompt_tokens=getattr(usage, "total_tokens", 0) or 0,
+        )
         return result
     except Exception as e:
         log_ai_call(
             feature, user_id, settings.ZHIPU_EMBED_MODEL,
-            int((time.monotonic() - start) * 1000), "error", str(e)[:255],
+            int((time.monotonic() - start) * 1000), "error", str(e)[:512],
         )
         raise

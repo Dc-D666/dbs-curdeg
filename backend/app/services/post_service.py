@@ -14,9 +14,11 @@ from app.models.board import Board
 from app.models.community import Community
 from app.models.favorite import Favorite
 from app.models.follow import Follow
-from app.models.like import Like
+from app.models.board_role_perm import BoardRolePerm
+from app.models.like import PostLike
 from app.models.member import MEMBER_ADMIN, MEMBER_OWNER, Member
 from app.models.post import Post, POST_STATUS_DELETED, POST_STATUS_NORMAL
+from app.models.post_content import PostContent
 from app.models.topic import Topic
 from app.models.user import User
 from app.schemas.post import CreatePostRequest, PostOut, UpdatePostRequest
@@ -49,8 +51,12 @@ def create_post(
         topic = db.get(Topic, payload.topic_id)
         if topic is None or topic.community_id != community.id or topic.status != 0:
             raise ParamError("关联话题不存在")
-        topic.post_count += 1
-        topic.heat_value += 1
+        # 原子递增（并发发帖防丢计数；08-29 计数器审查统一整改）
+        db.execute(
+            update(Topic)
+            .where(Topic.id == payload.topic_id)
+            .values(post_count=Topic.post_count + 1, heat_value=Topic.heat_value + 1)
+        )
     post = Post(
         community_id=community.id,
         board_id=board.id,
@@ -58,11 +64,11 @@ def create_post(
         title=payload.title,
         post_type=payload.post_type,
         topic_id=payload.topic_id,
-        rich_content=rich,
-        source_markdown=plain,
-        images=payload.images,
     )
     db.add(post)
+    # 正文写 1:1 扩展表 post_contents（08-29 垂直拆分）；flush 取 post.id
+    db.flush()
+    db.add(PostContent(post_id=post.id, source_markdown=plain, rich_content=rich, images=payload.images))
     # 原子自增，避免并发 read-modify-write 丢计数
     db.execute(update(Community).where(Community.id == community.id).values(post_count=Community.post_count + 1))
     # 活跃等级：发帖 +5（等级身份达标自动授予）
@@ -98,15 +104,25 @@ def update_post(
         raise PermissionError_("只能编辑自己的帖子")
     _require_member(db, community.id, user.id)
     data = payload.model_dump(exclude_unset=True)
+    pc = None
     if "content" in data or "rich_content" in data:
         rich, plain = _normalize_content(payload)
         _validate_at_users(db, community.id, rich)
-        post.rich_content = rich
-        post.source_markdown = plain
+        pc = db.get(PostContent, post.id)
+        if pc is None:
+            pc = PostContent(post_id=post.id)
+            db.add(pc)
+        pc.rich_content = rich
+        pc.source_markdown = plain
     if "title" in data:
         post.title = data["title"]
     if "images" in data:
-        post.images = data["images"]
+        if pc is None:
+            pc = db.get(PostContent, post.id)
+            if pc is None:
+                pc = PostContent(post_id=post.id)
+                db.add(pc)
+        pc.images = data["images"]
     if "post_type" in data:
         post.post_type = data["post_type"]
     if "topic_id" in data:
@@ -288,6 +304,29 @@ def global_feed(
     }
 
 
+def user_posts(
+    db: Session,
+    author_id: int,
+    cursor: str | None,
+    page_size: int,
+    current_user_id: int | None,
+) -> dict:
+    """某用户发布的帖子（latest 时间倒序，keyset 游标）；用于他人主页「TA 的帖子」。"""
+    stmt = select(Post).where(Post.author_id == author_id, Post.status == POST_STATUS_NORMAL)
+    last_id = int(cursor) if cursor and cursor.isdigit() else None
+    if last_id:
+        stmt = stmt.where(Post.id < last_id)
+    stmt = stmt.order_by(Post.id.desc())
+    posts = db.execute(stmt.limit(page_size)).scalars().all()
+    has_more = len(posts) == page_size
+    next_cursor = str(posts[-1].id) if has_more and posts else None
+    return {
+        "items": post_outs(db, posts, current_user_id),
+        "next_cursor": next_cursor,
+        "has_more": has_more,
+    }
+
+
 def my_feed(
     db: Session,
     user: User,
@@ -370,12 +409,22 @@ def post_outs(db: Session, posts: list[Post], current_user_id: int | None) -> li
     pids = [p.id for p in posts]
 
     users = {u.id: u for u in db.execute(select(User).where(User.id.in_(uids))).scalars().all()}
+    # 正文批量取（1:1 扩展表，一次 IN 查询）
+    contents = {
+        pc.post_id: pc
+        for pc in db.execute(select(PostContent).where(PostContent.post_id.in_(pids))).scalars().all()
+    }
     boards = {b.id: b for b in db.execute(select(Board).where(Board.id.in_(bids))).scalars().all()}
     comms = {c.id: c for c in db.execute(select(Community).where(Community.id.in_(cids))).scalars().all()}
 
     out_map: dict[int, PostOut] = {}
     for p in posts:
         o = PostOut.model_validate(p)
+        pc = contents.get(p.id)
+        if pc is not None:
+            o.rich_content = pc.rich_content
+            o.source_markdown = pc.source_markdown
+            o.images = pc.images
         u = users.get(p.author_id)
         if u:
             o.author_nickname = u.nickname or u.username
@@ -391,8 +440,8 @@ def post_outs(db: Session, posts: list[Post], current_user_id: int | None) -> li
     if current_user_id:
         liked_ids = set(
             db.execute(
-                select(Like.post_id).where(
-                    Like.post_id.in_(pids), Like.comment_id == 0, Like.user_id == current_user_id
+                select(PostLike.post_id).where(
+                    PostLike.post_id.in_(pids), PostLike.user_id == current_user_id
                 )
             ).scalars().all()
         )
@@ -432,6 +481,11 @@ def post_outs(db: Session, posts: list[Post], current_user_id: int | None) -> li
 def post_out(db: Session, post: Post, current_user_id: int | None) -> PostOut:
     """帖子输出增强：作者昵称/头像、频道/版块名、互动状态。"""
     out = PostOut.model_validate(post)
+    pc = db.get(PostContent, post.id)
+    if pc is not None:
+        out.rich_content = pc.rich_content
+        out.source_markdown = pc.source_markdown
+        out.images = pc.images
 
     author = db.get(User, post.author_id)
     if author:
@@ -446,8 +500,8 @@ def post_out(db: Session, post: Post, current_user_id: int | None) -> PostOut:
 
     if current_user_id:
         liked = db.execute(
-            select(Like.id).where(
-                Like.post_id == post.id, Like.comment_id == 0, Like.user_id == current_user_id
+            select(PostLike.id).where(
+                PostLike.post_id == post.id, PostLike.user_id == current_user_id
             )
         ).scalar_one_or_none()
         out.is_liked = liked is not None
@@ -548,7 +602,10 @@ def _check_board_post_perm(
     """版块发帖权限：allow_post_role_ids 非空时，成员身份组必须命中（owner/admin 直接放行）。"""
     if member.member_type in (MEMBER_OWNER, MEMBER_ADMIN):
         return
-    allowed = board.allow_post_role_ids or []
+    # 白名单读规范化后的 board_role_perms 关系表（空 = 所有人可发帖）
+    allowed = list(
+        db.execute(select(BoardRolePerm.role_id).where(BoardRolePerm.board_id == board.id)).scalars().all()
+    )
     if not allowed:
         return
     if member.role_id is None or member.role_id not in allowed:

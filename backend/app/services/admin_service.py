@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.core.response import NotFoundError, ParamError
 from app.models.comment import Comment
 from app.models.community import Community
-from app.models.like import Like
+from app.models.like import CommentLike, PostLike
 from app.models.post import Post, POST_STATUS_BANNED
 from app.models.review import CONTENT_POST, REVIEW_MANUAL, REVIEW_PASSED, REVIEW_REJECTED, Review
 from app.models.user import User
@@ -52,7 +52,7 @@ def overview_stats(db: Session) -> dict:
     communities_total = count(Community)
     posts_total = count(Post, Post.status == 0)
     comments_total = count(Comment, Comment.status == 0)
-    likes_total = count(Like)
+    likes_total = count(PostLike) + count(CommentLike)  # 08-29 拆表：两表求和
 
     # 近 7 天发帖趋势
     rows = db.execute(

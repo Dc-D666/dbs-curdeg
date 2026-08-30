@@ -47,6 +47,13 @@ class ParamError(BizError):
         super().__init__(code=2001, message=message)
 
 
+class FeatureDisabledError(BizError):
+    """AI 功能被管理端关闭（ai_configs.enabled=0；08-29 整改：让管理端开关真正生效）。"""
+
+    def __init__(self, message: str = "该 AI 功能已被管理员关闭"):
+        super().__init__(code=2003, message=message, http_status=status.HTTP_403_FORBIDDEN)
+
+
 def ok(data: Any = None, message: str = "ok") -> dict:
     """统一成功响应。"""
     return {"code": 0, "message": message, "data": data}

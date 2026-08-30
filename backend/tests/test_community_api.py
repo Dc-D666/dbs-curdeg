@@ -142,6 +142,32 @@ def test_reviewed_join_flow(ctx):
     assert any(m["username"] == "normal1" for m in member_list)
 
 
+def test_rejected_join_can_reapply(ctx):
+    """被拒后可重新申请（uq 约束与应用语义闭环，08-29 修复：原实现撞唯一键 500）。"""
+    client = ctx["client"]
+    cid = _create_community(client, ctx["owner"], "重申频道", join_setting=1)
+    # 首次申请 → 拒绝
+    res = client.post(f"/api/v1/communities/{cid}/join", headers=_auth(ctx["normal"]))
+    assert res.status_code == 200
+    reqs = client.get(f"/api/v1/communities/{cid}/join-requests", headers=_auth(ctx["owner"])).json()["data"]["items"]
+    assert len(reqs) == 1
+    res_rej = client.post(
+        f"/api/v1/communities/{cid}/join-requests/{reqs[0]['id']}",
+        json={"approve": False},
+        headers=_auth(ctx["owner"]),
+    )
+    assert res_rej.status_code == 200
+    # 被拒后重新申请 → 成功回到待审（不再撞 uq_joinreq_community_user）
+    res2 = client.post(f"/api/v1/communities/{cid}/join", headers=_auth(ctx["normal"]))
+    assert res2.status_code == 200
+    assert res2.json()["data"]["status"] == "pending"
+    # 仍只有一条申请记录（复用原行），状态已重置；重复申请依旧拦截
+    reqs2 = client.get(f"/api/v1/communities/{cid}/join-requests", headers=_auth(ctx["owner"])).json()["data"]["items"]
+    assert len(reqs2) == 1
+    res3 = client.post(f"/api/v1/communities/{cid}/join", headers=_auth(ctx["normal"]))
+    assert res3.status_code == 409
+
+
 def test_invite_only_community_rejects(ctx):
     client = ctx["client"]
     cid = _create_community(client, ctx["owner"], "邀请频道", join_setting=2)

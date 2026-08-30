@@ -47,6 +47,9 @@ class Settings(BaseSettings):
     # 内容审核：发帖后异步快审（False 关闭，测试/开发可关）
     AI_REVIEW_ENABLED: bool = True
     AI_REVIEW_QUEUE: str = "ai:review:queue"
+    # 后台任务总开关（短链清理/统计汇总/审核消费循环）：False 关闭（测试环境关闭，
+    # 避免 while True 循环阻塞 TestClient 事件循环关闭导致 teardown 挂起）
+    BACKGROUND_TASKS_ENABLED: bool = True
     # 接口限流（阶段 7）：False 关闭（测试环境关闭避免共享 Redis 串扰）
     RATE_LIMIT_ENABLED: bool = True
 

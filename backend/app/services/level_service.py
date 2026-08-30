@@ -5,7 +5,7 @@
 - 手动分配的身份（排序更靠前）优先，不被等级身份覆盖；等级身份之间取门槛最高者
 - 加分与授予在同一事务内，由调用方 commit
 """
-from sqlalchemy import select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.models.member import Member
@@ -21,7 +21,13 @@ def add_level(db: Session, community_id: int, user_id: int, points: int) -> Memb
     ).scalar_one_or_none()
     if member is None or member.is_blocked:
         return None
-    member.level = max(1, member.level + points)
+    # 原子加分（并发互动防丢分）+ 顺带激活 last_active_at（原为死列，08-29 整改）
+    db.execute(
+        update(Member)
+        .where(Member.id == member.id)
+        .values(level=func.greatest(1, Member.level + points), last_active_at=func.now())
+    )
+    db.refresh(member)
     _sync_level_role(db, member)
     return member
 

@@ -81,13 +81,17 @@ def test_create_post_requires_member(ctx):
 
 
 def test_board_post_role_restriction(ctx):
-    """版块 allow_post_role_ids 非空时，未命中身份组的成员不能发帖；owner 放行。"""
+    """版块发帖白名单非空时，未命中身份组的成员不能发帖；owner 放行。
+
+    08-29 外键化：白名单存 board_role_perms 关系表，悬空角色 ID 会被 FK 拒绝，
+    故先创建真实身份组再引用。
+    """
     client, owner, normal, cid = ctx["client"], ctx["owner"], ctx["normal"], ctx["cid"]
-    # owner 的角色 id 为频道创建时第一个角色（频道主），normal 未分配角色（role_id=None）
-    owner_role = client.get(f"/api/v1/communities/{cid}", headers=_auth(owner)).json()["data"]["boards"]
-    _ = owner_role
-    # 创建一个仅允许角色 9999（不存在）发帖的版块
-    restricted_bid = _create_board(client, owner, cid, name="受限版块", allow_post_role_ids=[9999])
+    # 创建真实身份组，白名单仅允许它发帖
+    role_res = client.post(f"/api/v1/communities/{cid}/roles", json={"name": "贵宾"}, headers=_auth(owner))
+    assert role_res.status_code == 200
+    vip_role_id = role_res.json()["data"]["id"]
+    restricted_bid = _create_board(client, owner, cid, name="受限版块", allow_post_role_ids=[vip_role_id])
     res = client.post(
         f"/api/v1/communities/{cid}/boards/{restricted_bid}/posts",
         json={"title": "t", "content": "c"},

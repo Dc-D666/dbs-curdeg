@@ -42,9 +42,10 @@ class PostOut(BaseModel):
     title: str
     post_type: int = 0
     topic_id: int | None = None
-    rich_content: list
-    source_markdown: str
-    images: list
+    # 正文三大件来自 post_contents 1:1 扩展表（08-29 垂直拆分），由 post_out 回填
+    rich_content: list = []
+    source_markdown: str = ""
+    images: list = []
     like_count: int
     comment_count: int
     view_count: int = 0

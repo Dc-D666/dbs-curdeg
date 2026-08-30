@@ -10,9 +10,12 @@ from app.models.board import Board
 from app.models.role import Role
 from app.models.member import Member
 from app.models.join_request import JoinRequest
+from app.models.board_role_perm import BoardRolePerm
 from app.models.post import Post
+from app.models.post_content import PostContent
+from app.models.post_embedding import PostEmbedding
 from app.models.comment import Comment
-from app.models.like import Like
+from app.models.like import CommentLike, PostLike
 from app.models.follow import Follow
 from app.models.user_follow import UserFollow
 from app.models.favorite import Favorite
@@ -33,7 +36,7 @@ from app.models.daily_stat import DailyStat
 
 __all__ = [
     "User", "Community", "Board", "Role", "Member", "JoinRequest", "Post",
-    "Comment", "Like", "Follow", "UserFollow", "Favorite", "Attachment", "Topic",
+    "Comment", "PostLike", "CommentLike", "Follow", "PostEmbedding", "UserFollow", "Favorite", "Attachment", "Topic",
     "OpLog", "SearchRecord", "SensitiveWord", "Notification", "FeedStrategy",
     "ShortLink", "Review", "Report", "AiConfig", "AiCallLog", "SystemConfig",
     "DailyStat",

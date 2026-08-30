@@ -29,3 +29,13 @@ _tmp_*.py
 .vscode/
 .DS_Store
 Thumbs.db
+
+# ===== 数据类文件（体积大/含真实用户数据，永不入库；本地保留） =====
+guild_backup_*.sql
+migrant_data/
+designer/
+_p_*.txt
+_pretty_*.json
+android/.kotlin/
+.reasonix/
+_pgtest*.txt

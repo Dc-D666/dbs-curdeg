@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.core.permissions import PERM_DELETE_COMMENT, require_perms
 from app.core.response import ParamError
 from app.models.comment import Comment
-from app.models.like import Like
+from app.models.like import CommentLike
 from app.models.post import Post
 from app.models.user import User
 from app.schemas.post import CommentOut, CreateCommentRequest
@@ -171,8 +171,8 @@ def comment_out(db: Session, comment: Comment, current_user_id: int | None) -> C
             out.reply_to_nickname = ru.nickname or ru.username
     if current_user_id:
         liked = db.execute(
-            select(Like.id).where(
-                Like.comment_id == comment.id, Like.post_id == 0, Like.user_id == current_user_id
+            select(CommentLike.id).where(
+                CommentLike.comment_id == comment.id, CommentLike.user_id == current_user_id
             )
         ).scalar_one_or_none()
         out.is_liked = liked is not None

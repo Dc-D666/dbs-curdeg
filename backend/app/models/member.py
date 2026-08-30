@@ -1,7 +1,7 @@
 """成员模型（文档⑤社区成员管理，对应原生 member）。"""
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, Integer, String, UniqueConstraint, func
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -19,9 +19,15 @@ class Member(Base):
     __table_args__ = (UniqueConstraint("community_id", "user_id", name="uq_member_community_user"),)
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    community_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
-    user_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
-    role_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    community_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("communities.id", ondelete="CASCADE"), nullable=False
+    )  # 单列索引被 uq_member_community_user 左前缀覆盖（优化 08-29）
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    role_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("roles.id", ondelete="SET NULL"), nullable=True
+    )  # 身份组被硬删时成员保留、仅解绑
     nickname: Mapped[str] = mapped_column(String(64), default="")  # 频道内专属昵称
     member_type: Mapped[int] = mapped_column(Integer, default=MEMBER_NORMAL)
     level: Mapped[int] = mapped_column(Integer, default=1)  # 频道内活跃等级（互动增长，等级身份自动授予依据）

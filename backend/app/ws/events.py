@@ -107,5 +107,6 @@ def notification_payload(n) -> dict[str, Any]:
         "title": n.title,
         "summary": n.summary,
         "ref_id": n.ref_id,
+        "ref_type": n.ref_type,
         "created_at": n.created_at.strftime("%Y-%m-%d %H:%M:%S") if n.created_at else None,
     }

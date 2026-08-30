@@ -5,7 +5,7 @@
 """
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, Integer, String, func
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -25,7 +25,9 @@ class Review(Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     content_type: Mapped[int] = mapped_column(Integer, nullable=False)  # 1帖子 2评论
     content_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    user_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)  # 内容作者
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )  # 内容作者
     status: Mapped[int] = mapped_column(Integer, default=REVIEW_PENDING, index=True)
     violation_type: Mapped[str] = mapped_column(String(32), default="")   # 违规类型（AI 给出）
     violation_detail: Mapped[str] = mapped_column(String(255), default="")  # 违规详情

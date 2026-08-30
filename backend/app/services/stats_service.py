@@ -18,7 +18,7 @@ from app.models.comment import Comment
 from app.models.daily_stat import DailyStat
 from app.models.favorite import Favorite
 from app.models.follow import Follow
-from app.models.like import Like
+from app.models.like import CommentLike, PostLike
 from app.models.post import Post
 from app.models.review import REVIEW_REJECTED, Review
 from app.models.user import User
@@ -36,7 +36,8 @@ def _active_user_ids(db: Session, d: date) -> set[int]:
     for model, col in (
         (Post, Post.author_id),
         (Comment, Comment.author_id),
-        (Like, Like.user_id),
+        (PostLike, PostLike.user_id),
+        (CommentLike, CommentLike.user_id),
         (Follow, Follow.user_id),
         (Favorite, Favorite.user_id),
     ):
@@ -61,9 +62,10 @@ def compute_daily_stats(db: Session, d: date | None = None) -> DailyStat:
     comments = db.execute(
         select(func.count(Comment.id)).where(Comment.created_at >= start, Comment.created_at < end)
     ).scalar_one()
-    likes = db.execute(
-        select(func.count(Like.id)).where(Like.created_at >= start, Like.created_at < end)
-    ).scalar_one()
+    likes = (
+        db.execute(select(func.count(PostLike.id)).where(PostLike.created_at >= start, PostLike.created_at < end)).scalar_one()
+        + db.execute(select(func.count(CommentLike.id)).where(CommentLike.created_at >= start, CommentLike.created_at < end)).scalar_one()
+    )
     follows = db.execute(
         select(func.count(Follow.id)).where(Follow.created_at >= start, Follow.created_at < end)
     ).scalar_one()

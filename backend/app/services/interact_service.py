@@ -12,7 +12,7 @@ from app.core.response import NotFoundError, ParamError
 from app.models.comment import Comment
 from app.models.community import Community
 from app.models.follow import Follow
-from app.models.like import Like
+from app.models.like import CommentLike, PostLike
 from app.models.post import Post, POST_STATUS_NORMAL
 from app.models.user import User
 from app.services import heat_service
@@ -20,26 +20,31 @@ from app.services.level_service import LEVEL_POINTS, add_level
 from app.services.notify_service import notify
 from app.services.post_service import _require_member
 
-# post_id / comment_id 用 0 表示"无"（哨兵值，保证唯一约束生效，见 like.py 注释）
-
-
 def like(db: Session, user: User, post_id: int | None = None, comment_id: int | None = None) -> dict:
-    """点赞：post_id / comment_id 恰好一个；需频道成员且频道正常。返回最新计数。"""
+    """点赞：post_id / comment_id 恰好一个；需频道成员且频道正常。返回最新计数。
+
+    08-29 拆表：帖子赞写 post_likes、评论赞写 comment_likes（各自 UNIQUE 幂等 + FK 级联）。
+    """
     target, community_id = _resolve_target(db, post_id, comment_id)
     # 频道状态 + 成员身份（含禁言/拉黑）校验
     _require_member(db, community_id, user.id)
 
-    post_id = post_id or 0
-    comment_id = comment_id or 0
-    exists = db.execute(
-        select(Like.id).where(
-            Like.post_id == post_id, Like.comment_id == comment_id, Like.user_id == user.id
-        )
-    ).scalar_one_or_none()
-    if exists:
-        return {"liked": True, "count": target.like_count}
-
-    db.add(Like(post_id=post_id, comment_id=comment_id, user_id=user.id))
+    if post_id is not None:
+        exists = db.execute(
+            select(PostLike.id).where(PostLike.post_id == post_id, PostLike.user_id == user.id)
+        ).scalar_one_or_none()
+        if exists:
+            return {"liked": True, "count": target.like_count}
+        db.add(PostLike(post_id=post_id, user_id=user.id))
+    else:
+        exists = db.execute(
+            select(CommentLike.id).where(
+                CommentLike.comment_id == comment_id, CommentLike.user_id == user.id
+            )
+        ).scalar_one_or_none()
+        if exists:
+            return {"liked": True, "count": target.like_count}
+        db.add(CommentLike(comment_id=comment_id, user_id=user.id))
     _bump_count(db, target, +1)
     # 活跃等级：点赞 +1（仅新增点赞时，重复点赞不加）
     add_level(db, community_id, user.id, LEVEL_POINTS["like"])
@@ -70,13 +75,16 @@ def unlike(db: Session, user: User, post_id: int | None = None, comment_id: int 
     target, community_id = _resolve_target(db, post_id, comment_id)
     _require_member(db, community_id, user.id)
 
-    post_id = post_id or 0
-    comment_id = comment_id or 0
-    row = db.execute(
-        select(Like).where(
-            Like.post_id == post_id, Like.comment_id == comment_id, Like.user_id == user.id
-        )
-    ).scalar_one_or_none()
+    if post_id is not None:
+        row = db.execute(
+            select(PostLike).where(PostLike.post_id == post_id, PostLike.user_id == user.id)
+        ).scalar_one_or_none()
+    else:
+        row = db.execute(
+            select(CommentLike).where(
+                CommentLike.comment_id == comment_id, CommentLike.user_id == user.id
+            )
+        ).scalar_one_or_none()
     if row is None:
         return {"liked": False, "count": target.like_count}
     db.delete(row)

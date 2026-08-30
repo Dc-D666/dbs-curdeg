@@ -358,8 +358,11 @@ def test_system_admin_full_perms(db_session):
 
     u = User(username="sysadmin1", email="sysadmin1@test.com", password_hash="x", user_type=1)
     owner = User(username="sysowner1", email="sysowner1@test.com", password_hash="x")
-    c = Community(number="SA1X2Y", name="系统测试频道", owner_id=0)
-    db_session.add_all([u, owner, c])
+    db_session.add_all([u, owner])
+    db_session.flush()
+    # FK 整改：owner_id 必须指向真实用户（原 owner_id=0 哨兵违反外键约束）
+    c = Community(number="SA1X2Y", name="系统测试频道", owner_id=owner.id)
+    db_session.add(c)
     db_session.flush()
     m = Member(community_id=c.id, user_id=owner.id, member_type=0, nickname="o")
     db_session.add(m)
@@ -371,8 +374,11 @@ def test_system_admin_full_perms(db_session):
 def test_shutup_expire_auto_unlock(db_session):
     """禁言到期自动解除：shutup_expire_at 已过则放行，未过则拒绝。"""
     u = User(username="shutupuser1", email="shutupuser1@test.com", password_hash="x")
-    c = Community(number="SU1X2Y", name="禁言测试频道", owner_id=0)
-    db_session.add_all([u, c])
+    db_session.add(u)
+    db_session.flush()
+    # FK 整改：owner_id 必须指向真实用户（原 owner_id=0 哨兵违反外键约束）
+    c = Community(number="SU1X2Y", name="禁言测试频道", owner_id=u.id)
+    db_session.add(c)
     db_session.flush()
     m = Member(community_id=c.id, user_id=u.id, member_type=MEMBER_NORMAL, nickname="x")
     db_session.add(m)

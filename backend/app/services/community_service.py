@@ -1,7 +1,7 @@
 """频道/版块/成员业务逻辑。"""
 import secrets
 
-from sqlalchemy import select
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.core.permissions import (
@@ -14,6 +14,7 @@ from app.core.permissions import (
 )
 from app.core.response import ConflictError, NotFoundError, ParamError, PermissionError_
 from app.models.board import Board
+from app.models.board_role_perm import BoardRolePerm
 from app.models.community import Community
 from app.models.join_request import JOIN_APPROVED, JOIN_PENDING, JOIN_REJECTED, JoinRequest
 from app.models.member import MEMBER_ADMIN, MEMBER_NORMAL, MEMBER_OWNER, Member
@@ -148,6 +149,15 @@ def community_out(db: Session, community: Community, current_user_id: int | None
         select(Board).where(Board.community_id == community.id, Board.status == 0).order_by(Board.sort, Board.id)
     ).scalars().all()
     out.boards = [BoardOut.model_validate(b) for b in boards]
+    # 版块发帖白名单批量聚合（一次 IN 查询）
+    if boards:
+        role_map: dict[int, list[int]] = {}
+        for brp in db.execute(
+            select(BoardRolePerm).where(BoardRolePerm.board_id.in_([b.id for b in boards]))
+        ).scalars().all():
+            role_map.setdefault(brp.board_id, []).append(brp.role_id)
+        for o in out.boards:
+            o.allow_post_role_ids = sorted(role_map.get(o.id, []))
     if current_user_id:
         member = db.execute(
             select(Member).where(Member.community_id == community.id, Member.user_id == current_user_id)
@@ -207,22 +217,43 @@ def create_board(
     db: Session, community: Community, user: User, payload: CreateBoardRequest
 ) -> BoardOut:
     _ensure_owner(db, community, user)
-    board = Board(community_id=community.id, **payload.model_dump())
+    data = payload.model_dump()
+    role_ids = data.pop("allow_post_role_ids", [])
+    board = Board(community_id=community.id, **data)
     db.add(board)
+    db.flush()  # 取 board.id：白名单写规范化后的 board_role_perms 关系表
+    for rid in role_ids:
+        db.add(BoardRolePerm(board_id=board.id, role_id=rid))
     db.commit()
     db.refresh(board)
-    return BoardOut.model_validate(board)
+    return _board_out(db, board)
 
 
 def update_board(
     db: Session, community: Community, user: User, board: Board, payload: UpdateBoardRequest
 ) -> BoardOut:
     _ensure_owner(db, community, user)
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    data = payload.model_dump(exclude_unset=True)
+    role_ids = data.pop("allow_post_role_ids", None)
+    for field, value in data.items():
         setattr(board, field, value)
+    if role_ids is not None:
+        # 全量替换白名单行（关系表规范化写法）
+        db.execute(delete(BoardRolePerm).where(BoardRolePerm.board_id == board.id))
+        for rid in role_ids:
+            db.add(BoardRolePerm(board_id=board.id, role_id=rid))
     db.commit()
     db.refresh(board)
-    return BoardOut.model_validate(board)
+    return _board_out(db, board)
+
+
+def _board_out(db: Session, board: Board) -> BoardOut:
+    """版块输出：发帖白名单从 board_role_perms 关系表聚合（保持 API 形状不变）。"""
+    out = BoardOut.model_validate(board)
+    out.allow_post_role_ids = sorted(
+        db.execute(select(BoardRolePerm.role_id).where(BoardRolePerm.board_id == board.id)).scalars().all()
+    )
+    return out
 
 
 def delete_board(db: Session, community: Community, user: User, board: Board) -> None:
@@ -249,18 +280,26 @@ def join_community(db: Session, community: Community, user: User) -> dict:
     if community.join_setting == 0:
         return _add_member(db, community, user, join_channel=0)
     if community.join_setting == 1:
-        # 已有待审申请则拒绝重复
-        pending = db.execute(
+        # 一人一频道仅一条申请记录（uq_joinreq_community_user 闭环）：
+        # 无记录 → 新建；审核中 → 拒绝重复；被拒 → 复用原行原子重置为待审（可重新申请）
+        req = db.execute(
             select(JoinRequest).where(
                 JoinRequest.community_id == community.id,
                 JoinRequest.user_id == user.id,
-                JoinRequest.status == JOIN_PENDING,
             )
         ).scalar_one_or_none()
-        if pending:
+        if req is not None and req.status == JOIN_PENDING:
             raise ConflictError("申请已在审核中")
-        req = JoinRequest(community_id=community.id, user_id=user.id)
-        db.add(req)
+        if req is None:
+            req = JoinRequest(community_id=community.id, user_id=user.id)
+            db.add(req)
+        else:
+            # 原子重置（仅 REJECTED 行可重置，防并发绕过）：审核留痕由 op_logs 承担
+            db.execute(
+                update(JoinRequest)
+                .where(JoinRequest.id == req.id, JoinRequest.status == JOIN_REJECTED)
+                .values(status=JOIN_PENDING, handler_id=None, handled_at=None, created_at=func.now())
+            )
         db.commit()
         return {"status": "pending", "message": "申请已提交，等待审核"}
     raise PermissionError_("该频道为邀请制，暂不接受加入")
@@ -275,7 +314,12 @@ def _add_member(db: Session, community: Community, user: User, join_channel: int
         join_channel=join_channel,
     )
     db.add(member)
-    community.member_count += 1
+    # 原子递增（并发加入防丢计数；08-29 计数器审查统一整改）
+    db.execute(
+        update(Community)
+        .where(Community.id == community.id)
+        .values(member_count=Community.member_count + 1)
+    )
     db.commit()
     return {"status": "joined", "message": "已加入频道"}
 
@@ -290,7 +334,12 @@ def leave_community(db: Session, community: Community, user: User) -> None:
     if member.member_type == MEMBER_OWNER:
         raise PermissionError_("频道主不能退出，可解散频道")
     db.delete(member)
-    community.member_count = max(0, community.member_count - 1)
+    # 原子递减（不为负）
+    db.execute(
+        update(Community)
+        .where(Community.id == community.id)
+        .values(member_count=func.greatest(0, Community.member_count - 1))
+    )
     db.commit()
 
 
@@ -344,21 +393,24 @@ def handle_join_request(
     )
 
 
-def list_members(db: Session, community: Community, page: int, page_size: int) -> dict:
-    """成员列表（按身份分组排序：owner/admin 优先）。"""
+def list_members(db: Session, community: Community, page: int, page_size: int, keyword: str | None = None) -> dict:
+    """成员列表（按身份分组排序：owner/admin 优先）。
+
+    keyword 可选：按用户名或昵称模糊匹配（用于管理后台成员搜索）。
+    """
+    base = select(Member).where(Member.community_id == community.id, Member.is_blocked.is_(False))
+    if keyword:
+        kws = f"%{keyword.strip()}%"
+        uid_sub = select(User.id).where(or_(User.username.like(kws), User.nickname.like(kws)))
+        base = base.where(Member.user_id.in_(uid_sub))
+    total = len(db.execute(base.with_only_columns(Member.id)).scalars().all())
     stmt = (
-        select(Member)
-        .where(Member.community_id == community.id, Member.is_blocked.is_(False))
+        base
         .order_by(Member.member_type, Member.join_time)
         .offset((page - 1) * page_size)
         .limit(page_size)
     )
     members = db.execute(stmt).scalars().all()
-    total = len(
-        db.execute(
-            select(Member.id).where(Member.community_id == community.id, Member.is_blocked.is_(False))
-        ).scalars().all()
-    )
     return {"items": _decorate_members(db, members), "total": total, "page": page, "page_size": page_size}
 
 

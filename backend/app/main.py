@@ -117,7 +117,8 @@ async def _capture_ws_loop() -> None:
     """捕获 ASGI 主事件循环，供同步端点 run_coroutine_threadsafe 投递 WS 推送。"""
     events.set_ws_loop(asyncio.get_running_loop())
     # 过期短链每日清理（后台任务）
-    asyncio.create_task(share_service.cleanup_loop())
+    if settings.BACKGROUND_TASKS_ENABLED:
+        asyncio.create_task(share_service.cleanup_loop())
     # 当日运营统计定时汇总（后台任务）
     from app.services.stats_service import compute_daily_stats
 
@@ -135,9 +136,10 @@ async def _capture_ws_loop() -> None:
                 pass
             await asyncio.sleep(6 * 3600)
 
-    asyncio.create_task(_stats_loop())
+    if settings.BACKGROUND_TASKS_ENABLED:
+        asyncio.create_task(_stats_loop())
     # AI 内容审核消费（后台任务）
-    if settings.AI_REVIEW_ENABLED:
+    if settings.AI_REVIEW_ENABLED and settings.BACKGROUND_TASKS_ENABLED:
         from app.ai.review import review_loop
 
         asyncio.create_task(review_loop())

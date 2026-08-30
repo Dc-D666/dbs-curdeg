@@ -67,6 +67,7 @@ def notify(
     title: str,
     summary: str = "",
     ref_id: int | None = None,
+    ref_type: str | None = None,
     actor_id: int | None = None,
     community_id: int | None = None,
 ) -> Notification | None:
@@ -92,6 +93,7 @@ def notify(
         title=title[:128],
         summary=summary[:255],
         ref_id=ref_id,
+        ref_type=ref_type,
         actor_id=actor_id,
         community_id=community_id,
     )
