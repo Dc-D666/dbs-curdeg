@@ -46,9 +46,12 @@ export default defineConfig({
     host: true,
     port: 5173,
     proxy: {
-      // 本地开发把 /api、/s 转发到后端，与生产 nginx 行为一致
+      // 本地开发把 /api、/s 转发到后端，与生产 nginx 行为一致。
+      // 注意：短链必须写成正则 '^/s/' —— 前缀写法 '/s' 会连带匹配 /src/*，
+      // 把 dev server 自己的模块请求（/src/main.ts 等）也代理到后端，导致整页空白。
+      // 生产 nginx 用 `location /s/`（带尾斜杠）所以没有这个问题。
       '/api': 'http://localhost:8000',
-      '/s': 'http://localhost:8000',
+      '^/s/': 'http://localhost:8000',
       '/ws': { target: 'ws://localhost:8000', ws: true },
     },
   },

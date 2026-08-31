@@ -112,6 +112,14 @@ button {
   min-height: 100vh;
   padding-bottom: var(--tabbar-height);
 }
+/* 错误态的兜底出口链接（配合 components/ErrorState.vue 使用） */
+.state-link {
+  color: var(--brand);
+  font-size: var(--fs-body);
+}
+.state-link:hover {
+  text-decoration: underline;
+}
 /* 键盘导航（J/K）落焦卡片的短暂高亮 */
 .feed-kbd-focus {
   animation: feed-kbd-focus 0.6s ease;

@@ -35,7 +35,9 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function fetchMe(): Promise<UserInfo | null> {
     try {
-      const me = await request<UserInfo>({ url: '/users/me' })
+      // skipAuthRedirect：这是登录态探测，401 属于预期结果。
+      // 若跟着全局 401 跳转，游客一进首页就会被弹到登录页。
+      const me = await request<UserInfo>({ url: '/users/me', skipAuthRedirect: true })
       user.value = me
       return me
     } catch {
