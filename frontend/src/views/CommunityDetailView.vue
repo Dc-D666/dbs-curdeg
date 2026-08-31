@@ -1,11 +1,34 @@
 <template>
   <main class="detail" :class="{ wb: isWide }">
     <header v-if="!isWide" class="page-header">
-      <router-link to="/discover" class="back">
-        <ArrowLeftIcon class="back-icon" /> 发现
-      </router-link>
+      <!-- 返回优先回来源页（首页工作台/我的频道/发现），深链进入才兜底「发现」 -->
+      <button type="button" class="back" @click="goBack">
+        <ArrowLeftIcon class="back-icon" /> 返回
+      </button>
       <h1 class="page-title">{{ community?.name || '频道' }}</h1>
       <span v-if="community?.is_member" class="tag tag-member">已加入</span>
+    </header>
+
+    <!-- 宽屏顶部条：三栏布局下没有底部 tabbar，必须自带返回/面包屑/站点导航，
+         否则桌面用户（尤其游客从分享链接进入）页面上没有任何导航控件 -->
+    <header v-if="isWide" class="wb-topbar">
+      <button type="button" class="wb-back" @click="goBack">
+        <ArrowLeftIcon class="back-icon" />返回
+      </button>
+      <!-- 面包屑从「发现」起：发现页是频道列表入口，与移动端返回目标一致 -->
+      <nav class="wb-crumb">
+        <router-link to="/discover" class="wb-crumb-link">发现</router-link>
+        <template v-if="community">
+          <span class="wb-crumb-sep">/</span>
+          <span class="wb-crumb-cur">{{ community.name }}</span>
+        </template>
+      </nav>
+      <div class="wb-top-links">
+        <router-link to="/" class="wb-top-link">首页</router-link>
+        <router-link to="/discover" class="wb-top-link">发现</router-link>
+        <router-link v-if="tokenStore.access" to="/me" class="wb-top-link">我的</router-link>
+        <router-link v-else to="/login" class="wb-top-link">登录</router-link>
+      </div>
     </header>
 
     <div v-if="loading" class="state">加载中…</div>
@@ -176,6 +199,12 @@
                 <span class="wb-channel-name">{{ c.name }}</span>
               </router-link>
             </div>
+            <p v-if="myChannels.length === 0" class="wb-empty wb-rail-empty">
+              {{ tokenStore.access ? '还没有加入任何频道' : '登录后这里显示你的频道' }}
+              <router-link :to="tokenStore.access ? '/discover' : '/login'" class="wb-empty-link">
+                {{ tokenStore.access ? '去发现' : '去登录' }}
+              </router-link>
+            </p>
             <div class="wb-rail-title">版块</div>
             <nav class="wb-boards">
               <button v-for="b in community.boards" :key="b.id" class="wb-board" :class="{ active: b.id === activeBoard }" @click="activeBoard = b.id">
@@ -272,7 +301,15 @@
         </div>
       </template>
     </div>
-    <div v-else class="state">频道不存在</div>
+    <!-- 加载失败：区分「频道确实不存在」与「网络/服务端故障（可重试）」，不再一律报“不存在” -->
+    <ErrorState
+      v-else
+      :text="loadError"
+      :retryable="!notFound"
+      @retry="loadAll"
+    >
+      <router-link v-if="notFound" to="/discover" class="state-link">去发现频道</router-link>
+    </ErrorState>
 
     <!-- 话题编辑弹窗 -->
     <t-dialog
@@ -307,6 +344,8 @@ import { request, tokenStore } from '@/api/http'
 import { toast } from '@/utils/toast'
 import { confirmDialog } from '@/utils/confirm'
 import { formatTime } from '@/utils/time'
+import { loadErrorMessage } from '@/utils/error'
+import ErrorState from '@/components/ErrorState.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -314,6 +353,8 @@ const router = useRouter()
 const cid = computed(() => Number(route.params.id))
 const community = ref<Community | null>(null)
 const loading = ref(true)
+const loadError = ref('')
+const notFound = ref(false)
 const joining = ref(false)
 const activeBoard = ref<number | null>(null)
 const ownerMsg = ref('')
@@ -323,6 +364,13 @@ const statusForm = reactive({ status: 0 })
 const isWide = ref(window.innerWidth >= 1024)
 function onResize() {
   isWide.value = window.innerWidth >= 1024
+}
+
+/** 宽屏顶部条返回：有历史记录就退回来源页，否则兜底到「发现」。 */
+function goBack() {
+  const back = window.history.state?.back
+  if (typeof back === 'string' && back) router.back()
+  else router.push('/discover')
 }
 const myChannels = ref<Community[]>([])
 async function loadMyChannels() {
@@ -503,6 +551,8 @@ async function loadAll() {
   membersOpen.value = false
   requestsOpen.value = false
   ownerMsg.value = ''
+  loadError.value = ''
+  notFound.value = false
   try {
     const c = await communityApi.get(id)
     if (cid.value !== id) return // 已切走：丢弃过期响应
@@ -516,6 +566,9 @@ async function loadAll() {
   } catch (e) {
     if (cid.value === id) {
       community.value = null
+      const r = loadErrorMessage(e, '频道', '频道不存在或已解散')
+      notFound.value = r.notFound
+      loadError.value = r.text
     }
   } finally {
     if (cid.value === id) loading.value = false
@@ -689,6 +742,14 @@ async function onDissolve() {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  /* 返回改为 <button> 后需要重置默认样式 */
+  border: none;
+  background: none;
+  padding: 6px 4px;
+  cursor: pointer;
+}
+.back:hover {
+  color: var(--brand);
 }
 .back-icon {
   width: 16px;
@@ -938,12 +999,83 @@ async function onDissolve() {
   margin: 0;
   padding: 0;
 }
+/* 宽屏顶部条：自带返回 + 面包屑 + 站点导航（三栏页无底部 tabbar，必须提供导航） */
+.wb-topbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  height: var(--nav-height);
+  padding: 0 var(--sp-4);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.wb-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px 6px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: var(--fs-body);
+  cursor: pointer;
+}
+.wb-back:hover {
+  color: var(--brand);
+  border-color: var(--brand);
+}
+.wb-crumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: var(--fs-caption);
+}
+.wb-crumb-link {
+  color: var(--text-3);
+}
+.wb-crumb-link:hover {
+  color: var(--brand);
+}
+.wb-crumb-sep {
+  color: var(--text-3);
+}
+.wb-crumb-cur {
+  color: var(--text-1);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wb-top-links {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-shrink: 0;
+}
+.wb-top-link {
+  font-size: var(--fs-body);
+  color: var(--text-2);
+}
+.wb-top-link:hover,
+.wb-top-link.router-link-active {
+  color: var(--brand);
+}
+.wb-rail-empty {
+  margin: var(--sp-2) 0 0;
+}
+.wb-empty-link {
+  margin-left: 4px;
+  color: var(--brand);
+}
 .wb-grid {
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr) 300px;
-  height: calc(100vh - var(--nav-height));
+  /* 顶部条 nav-height + .app-shell 底部常驻 tabbar 留白，避免多出 56px 空白/滚动条 */
+  height: calc(100vh - var(--nav-height) - var(--tabbar-height));
   min-height: 0;
-  border-top: 1px solid var(--border);
 }
 .wb-left {
   border-right: 1px solid var(--border);

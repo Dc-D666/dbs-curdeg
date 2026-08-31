@@ -26,11 +26,15 @@ const router = createRouter({
   ],
 })
 
-// 需要登录的页面守卫
+// 需要登录的页面守卫：发帖页也要拦截，否则游客写完一整篇才发现要登录（只能靠草稿兜底）
+const guardedNames = ['community-admin', 'notifications', 'dashboard', 'post-create']
 router.beforeEach((to) => {
   const authed = !!tokenStore.access
-  const meRoute = to.path === '/me' || to.path.startsWith('/me/') || to.name === 'community-admin' || to.name === 'notifications' || to.name === 'dashboard'
-  if (meRoute && !authed) return { name: 'login' }
+  const needAuth = to.path === '/me' || to.path.startsWith('/me/') || guardedNames.includes(String(to.name))
+  if (needAuth && !authed) {
+    // 带上来源地址，登录后自动回到原页面
+    return { name: 'login', query: to.fullPath === '/' ? {} : { redirect: to.fullPath } }
+  }
   if ((to.name === 'login' || to.name === 'register') && authed) return { name: 'home' }
   return true
 })

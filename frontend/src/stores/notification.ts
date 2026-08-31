@@ -2,6 +2,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { notificationApi, type NotificationItem, type NotifySettings } from '@/api/notification'
+import { loadErrorMessage } from '@/utils/error'
 
 export const useNotificationStore = defineStore('notification', () => {
   const unread = ref(0)
@@ -10,6 +11,7 @@ export const useNotificationStore = defineStore('notification', () => {
   const page = ref(1)
   const loaded = ref(false)
   const loading = ref(false)
+  const error = ref('')
   const settings = ref<NotifySettings | null>(null)
 
   async function fetchUnread() {
@@ -20,17 +22,24 @@ export const useNotificationStore = defineStore('notification', () => {
     }
   }
 
+  /** 拉取列表。失败时置 error 态（不再让页面停在骨架屏上），成功清空 error。 */
   async function fetchList(reset = false) {
     if (reset) {
       page.value = 1
       items.value = []
     }
     loading.value = true
+    error.value = ''
     try {
       const data = await notificationApi.list(page.value, 20)
       items.value = reset ? data.items : [...items.value, ...data.items]
       total.value = data.total
       loaded.value = true
+    } catch (e) {
+      error.value = loadErrorMessage(e, '通知').text
+      // 加载更多翻页失败要退回原页码，避免跳过一页数据
+      if (!reset && page.value > 1) page.value -= 1
+      throw e
     } finally {
       loading.value = false
     }
@@ -71,7 +80,7 @@ export const useNotificationStore = defineStore('notification', () => {
   }
 
   return {
-    unread, items, total, page, loaded, loading, settings,
+    unread, items, total, page, loaded, loading, error, settings,
     fetchUnread, fetchList, bumpUnread, markRead, markAllRead, removeItem, loadSettings, saveSettings,
   }
 })

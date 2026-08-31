@@ -216,7 +216,15 @@
       </template>
     </template>
 
-    <div v-else-if="!loading" class="state">频道不存在</div>
+    <!-- 加载失败：区分「频道确实不存在」与「网络/服务端故障（可重试）」 -->
+    <ErrorState
+      v-else-if="!loading"
+      :text="loadError"
+      :retryable="!notFound"
+      @retry="loadAll"
+    >
+      <router-link v-if="notFound" to="/discover" class="state-link">去发现频道</router-link>
+    </ErrorState>
 
     <!-- 话题编辑弹窗 -->
     <t-dialog
@@ -249,6 +257,8 @@ import { usePostDrawer } from '@/stores/postDrawer'
 import { tokenStore } from '@/api/http'
 import { toast } from '@/utils/toast'
 import { confirmDialog } from '@/utils/confirm'
+import { loadErrorMessage } from '@/utils/error'
+import ErrorState from '@/components/ErrorState.vue'
 
 const props = withDefaults(
   defineProps<{ cid: number; embeddedInTab?: boolean }>(),
@@ -259,6 +269,8 @@ const emit = defineEmits<{ (e: 'change', cid: number): void }>()
 const router = useRouter()
 const community = ref<Community | null>(null)
 const loading = ref(true)
+const loadError = ref('')
+const notFound = ref(false)
 const joining = ref(false)
 const activeBoard = ref<number | null>(null)
 
@@ -456,6 +468,8 @@ async function loadAll() {
   feedHasMore.value = false
   topics.value = []
   hotPosts.value = []
+  loadError.value = ''
+  notFound.value = false
   try {
     const c = await communityApi.get(id)
     if (props.cid !== id) return
@@ -463,8 +477,13 @@ async function loadAll() {
     if (c.boards.length > 0) activeBoard.value = await pickDefaultBoard(c)
     loadTopics()
     loadHotPosts()
-  } catch {
-    if (props.cid === id) community.value = null
+  } catch (e) {
+    if (props.cid === id) {
+      community.value = null
+      const r = loadErrorMessage(e, '频道', '频道不存在或已解散')
+      notFound.value = r.notFound
+      loadError.value = r.text
+    }
   } finally {
     if (props.cid === id) loading.value = false
   }

@@ -35,6 +35,23 @@
         </t-select>
       </div>
 
+      <!-- AI 文生图描述输入（原 window.prompt） -->
+      <t-dialog
+        v-model:visible="drawDialog"
+        header="AI 文生图"
+        :confirm-btn="{ content: '生成', theme: 'primary', loading: drawBusy }"
+        cancel-btn="取消"
+        @confirm="submitDraw"
+      >
+        <t-input
+          v-model="drawPrompt"
+          maxlength="200"
+          placeholder="输入画面描述（用于文生图）"
+          :disabled="drawBusy"
+          @enter="submitDraw"
+        />
+      </t-dialog>
+
       <div v-if="drawImage" class="field">
         <span class="field-label">AI 生成图片</span>
         <img :src="drawImage" class="draw-img" alt="" />
@@ -126,6 +143,8 @@ watch(
 const topics = ref<TopicItem[]>([])
 const drawBusy = ref(false)
 const drawImage = ref('')
+const drawDialog = ref(false)
+const drawPrompt = ref('')
 
 // AI 帮写（阶段 6）
 const aiBusy = ref<'write' | 'polish' | 'title' | ''>('')
@@ -146,14 +165,16 @@ async function aiRun(action: 'write' | 'polish' | 'title') {
   }
   aiBusy.value = action
   aiText.value = ''
+  // 先留底：AI 失败时回填，避免用户原标题被清空后永久丢失
+  const before = action === 'title' ? form.title : ''
   try {
     if (action === 'title') {
       // 直接打字机写入标题输入框
-      const before = form.title
       form.title = ''
       await streamPost('/api/v1/ai/assist', { action, title: before, content: aiPlainContent() }, (d) => {
         form.title += d
       })
+      if (!form.title.trim()) form.title = before
     } else {
       aiMode = action === 'polish' ? 'replace' : 'append'
       await streamPost('/api/v1/ai/assist', { action, title: form.title, content: aiPlainContent() }, (d) => {
@@ -163,6 +184,8 @@ async function aiRun(action: 'write' | 'polish' | 'title') {
     }
     toast('AI 生成完成，可继续编辑', 'success')
   } catch (e) {
+    // 失败回填原标题（生成过半也还原，保证用户内容不丢）
+    if (action === 'title') form.title = before
     toast(e instanceof Error ? e.message : 'AI 生成失败', 'error')
     aiText.value = ''
   } finally {
@@ -177,15 +200,24 @@ function aiApply() {
   toast('已插入编辑器', 'success')
 }
 
-/** AI 绘画入口（P0）：后端需配置 draw_api_url/key。 */
-async function aiDraw() {
+/** AI 绘画入口（P0）：后端需配置 draw_api_url/key。用弹窗收集描述，替代 window.prompt。 */
+function aiDraw() {
   if (drawBusy.value) return
   if (!tokenStore.access) {
     router.push(`/login?redirect=${encodeURIComponent(route.fullPath)}`)
     return
   }
-  const prompt = window.prompt('输入画面描述（用于文生图）：')
-  if (!prompt) return
+  drawPrompt.value = ''
+  drawDialog.value = true
+}
+
+async function submitDraw() {
+  const prompt = drawPrompt.value.trim()
+  if (!prompt) {
+    toast('请输入画面描述', 'warning')
+    return
+  }
+  if (drawBusy.value) return
   drawBusy.value = true
   try {
     const r = await request<{ url: string; b64_json: string }>({ url: '/ai/draw', method: 'POST', data: { prompt } })
@@ -200,6 +232,7 @@ async function aiDraw() {
     toast(e instanceof Error ? e.message : '生成失败', 'error')
   } finally {
     drawBusy.value = false
+    drawDialog.value = false
   }
 }
 
@@ -230,6 +263,8 @@ onMounted(async () => {
     }
   }
   tryRestoreDraft()
+  // beforeunload：onBeforeUnmount 在浏览器刷新/关页时不可靠，必须单独兜底
+  window.addEventListener('beforeunload', onBeforeUnload)
 })
 
 // 离开前拦截：内容未发布时提示（草稿已存，可稍后恢复）
@@ -239,8 +274,12 @@ onBeforeRouteLeave(async () => {
   return ok
 })
 
-// 刷新/关闭/路由离开前把最后 2 秒内的输入补落一次草稿
+// 刷新/关闭页前把最后 2 秒内的输入补落一次草稿（同步写 localStorage）
+function onBeforeUnload() {
+  saveDraft()
+}
 onBeforeUnmount(() => {
+  window.removeEventListener('beforeunload', onBeforeUnload)
   window.clearTimeout(draftTimer)
   saveDraft()
 })

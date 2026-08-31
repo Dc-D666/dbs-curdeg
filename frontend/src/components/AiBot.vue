@@ -9,7 +9,10 @@
     <div v-if="open" class="ai-bot-panel">
       <header class="ai-bot-head">
         <span><RobotIcon class="ai-head-icon" /> 频道问答助手</span>
-        <button class="ai-bot-close" title="关闭" @click="open = false">✕</button>
+        <div class="ai-head-ops">
+          <button class="ai-bot-clear" title="清空会话" :disabled="busy" @click="clearSession">清空</button>
+          <button class="ai-bot-close" title="关闭" @click="open = false">✕</button>
+        </div>
       </header>
       <div ref="bodyEl" class="ai-bot-body">
         <p class="ai-bot-tip">基于频道内帖子内容回答，支持引用跳转。</p>
@@ -27,7 +30,9 @@
       </div>
       <footer class="ai-bot-foot">
         <t-input v-model="question" placeholder="问点频道里的事…" size="small" @enter="ask" />
-        <t-button theme="primary" size="small" :loading="busy" @click="ask">发送</t-button>
+        <!-- 流式回答中给出「停止」入口：此前 busy 锁最长 60s，用户只能干等 -->
+        <t-button v-if="busy" theme="danger" variant="outline" size="small" @click="stop">停止</t-button>
+        <t-button v-else theme="primary" size="small" :disabled="!question.trim()" @click="ask">发送</t-button>
       </footer>
     </div>
   </div>
@@ -39,6 +44,7 @@ import { useRouter } from 'vue-router'
 import { RobotIcon } from 'tdesign-icons-vue-next'
 import { tokenStore } from '@/api/http'
 import { streamPost } from '@/utils/sse'
+import { useAuthStore } from '@/stores/auth'
 
 interface QaMsg {
   role: 'user' | 'bot'
@@ -49,19 +55,97 @@ interface QaMsg {
 }
 
 const router = useRouter()
+const auth = useAuthStore()
 const authed = computed(() => !!tokenStore.access)
 const open = ref(false)
 const busy = ref(false)
 const question = ref('')
 const messages = ref<QaMsg[]>([])
 const bodyEl = ref<HTMLElement | null>(null)
+// 流式请求的中断控制器（「停止生成」）
+let controller: AbortController | null = null
+
+// ---------- 会话持久化：关闭面板不再清空历史 ----------
+
+const SESSION_TTL = 24 * 3600 * 1000
+const sessionKey = computed(() => `ai_bot_session:${auth.user?.id ?? 0}`)
+
+function persist() {
+  try {
+    // 空会话直接清键：否则清空后防抖的 persist 会把 [] 又写回去
+    if (messages.value.length === 0) {
+      localStorage.removeItem(sessionKey.value)
+      return
+    }
+    // 只存可见内容，不存 streaming 等瞬时状态；最多留最近 50 条
+    const data = messages.value.slice(-50).map(({ role, text, status, refs }) => ({
+      role,
+      text,
+      status,
+      refs,
+    }))
+    localStorage.setItem(sessionKey.value, JSON.stringify({ ts: Date.now(), data }))
+  } catch {
+    // localStorage 不可用（隐私模式/超限）：静默忽略，不影响对话
+  }
+}
+
+function restore() {
+  try {
+    const raw = localStorage.getItem(sessionKey.value)
+    if (!raw) return
+    const parsed = JSON.parse(raw) as { ts?: number; data?: QaMsg[] }
+    if (!Array.isArray(parsed.data)) return
+    // 超过 24h 的会话不再恢复，避免上下文过期
+    if (parsed.ts && Date.now() - parsed.ts > SESSION_TTL) {
+      localStorage.removeItem(sessionKey.value)
+      return
+    }
+    messages.value = parsed.data
+      .filter((m) => m && (m.role === 'user' || m.role === 'bot'))
+      .map((m) => ({ role: m.role, text: m.text || '', status: m.status, refs: m.refs }))
+  } catch {
+    /* 坏数据：忽略，按空会话处理 */
+  }
+}
+
+let saveTimer: number | undefined
+watch(
+  messages,
+  () => {
+    window.clearTimeout(saveTimer)
+    saveTimer = window.setTimeout(persist, 400) // 流式输出很密集，防抖落盘
+  },
+  { deep: true },
+)
 
 watch(open, (v) => {
   if (v) {
-    messages.value = []
-    question.value = ''
+    if (messages.value.length === 0) restore()
+    return
   }
+  window.clearTimeout(saveTimer)
+  persist()
 })
+
+// 换账号时不能串会话
+watch(sessionKey, () => {
+  messages.value = []
+  if (open.value) restore()
+})
+
+function clearSession() {
+  messages.value = []
+  try {
+    localStorage.removeItem(sessionKey.value)
+  } catch {
+    /* ignore */
+  }
+}
+
+function stop() {
+  controller?.abort()
+}
 
 watch(messages, async () => {
   await nextTick()
@@ -78,6 +162,7 @@ async function ask() {
   const bot = reactive<QaMsg>({ role: 'bot', text: '', streaming: true })
   messages.value.push(bot)
   busy.value = true
+  controller = new AbortController()
   try {
     await streamPost(
       '/api/v1/ai/qa/stream',
@@ -86,6 +171,7 @@ async function ask() {
         bot.text += delta
       },
       {
+        signal: controller.signal,
         onEvent(event) {
           if (event.type === 'error') {
             bot.text = event.message || '问答失败，请稍后再试'
@@ -112,11 +198,17 @@ async function ask() {
       },
     )
   } catch (e) {
+    if ((e as Error)?.name === 'AbortError') {
+      // 用户主动停止：保留已生成的部分，不弹错误
+      if (!bot.text) bot.text = '（已停止生成）'
+      return
+    }
     if (bot.text) return // 已输出部分内容则保留，不做整段覆盖
     bot.text = (e as Error).message || '问答失败，请稍后再试'
   } finally {
     bot.streaming = false
     busy.value = false
+    controller = null
   }
 }
 
@@ -179,6 +271,27 @@ function gotoPost(id: number) {
   height: 16px;
   vertical-align: -2px;
   margin-right: 4px;
+}
+.ai-head-ops {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ai-bot-clear {
+  border: none;
+  background: transparent;
+  color: #fff;
+  font-size: 12px;
+  opacity: 0.85;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+.ai-bot-clear:hover {
+  opacity: 1;
+}
+.ai-bot-clear:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 .ai-bot-close {
   border: none;

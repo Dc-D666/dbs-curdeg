@@ -7,7 +7,12 @@
       <h1 class="page-title">我的收藏</h1>
     </header>
 
-    <p v-if="loading" class="state">加载中…</p>
+    <p v-if="loading && items.length === 0" class="state">加载中…</p>
+    <ErrorState
+      v-else-if="loadError && items.length === 0"
+      :text="loadError"
+      @retry="retry"
+    />
     <EmptyState v-else-if="items.length === 0" text="暂无收藏" />
 
     <ul v-else class="list">
@@ -35,26 +40,38 @@ import { onMounted, ref } from 'vue'
 import { ArrowLeftIcon } from 'tdesign-icons-vue-next'
 import { postApi, type FavoriteItem } from '@/api/post'
 import EmptyState from '@/components/EmptyState.vue'
+import ErrorState from '@/components/ErrorState.vue'
 import { toast } from '@/utils/toast'
+import { errMessage } from '@/utils/error'
 
 const items = ref<FavoriteItem[]>([])
 const page = ref(0)
 const total = ref(0)
 const loading = ref(false)
+// 首屏失败要落到错误态，否则空列表会被误读成「暂无收藏」
+const loadError = ref('')
 
 async function load(p: number) {
   if (loading.value) return
   loading.value = true
+  loadError.value = ''
   try {
     const data = await postApi.myFavorites(p)
     items.value = p === 1 ? data.items : [...items.value, ...data.items]
     page.value = p
     total.value = data.total
   } catch (e) {
-    toast(e instanceof Error ? e.message : '加载失败', 'error')
+    const msg = errMessage(e, '加载失败')
+    if (p === 1 && items.value.length === 0) loadError.value = msg
+    else toast(msg, 'error')
   } finally {
     loading.value = false
   }
+}
+
+function retry() {
+  page.value = 0
+  load(1)
 }
 
 async function remove(f: FavoriteItem) {

@@ -19,10 +19,20 @@
           <ChevronRightIcon />
         </button>
 
-        <div class="lb-stage" @wheel.prevent="onWheel" @mousedown="onDragStart">
+        <!-- 移动端手势：单指左右滑切图 / 双指捏合缩放 / 放大后单指拖拽平移 -->
+        <div
+          class="lb-stage"
+          :class="{ 'is-interacting': interacting }"
+          @wheel.prevent="onWheel"
+          @mousedown="onDragStart"
+          @touchstart="onTouchStart"
+          @touchmove.prevent="onTouchMove"
+          @touchend="onTouchEnd"
+          @touchcancel="onTouchEnd"
+        >
           <img
             :src="current"
-            :style="{ transform: `scale(${scale})`, cursor: dragging ? 'grabbing' : 'grab' }"
+            :style="imgStyle"
             class="lb-img"
             alt=""
             draggable="false"
@@ -55,13 +65,34 @@ const visible = ref(false)
 const scale = ref(1)
 const dragging = ref(false)
 const dragX = ref(0)
+// 放大后的平移偏移（px）
+const panX = ref(0)
+const panY = ref(0)
+// 触摸交互进行中：关闭 transform 过渡，否则捏合/拖拽会有粘滞感
+const interacting = ref(false)
 
 const current = computed(() => props.images[props.index] ?? props.images[0] ?? '')
+
+const imgStyle = computed(() => ({
+  transform: `translate(${panX.value}px, ${panY.value}px) scale(${scale.value})`,
+  cursor: dragging.value ? 'grabbing' : 'grab',
+}))
+
+function clampScale(v: number) {
+  return Math.min(4, Math.max(0.5, +v.toFixed(2)))
+}
+
+/** 复位视图（切图 / 重新打开 / 缩回原始尺寸时调用）。 */
+function resetView() {
+  scale.value = 1
+  panX.value = 0
+  panY.value = 0
+}
 
 /** 打开灯箱：滚动到 index 对应图片并锁定页面滚动。 */
 function open() {
   visible.value = true
-  scale.value = 1
+  resetView()
   document.body.style.overflow = 'hidden'
 }
 
@@ -76,7 +107,7 @@ function changeIndex(delta: number) {
   if (n < 2) return
   const next = (props.index + delta + n) % n
   emit('update:index', next)
-  scale.value = 1
+  resetView()
 }
 
 function prev() {
@@ -87,7 +118,83 @@ function next() {
 }
 
 function zoom(delta: number) {
-  scale.value = Math.min(4, Math.max(0.5, +(scale.value + delta).toFixed(2)))
+  scale.value = clampScale(scale.value + delta)
+  // 缩回原始尺寸后归位，避免图片停在偏移位置
+  if (scale.value <= 1) {
+    panX.value = 0
+    panY.value = 0
+  }
+}
+
+// ---------- 触摸手势（移动端）----------
+
+const SWIPE_THRESHOLD = 50
+let touchStart: { x: number; y: number; time: number } | null = null
+let pinchStart: { dist: number; scale: number } | null = null
+let panOrigin: { x: number; y: number } | null = null
+
+function touchDistance(t: TouchList) {
+  return Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY)
+}
+
+function onTouchStart(e: TouchEvent) {
+  interacting.value = true
+  if (e.touches.length >= 2) {
+    // 双指：进入捏合缩放，取消单指判定
+    pinchStart = { dist: touchDistance(e.touches), scale: scale.value }
+    touchStart = null
+    panOrigin = null
+    return
+  }
+  const t = e.touches[0]
+  touchStart = { x: t.clientX, y: t.clientY, time: Date.now() }
+  panOrigin = { x: t.clientX - panX.value, y: t.clientY - panY.value }
+}
+
+function onTouchMove(e: TouchEvent) {
+  if (e.touches.length >= 2 && pinchStart) {
+    const next = clampScale(pinchStart.scale * (touchDistance(e.touches) / pinchStart.dist))
+    // 缩到 1 以下时保持不放大状态并归位
+    scale.value = next
+    if (next <= 1) {
+      panX.value = 0
+      panY.value = 0
+    }
+    return
+  }
+  // 单指：仅在放大状态拖拽平移；未放大时留给 touchend 判定为切图手势
+  if (e.touches.length === 1 && panOrigin && scale.value > 1) {
+    panX.value = e.touches[0].clientX - panOrigin.x
+    panY.value = e.touches[0].clientY - panOrigin.y
+  }
+}
+
+function onTouchEnd(e: TouchEvent) {
+  if (e.touches.length < 2) pinchStart = null
+  if (e.touches.length === 0 && touchStart) {
+    const t = e.changedTouches[0]
+    const dx = t.clientX - touchStart.x
+    const dy = t.clientY - touchStart.y
+    const dt = Date.now() - touchStart.time
+    // 未放大 + 明显横向滑动 + 够快 → 切换上一张/下一张
+    if (
+      scale.value <= 1 &&
+      Math.abs(dx) >= SWIPE_THRESHOLD &&
+      Math.abs(dx) > Math.abs(dy) * 1.5 &&
+      dt < 800
+    ) {
+      changeIndex(dx > 0 ? -1 : 1)
+    }
+    touchStart = null
+    panOrigin = null
+  }
+  if (e.touches.length === 0) {
+    interacting.value = false
+    if (scale.value <= 1) {
+      panX.value = 0
+      panY.value = 0
+    }
+  }
 }
 
 function onWheel(e: WheelEvent) {
@@ -140,7 +247,7 @@ defineExpose({ open, close })
 watch(
   () => props.images,
   () => {
-    if (visible.value) scale.value = 1
+    if (visible.value) resetView()
   },
 )
 </script>
@@ -236,13 +343,20 @@ watch(
   overflow: hidden;
   padding: 60px var(--sp-5) var(--sp-5);
   box-sizing: border-box;
+  /* 交给自定义手势处理：禁止浏览器的滚动/双击缩放抢走事件 */
+  touch-action: none;
 }
 .lb-img {
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
   user-select: none;
+  -webkit-user-drag: none;
   transition: transform 0.18s ease;
+}
+/* 捏合/拖拽进行中去掉过渡，否则跟手性差 */
+.lb-stage.is-interacting .lb-img {
+  transition: none;
 }
 .lb-fade-enter-active,
 .lb-fade-leave-active {

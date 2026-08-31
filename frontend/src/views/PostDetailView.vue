@@ -1,13 +1,22 @@
 <template>
   <main class="detail-page" :class="{ embedded }">
     <header v-if="!embedded" class="page-header">
-      <router-link :to="post ? `/c/${post.community_id}` : '/discover'" class="back">
+      <!-- 返回优先回来源页（搜索/收藏/用户主页/关注流），深链进入才兜底到频道页 -->
+      <button type="button" class="back" @click="goBack">
         <ArrowLeftIcon class="back-icon" /> 返回
-      </router-link>
+      </button>
       <h1 class="page-title">帖子</h1>
     </header>
 
     <div v-if="loading" class="state">加载中…</div>
+    <ErrorState
+      v-else-if="!post"
+      :text="loadError"
+      :retryable="!notFound"
+      @retry="retryLoad"
+    >
+      <router-link v-if="notFound" to="/discover" class="state-link">去发现频道</router-link>
+    </ErrorState>
 
     <template v-else-if="post">
       <section class="panel post-panel">
@@ -19,7 +28,12 @@
           </h2>
           <div class="post-meta">
             <router-link :to="`/users/${post.author_id}`" class="author">{{ post.author_nickname }}</router-link>
-            <span>{{ post.community_name }} · {{ post.board_name }}</span>
+            <!-- 面包屑：频道名可点，便于从搜索/收藏进入后跳回频道 -->
+            <span class="crumb">
+              <router-link :to="`/c/${post.community_id}`" class="crumb-link">{{ post.community_name }}</router-link>
+              <span class="crumb-sep">·</span>
+              <span class="crumb-cur">{{ post.board_name }}</span>
+            </span>
             <span>{{ formatTime(post.created_at) }}</span>
           </div>
         </div>
@@ -99,8 +113,8 @@
             size="small"
             @click="router.push(`/c/${post.community_id}/boards/${post.board_id}/post/new?edit=${post.id}`)"
           >编辑</t-button>
-          <t-button variant="outline" size="small" @click="onToggleTop">{{ post.is_top ? '取消置顶' : '置顶' }}</t-button>
-          <t-button variant="outline" size="small" @click="onToggleEssence">{{ post.is_essence ? '取消精华' : '设精华' }}</t-button>
+          <t-button variant="outline" size="small" :loading="topBusy" @click="onToggleTop">{{ post.is_top ? '取消置顶' : '置顶' }}</t-button>
+          <t-button variant="outline" size="small" :loading="essenceBusy" @click="onToggleEssence">{{ post.is_essence ? '取消精华' : '设精华' }}</t-button>
           <t-button variant="outline" size="small" theme="danger" @click="onDeletePost">删除帖子</t-button>
         </div>
       </section>
@@ -192,7 +206,6 @@
       />
     </template>
 
-    <div v-else class="state">帖子不存在</div>
 
     <!-- 举报弹窗 -->
     <t-dialog
@@ -235,6 +248,8 @@ import { useUndoStore } from '@/stores/undo'
 import { toast } from '@/utils/toast'
 import { confirmDialog } from '@/utils/confirm'
 import { formatTime } from '@/utils/time'
+import { errMessage, loadErrorMessage } from '@/utils/error'
+import ErrorState from '@/components/ErrorState.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -251,6 +266,20 @@ const undo = useUndoStore()
 const post = ref<PostItem | null>(null)
 const loading = ref(true)
 const myMemberType = ref<number | null>(null)
+// 加载失败态：区分「帖子确实不存在（404，重试无意义）」与「网络/服务端故障（可重试）」
+const loadError = ref('')
+const notFound = ref(false)
+
+function retryLoad() {
+  loadPost()
+}
+
+/** 返回：有上一页就回上一页，深链直接进入时兜底到所属频道。 */
+function goBack() {
+  const back = window.history.state?.back
+  if (typeof back === 'string' && back) router.back()
+  else router.push(post.value ? `/c/${post.value.community_id}` : '/discover')
+}
 
 // 图片灯箱（P1）：缩放/切换/Esc，替代旧的全屏遮罩
 const lightboxRef = ref<InstanceType<typeof Lightbox> | null>(null)
@@ -358,6 +387,8 @@ async function loadPost() {
   const id = pid.value
   loading.value = true
   post.value = null
+  loadError.value = ''
+  notFound.value = false
   summary.value = ''
   typedSummary.value = ''
   typing.value = false
@@ -374,11 +405,16 @@ async function loadPost() {
       if (pid.value === id) attachments.value = list
     }).catch(() => {})
   } catch (e) {
-    if (pid.value === id) post.value = null
+    if (pid.value === id) {
+      post.value = null
+      const r = loadErrorMessage(e, '帖子')
+      notFound.value = r.notFound
+      loadError.value = r.text
+    }
   } finally {
     if (pid.value === id) loading.value = false
   }
-  if (pid.value === id) loadComments(1)
+  if (pid.value === id && post.value) loadComments(1)
 }
 
 onMounted(loadPost)
@@ -794,14 +830,37 @@ async function deleteComment(commentId: number) {
   })
 }
 
+const topBusy = ref(false)
+const essenceBusy = ref(false)
+
 async function onToggleTop() {
-  if (!post.value) return
-  post.value = await postApi.setTop(post.value.id, !post.value.is_top)
+  const p = post.value
+  if (!p || topBusy.value) return
+  const next = !p.is_top
+  topBusy.value = true
+  try {
+    post.value = await postApi.setTop(p.id, next)
+    toast(next ? '已置顶' : '已取消置顶', 'success')
+  } catch (e) {
+    toast(errMessage(e, '操作失败'), 'error')
+  } finally {
+    topBusy.value = false
+  }
 }
 
 async function onToggleEssence() {
-  if (!post.value) return
-  post.value = await postApi.setEssence(post.value.id, !post.value.is_essence)
+  const p = post.value
+  if (!p || essenceBusy.value) return
+  const next = !p.is_essence
+  essenceBusy.value = true
+  try {
+    post.value = await postApi.setEssence(p.id, next)
+    toast(next ? '已设为精华' : '已取消精华', 'success')
+  } catch (e) {
+    toast(errMessage(e, '操作失败'), 'error')
+  } finally {
+    essenceBusy.value = false
+  }
 }
 
 async function onDeletePost() {
@@ -840,6 +899,14 @@ async function onDeletePost() {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  /* 返回改为 <button> 后需要重置默认样式 */
+  border: none;
+  background: none;
+  padding: 6px 4px;
+  cursor: pointer;
+}
+.back:hover {
+  color: var(--brand);
 }
 .back-icon {
   width: 16px;
@@ -879,6 +946,28 @@ async function onDeletePost() {
 .author {
   color: var(--brand);
   text-decoration: none;
+}
+/* 面包屑：频道可点，版块为当前位置 */
+.crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.crumb-link {
+  color: var(--text-2);
+}
+.crumb-link:hover {
+  color: var(--brand);
+}
+.crumb-sep {
+  color: var(--text-3);
+}
+.crumb-cur {
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .post-body {
   margin-top: var(--sp-4);
@@ -954,6 +1043,8 @@ async function onDeletePost() {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
+  /* 375px 下有 5 个按钮 + 计数，不换行会被 overflow-x:hidden 裁掉（举报按钮看不见） */
+  flex-wrap: wrap;
 }
 .post-extra {
   margin-top: var(--sp-2);

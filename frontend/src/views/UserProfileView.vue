@@ -1,7 +1,7 @@
 <template>
   <main class="profile">
     <header class="page-header">
-      <t-button variant="text" @click="$router.back()">
+      <t-button variant="text" @click="goBack">
         <ArrowLeftIcon class="back-icon" /> 返回
       </t-button>
       <h1 class="page-title">用户主页</h1>
@@ -54,7 +54,15 @@
       </t-tabs>
     </section>
 
-    <div v-else class="state">用户不存在</div>
+    <!-- 加载失败：区分「用户确实不存在」与「网络/服务端故障（可重试）」 -->
+    <ErrorState
+      v-else
+      :text="loadError"
+      :retryable="!notFound"
+      @retry="retryLoad"
+    >
+      <router-link v-if="notFound" to="/discover" class="state-link">去发现频道</router-link>
+    </ErrorState>
   </main>
 </template>
 
@@ -68,7 +76,9 @@ import { useAuthStore } from '@/stores/auth'
 import { tokenStore } from '@/api/http'
 import FeedCard from '@/components/FeedCard.vue'
 import EmptyState from '@/components/EmptyState.vue'
+import ErrorState from '@/components/ErrorState.vue'
 import { toast } from '@/utils/toast'
+import { loadErrorMessage } from '@/utils/error'
 
 const route = useRoute()
 const router = useRouter()
@@ -76,6 +86,19 @@ const uid = Number(route.params.id)
 const auth = useAuthStore()
 const user = ref<PublicUser | null>(null)
 const loading = ref(true)
+const loadError = ref('')
+const notFound = ref(false)
+
+/** 返回：有上一页就回上一页；分享链接/新标签页直接进入时兜底到「发现」。
+ *
+ * 兜底选「发现」而不是首页：用户主页多半是从频道/帖子流里的作者名点进来的，
+ * 回到「发现」比回到个人工作台更符合来路预期。
+ */
+function goBack() {
+  const back = window.history.state?.back
+  if (typeof back === 'string' && back) router.back()
+  else router.push('/discover')
+}
 const following = ref(false)
 const followBusy = ref(false)
 const followCount = ref(0)
@@ -122,18 +145,36 @@ async function reloadPosts() {
 }
 
 onMounted(async () => {
-  try {
-    user.value = await userApi.get(uid)
-  } catch {
-    user.value = null
-  } finally {
-    loading.value = false
-  }
+  await loadUser()
+  // 用户资料都加载失败就不要再请求帖子，否则叠加一条「加载帖子失败」的报错 toast
+  if (!user.value) return
   loadPosts(true)
   if (tokenStore.access && auth.user?.id !== uid) {
     userApi.followStatus(uid).then((r) => (following.value = r.following)).catch(() => {})
   }
 })
+
+async function loadUser() {
+  loading.value = true
+  loadError.value = ''
+  notFound.value = false
+  try {
+    user.value = await userApi.get(uid)
+  } catch (e) {
+    user.value = null
+    const r = loadErrorMessage(e, '用户', '用户不存在')
+    notFound.value = r.notFound
+    loadError.value = r.text
+  } finally {
+    loading.value = false
+  }
+}
+
+function retryLoad() {
+  loadUser().then(() => {
+    if (user.value) loadPosts(true)
+  })
+}
 
 async function toggleFollow() {
   if (!tokenStore.access) {

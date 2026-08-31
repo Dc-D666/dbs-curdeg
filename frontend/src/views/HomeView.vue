@@ -27,10 +27,19 @@
       @change="onChangeChannel"
     />
 
-    <!-- 无默认频道：引导去发现页 -->
+    <!-- 无默认频道：加载中 / 加载失败（可重试）/ 确实没加入（引导去发现页） -->
     <div v-else class="state">
-      <p class="state-text">加入一个频道，开始使用频道工作台</p>
-      <t-button theme="primary" @click="router.push('/discover')">去发现频道</t-button>
+      <template v-if="picking">
+        <p class="state-text">加载中…</p>
+      </template>
+      <template v-else-if="loadError">
+        <p class="state-text">{{ loadError }}</p>
+        <t-button variant="outline" @click="retryPick">重试</t-button>
+      </template>
+      <template v-else>
+        <p class="state-text">加入一个频道，开始使用频道工作台</p>
+        <t-button theme="primary" @click="router.push('/discover')">去发现频道</t-button>
+      </template>
     </div>
   </main>
 </template>
@@ -43,6 +52,7 @@ import { communityApi } from '@/api/community'
 import { useAuthStore } from '@/stores/auth'
 import { tokenStore } from '@/api/http'
 import { formatBeijing } from '@/utils/time'
+import { errMessage } from '@/utils/error'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -67,6 +77,10 @@ function remember(id: number) {
   localStorage.setItem(LAST_CHANNEL_KEY, String(id))
 }
 
+// 失败不能静默吞掉：否则已登录用户会看到「加入一个频道」的错误引导且无任何重试入口
+const picking = ref(false)
+const loadError = ref('')
+
 function pickDefault() {
   const saved = Number(localStorage.getItem(LAST_CHANNEL_KEY))
   if (saved && saved > 0) {
@@ -74,6 +88,8 @@ function pickDefault() {
     return
   }
   if (!tokenStore.access) return // 未登录且无记忆 → 引导
+  picking.value = true
+  loadError.value = ''
   communityApi
     .mine()
     .then((m) => {
@@ -83,7 +99,16 @@ function pickDefault() {
         remember(all[0].id)
       }
     })
-    .catch(() => {})
+    .catch((e: unknown) => {
+      loadError.value = errMessage(e, '加载我的频道失败')
+    })
+    .finally(() => {
+      picking.value = false
+    })
+}
+
+function retryPick() {
+  pickDefault()
 }
 
 /** 工作台内就地切换频道：更新当前频道 + 写入最近访问记忆。 */

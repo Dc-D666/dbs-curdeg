@@ -48,6 +48,9 @@
       </div>
     </section>
 
+    <section v-else-if="store.error" class="ntf-empty">
+      <ErrorState :text="store.error" @retry="onRetry" />
+    </section>
     <section v-else-if="store.loaded" class="ntf-empty">
       <t-empty description="暂无通知" />
     </section>
@@ -62,6 +65,7 @@ import { onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useNotificationStore } from '@/stores/notification'
+import ErrorState from '@/components/ErrorState.vue'
 import type { NotificationItem } from '@/api/notification'
 
 const router = useRouter()
@@ -111,7 +115,14 @@ function goto(n: NotificationItem) {
 
 function loadMore() {
   store.page += 1
-  store.fetchList()
+  store.fetchList().catch((e: unknown) => {
+    MessagePlugin.error((e as Error)?.message || '加载失败，请重试')
+  })
+}
+
+/** 首屏加载失败后的重试入口（避免页面停在骨架屏/错误态无任何出路）。 */
+function onRetry() {
+  store.fetchList(true).catch(() => {})
 }
 
 async function onReadAll() {
@@ -133,7 +144,7 @@ async function onRemove(n: NotificationItem) {
 }
 
 onMounted(() => {
-  store.fetchList(true)
+  store.fetchList(true).catch(() => {})
 })
 </script>
 

@@ -35,6 +35,7 @@ import { PenIcon } from 'tdesign-icons-vue-next'
 import { postApi } from '@/api/post'
 import { tokenStore } from '@/api/http'
 import { toast } from '@/utils/toast'
+import { confirmDialog } from '@/utils/confirm'
 
 const props = withDefaults(defineProps<{ cid: number; bid: number }>(), { bid: 0 })
 const emit = defineEmits<{ (e: 'posted'): void }>()
@@ -54,10 +55,20 @@ function expand() {
   open.value = true
 }
 
-function collapse() {
+/** 无确认地清空（发布成功后调用）。 */
+function reset() {
   open.value = false
   title.value = ''
   content.value = ''
+}
+
+/** 有内容时先二次确认，避免误点「取消」丢稿。 */
+async function collapse() {
+  if (title.value.trim() || content.value.trim()) {
+    const ok = await confirmDialog('放弃这条内容？', '关闭后已填写的标题和正文将不会保留。', false)
+    if (!ok) return
+  }
+  reset()
 }
 
 async function submit() {
@@ -76,7 +87,7 @@ async function submit() {
   try {
     await postApi.create(props.cid, props.bid, { title: t, content: c || undefined })
     toast('已发布', 'success')
-    collapse()
+    reset()
     emit('posted')
   } catch (e) {
     toast(e instanceof Error ? e.message : '发布失败', 'error')

@@ -26,15 +26,35 @@ export const useUndoStore = defineStore('undo', () => {
     }
   }
 
-  function hide() {
+  /** 只清理状态，不触发任何回调。 */
+  function reset() {
+    clear()
     visible.value = false
+    message.value = ''
     onUndo = null
     onCommit = null
-    clear()
+  }
+
+  /** 结算当前未决操作：有 onCommit 就立即执行（延迟执行型），否则仅丢弃撤销机会。
+   *
+   * 新操作到来前必须先结算上一条，否则 onCommit 会被覆盖 ——
+   * 表现为「评论在 UI 上消失了，但服务端的删除从未发生」，刷新后内容复活。
+   */
+  function commitPending() {
+    const commit = onCommit
+    reset()
+    commit?.()
+  }
+
+  /** 外部主动隐藏：等同结算（绝不静默丢弃未执行的删除）。 */
+  function hide() {
+    commitPending()
   }
 
   /** 展示撤销 Snackbar；超时未撤销才执行 onCommit，撤销则执行 onUndo。 */
   function notify(msg: string, undoFn: () => void, commitFn?: () => void, durationMs = 5000) {
+    // 队列语义：已有未决操作时先立即结算上一条，再开新条
+    if (visible.value) commitPending()
     message.value = msg
     onUndo = undoFn
     onCommit = commitFn ?? null
@@ -42,16 +62,16 @@ export const useUndoStore = defineStore('undo', () => {
     clear()
     timer = setTimeout(() => {
       const commit = onCommit
-      hide()
+      reset()
       commit?.()
     }, durationMs)
   }
 
   function undo() {
     const fn = onUndo
-    hide()
+    reset()
     fn?.()
   }
 
-  return { message, visible, notify, undo, hide }
+  return { message, visible, notify, undo, hide, commitPending }
 })

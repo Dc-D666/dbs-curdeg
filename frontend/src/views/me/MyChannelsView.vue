@@ -7,7 +7,9 @@
       <h1 class="page-title">我的频道</h1>
     </header>
 
-    <t-tabs v-model="active" class="channels-tabs">
+    <!-- 加载失败：不能落到「还没有创建过频道」这类误导性空态 -->
+    <ErrorState v-if="loadError" :text="loadError" @retry="load" />
+    <t-tabs v-else v-model="active" class="channels-tabs">
       <t-tab-panel :value="0" :label="`我创建的${lists.owned.length ? `（${lists.owned.length}）` : ''}`">
         <ChannelGroup :loading="loading" :items="lists.owned" empty-text="还没有创建过频道" />
       </t-tab-panel>
@@ -27,9 +29,12 @@ import { onBeforeRouteUpdate } from 'vue-router'
 import { ArrowLeftIcon } from 'tdesign-icons-vue-next'
 import { communityApi, type Community } from '@/api/community'
 import ChannelGroup from '@/components/channel/ChannelGroup.vue'
+import ErrorState from '@/components/ErrorState.vue'
+import { errMessage } from '@/utils/error'
 
 const active = ref(0)
 const loading = ref(false)
+const loadError = ref('')
 const lists = reactive<{ owned: Community[]; managed: Community[]; joined: Community[] }>({
   owned: [],
   managed: [],
@@ -39,11 +44,14 @@ const lists = reactive<{ owned: Community[]; managed: Community[]; joined: Commu
 async function load() {
   if (loading.value) return
   loading.value = true
+  loadError.value = ''
   try {
     const data = await communityApi.mine()
     lists.owned = data.owned
     lists.managed = data.managed
     lists.joined = data.joined
+  } catch (e) {
+    loadError.value = errMessage(e, '加载我的频道失败')
   } finally {
     loading.value = false
   }

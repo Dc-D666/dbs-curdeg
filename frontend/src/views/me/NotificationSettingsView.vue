@@ -7,18 +7,28 @@
       <h1 class="page-title">通知设置</h1>
     </header>
 
-    <section class="panel">
-      <div v-for="s in settingRows" :key="s.key" class="switch-row">
-        <div class="switch-side">
-          <span class="switch-label">{{ s.label }}</span>
-          <span class="switch-desc">{{ s.desc }}</span>
+    <!-- 加载失败不能静默吞掉：所有开关会默认显示为「关」，用户会误以为自己关了通知 -->
+    <ErrorState v-if="loadError" :text="loadError" @retry="loadSettings" />
+    <template v-else>
+      <section class="panel">
+        <div v-for="s in settingRows" :key="s.key" class="switch-row">
+          <div class="switch-side">
+            <span class="switch-label">{{ s.label }}</span>
+            <span class="switch-desc">{{ s.desc }}</span>
+          </div>
+          <t-switch
+            :value="!!(form[s.key])"
+            size="small"
+            :disabled="loading"
+            @change="(v: boolean) => onToggle(s.key, v)"
+          />
         </div>
-        <t-switch :value="!!(form[s.key])" size="small" @change="(v: boolean) => onToggle(s.key, v)" />
-      </div>
-      <p v-if="msg" class="msg" :class="{ error }">{{ msg }}</p>
-    </section>
+        <p v-if="msg" class="msg" :class="{ error }">{{ msg }}</p>
+      </section>
 
-    <p class="hint">关闭后你将不再收到对应类型的通知（系统消息除外）。</p>
+      <p v-if="loading" class="hint">设置加载中…</p>
+      <p v-else class="hint">关闭后你将不再收到对应类型的通知（系统消息除外）。</p>
+    </template>
   </main>
 </template>
 
@@ -26,6 +36,8 @@
 import { onMounted, reactive, ref } from 'vue'
 import { ArrowLeftIcon } from 'tdesign-icons-vue-next'
 import { notificationApi, type NotifySettings } from '@/api/notification'
+import ErrorState from '@/components/ErrorState.vue'
+import { errMessage } from '@/utils/error'
 
 const settingRows: Array<{ key: keyof NotifySettings; label: string; desc: string }> = [
   { key: 'mention', label: '@ 提及我', desc: '有人在我的帖子或评论里 @ 我时提醒' },
@@ -40,15 +52,23 @@ const settingRows: Array<{ key: keyof NotifySettings; label: string; desc: strin
 const form = reactive<Record<string, boolean>>({})
 const msg = ref('')
 const error = ref(false)
+const loading = ref(true)
+const loadError = ref('')
 
-onMounted(async () => {
+async function loadSettings() {
+  loading.value = true
+  loadError.value = ''
   try {
     const settings = await notificationApi.getSettings()
     for (const row of settingRows) form[row.key] = !!settings[row.key]
-  } catch {
-    /* 忽略 */
+  } catch (e) {
+    loadError.value = errMessage(e, '通知设置加载失败')
+  } finally {
+    loading.value = false
   }
-})
+}
+
+onMounted(loadSettings)
 
 async function onToggle(key: keyof NotifySettings, v: boolean) {
   msg.value = ''

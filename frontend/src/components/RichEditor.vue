@@ -37,16 +37,76 @@
       <span v-if="uploading" class="re-uploading">上传中…</span>
     </div>
 
-    <!-- @ 成员面板 -->
+    <!-- @ 成员面板：点击立刻展开（先给反馈），加载中显示骨架，支持按昵称/用户名搜索 -->
     <div v-if="atOpen" class="re-overlay" @click.self="atOpen = false">
       <div class="re-dialog">
         <h4 class="re-dialog-title">提及成员</h4>
+        <t-input
+          v-model="atKeyword"
+          class="re-member-search"
+          placeholder="搜索昵称 / 用户名"
+          clearable
+          @input="onAtSearch"
+          @enter="onAtSearch"
+        />
         <div class="re-member-list">
-          <button v-for="m in members" :key="m.id" type="button" class="re-member" @click="insertAt(m)">
+          <template v-if="atLoading">
+            <div v-for="i in 4" :key="i" class="re-member re-skeleton-row">
+              <span class="re-skeleton" :style="{ width: `${40 + ((i * 13) % 30)}%` }" />
+            </div>
+          </template>
+          <button
+            v-else
+            v-for="m in members"
+            :key="m.id"
+            type="button"
+            class="re-member"
+            @click="insertAt(m)"
+          >
             {{ m.user_nickname || m.username }}
             <span class="re-member-tag">{{ memberTypeName(m.member_type) }}</span>
           </button>
-          <p v-if="members.length === 0" class="re-dialog-empty">暂无成员</p>
+          <p v-if="!atLoading && atError" class="re-dialog-empty">{{ atError }}</p>
+          <p v-else-if="!atLoading && members.length === 0" class="re-dialog-empty">
+            {{ atKeyword.trim() ? '没有匹配的成员' : '暂无成员' }}
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 插入话题（原 window.prompt） -->
+    <div v-if="topicOpen" class="re-overlay" @click.self="topicOpen = false">
+      <div class="re-dialog">
+        <h4 class="re-dialog-title">插入话题</h4>
+        <t-input
+          v-model.trim="topicName"
+          class="re-dialog-input"
+          maxlength="32"
+          placeholder="话题名称（不带 #）"
+          @enter="confirmTopic"
+        />
+        <div class="re-dialog-ops">
+          <t-button size="small" variant="outline" @click="topicOpen = false">取消</t-button>
+          <t-button size="small" theme="primary" :loading="topicSaving" @click="confirmTopic">插入</t-button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 插入链接（原两次 window.prompt） -->
+    <div v-if="linkOpen" class="re-overlay" @click.self="linkOpen = false">
+      <div class="re-dialog">
+        <h4 class="re-dialog-title">插入链接</h4>
+        <t-input v-model.trim="linkUrl" class="re-dialog-input" placeholder="链接地址（https://…）" />
+        <t-input
+          v-model.trim="linkText"
+          class="re-dialog-input"
+          maxlength="64"
+          placeholder="显示文字（留空则显示网址）"
+          @enter="confirmLink"
+        />
+        <div class="re-dialog-ops">
+          <t-button size="small" variant="outline" @click="linkOpen = false">取消</t-button>
+          <t-button size="small" theme="primary" @click="confirmLink">插入</t-button>
         </div>
       </div>
     </div>
@@ -70,12 +130,13 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ImageIcon, LinkIcon } from 'tdesign-icons-vue-next'
 import { communityApi, type Member } from '@/api/community'
 import { request } from '@/api/http'
 import type { RichSegment, SegStyle } from '@/api/post'
 import { toast } from '@/utils/toast'
+import { errMessage } from '@/utils/error'
 
 const props = defineProps<{ modelValue: RichSegment[]; cid: number; initialImages?: string[] }>()
 const emit = defineEmits<{
@@ -95,11 +156,26 @@ const images = ref<string[]>([])
 const atOpen = ref(false)
 const emojiOpen = ref(false)
 const members = ref<Member[]>([])
-let membersLoaded = false
+// @ 面板：加载态 / 错误态 / 搜索词
+const atLoading = ref(false)
+const atError = ref('')
+const atKeyword = ref('')
+let atTimer: number | undefined
+// 话题 / 链接 弹窗（替代 window.prompt：移动端体验差且打断编辑焦点）
+const topicOpen = ref(false)
+const topicName = ref('')
+const topicSaving = ref(false)
+const linkOpen = ref(false)
+const linkUrl = ref('')
+const linkText = ref('')
 let savedRange: Range | null = null
 
 onMounted(() => {
   renderSegments(props.modelValue, props.initialImages ?? [])
+})
+
+onBeforeUnmount(() => {
+  window.clearTimeout(atTimer)
 })
 
 watch(
@@ -161,18 +237,31 @@ function insertNode(node: Node) {
 
 // ---------- @ / 话题 / emoji / 链接 ----------
 
+/** 打开 @ 面板：立刻展开先给反馈，再异步拉成员；已加载过且无搜索词则不重复请求。 */
 async function openAt() {
-  if (!membersLoaded) {
-    try {
-      const data = await communityApi.members(props.cid, 1, 50)
-      members.value = data.items
-      membersLoaded = true
-    } catch (e) {
-      toast(e instanceof Error ? e.message : '加载成员失败', 'error')
-      return
-    }
-  }
   atOpen.value = !atOpen.value
+  if (!atOpen.value) return
+  if (members.value.length > 0 && !atKeyword.value.trim()) return
+  await loadMembers(atKeyword.value.trim())
+}
+
+async function loadMembers(keyword = '') {
+  atLoading.value = true
+  atError.value = ''
+  try {
+    const data = await communityApi.members(props.cid, 1, 50, keyword || undefined)
+    members.value = data.items
+  } catch (e) {
+    atError.value = errMessage(e, '加载成员失败')
+  } finally {
+    atLoading.value = false
+  }
+}
+
+/** 搜索防抖 300ms，避免每敲一个字就打一次接口。 */
+function onAtSearch() {
+  window.clearTimeout(atTimer)
+  atTimer = window.setTimeout(() => loadMembers(atKeyword.value.trim()), 300)
 }
 
 function memberTypeName(t: number): string {
@@ -190,9 +279,19 @@ function insertAt(m: Member) {
   insertNode(span)
 }
 
-async function insertTopic() {
-  const name = window.prompt('话题名称（不带 #，最多 32 字）')
-  if (!name) return
+function insertTopic() {
+  topicName.value = ''
+  topicOpen.value = true
+}
+
+async function confirmTopic() {
+  const name = topicName.value.trim()
+  if (!name) {
+    toast('请填写话题名称', 'warning')
+    return
+  }
+  if (topicSaving.value) return
+  topicSaving.value = true
   try {
     const data = await request<{ id: number; name: string }>({
       url: `/communities/${props.cid}/topics`,
@@ -205,9 +304,12 @@ async function insertTopic() {
     span.dataset.tid = String(data.id)
     span.contentEditable = 'false'
     span.textContent = `#${data.name} `
+    topicOpen.value = false
     insertNode(span)
   } catch (e) {
     toast(e instanceof Error ? e.message : '创建话题失败', 'error')
+  } finally {
+    topicSaving.value = false
   }
 }
 
@@ -224,15 +326,28 @@ function insertEmoji(char: string) {
 }
 
 function insertLink() {
-  const url = window.prompt('链接地址（https://…）')
-  if (!url) return
-  const text = window.prompt('显示文字') || url
+  linkUrl.value = ''
+  linkText.value = ''
+  linkOpen.value = true
+}
+
+function confirmLink() {
+  const url = linkUrl.value.trim()
+  if (!url) {
+    toast('请填写链接地址', 'warning')
+    return
+  }
+  if (!/^https?:\/\//i.test(url)) {
+    toast('链接需以 http:// 或 https:// 开头', 'warning')
+    return
+  }
   const a = document.createElement('a')
   a.href = url
   a.className = 're-link'
   a.dataset.type = 'link'
   a.dataset.url = url
-  a.textContent = text
+  a.textContent = linkText.value.trim() || url
+  linkOpen.value = false
   insertNode(a)
 }
 
@@ -656,6 +771,37 @@ function styleText(text: string, s: SegStyle): Node {
   text-align: center;
   color: var(--text-3);
   font-size: var(--fs-caption);
+}
+.re-member-search {
+  margin-bottom: var(--sp-2);
+}
+.re-dialog-input {
+  margin-bottom: var(--sp-2);
+}
+.re-dialog-ops {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+  margin-top: var(--sp-1);
+}
+.re-skeleton-row {
+  pointer-events: none;
+}
+.re-skeleton {
+  display: block;
+  height: 12px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--bg-secondary) 25%, var(--border-soft, #e5e6eb) 37%, var(--bg-secondary) 63%);
+  background-size: 400% 100%;
+  animation: re-shimmer 1.4s ease infinite;
+}
+@keyframes re-shimmer {
+  0% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0 50%;
+  }
 }
 .re-emoji-panel {
   display: flex;
