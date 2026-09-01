@@ -1,5 +1,14 @@
 <template>
-  <article class="feed-card" @click="goDetail">
+  <!-- 可聚焦/回车打开：桌面开抽屉、移动跳页，无法用纯 router-link，
+       用 role=link + tabindex + Enter 达成键盘可达性（#38） -->
+  <article
+    class="feed-card"
+    role="link"
+    tabindex="0"
+    :aria-label="post.title"
+    @click="goDetail"
+    @keydown.enter="goDetail"
+  >
     <div class="fc-head">
       <span class="fc-title">{{ post.title }}</span>
       <t-tag v-if="post.is_top" theme="danger" variant="light" size="small">置顶</t-tag>
@@ -50,13 +59,6 @@
         <span v-if="post.like_count" class="fc-action-count">{{ post.like_count }}</span>
       </button>
     </div>
-
-    <Lightbox
-      ref="lightboxRef"
-      :images="post.images.slice(0, 9)"
-      :index="lightboxIndex"
-      @update:index="(i: number) => (lightboxIndex = i)"
-    />
   </article>
 </template>
 
@@ -68,9 +70,9 @@ import type { PostItem } from '@/api/post'
 import { postApi } from '@/api/post'
 import { tokenStore } from '@/api/http'
 import UserAvatar from '@/components/UserAvatar.vue'
-import Lightbox from '@/components/Lightbox.vue'
 import { useInteractionStore } from '@/stores/interaction'
 import { usePostDrawer } from '@/stores/postDrawer'
+import { useLightboxStore } from '@/stores/lightbox'
 import { timeAgo } from '@/utils/time'
 import { toast } from '@/utils/toast'
 
@@ -86,9 +88,9 @@ const interaction = useInteractionStore()
 // 点赞图标弹跳动画重触发：每次点赞更新 key 使图标重挂载，重新播放 CSS 动画
 const popTick = ref(0)
 
-// ---------- 图片栅格 / 懒加载 / 灯箱 ----------
-const lightboxRef = ref<InstanceType<typeof Lightbox> | null>(null)
-const lightboxIndex = ref(0)
+// ---------- 图片栅格 / 懒加载 / 全局灯箱 ----------
+// 全局单例灯箱（#59）：不再每张卡片各挂一个 Teleport 实例
+const lightbox = useLightboxStore()
 const imgLoaded = reactive<Record<string, boolean>>({})
 
 const imgClass = computed(() => {
@@ -101,11 +103,12 @@ const imgClass = computed(() => {
 
 function markLoaded(url: string) {
   imgLoaded[url] = true
+  // 懒加载图片就位后卡片高度变化，重测「展开全文」判定（#58）
+  measureOverflow()
 }
 
 function openLightbox(i: number) {
-  lightboxIndex.value = i
-  lightboxRef.value?.open()
+  lightbox.open(props.post.images.slice(0, 9), i)
 }
 
 // ---------- 正文折叠 + 渐变遮罩 ----------
@@ -127,6 +130,8 @@ async function measureOverflow() {
 onMounted(() => {
   measureOverflow()
   window.addEventListener('resize', measureOverflow)
+  // web 字体就位后行高变化，也会影响折叠判定（#58）
+  document.fonts?.ready.then(() => measureOverflow()).catch(() => {})
 })
 onBeforeUnmount(() => {
   window.removeEventListener('resize', measureOverflow)
@@ -196,6 +201,11 @@ async function toggleLike() {
 .feed-card:hover {
   border-color: var(--brand);
   box-shadow: var(--shadow-md);
+}
+/* 键盘导航落焦样式（配合 useGlobalShortcuts 的 J/K 落焦高亮） */
+.feed-card:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
 }
 .fc-head {
   display: flex;

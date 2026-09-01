@@ -28,7 +28,7 @@
       <span class="re-sep"></span>
       <button type="button" class="re-btn" title="提及成员" @click="openAt">@</button>
       <button type="button" class="re-btn" title="话题" @click="insertTopic">#</button>
-      <button type="button" class="re-btn" title="表情" @click="emojiOpen = !emojiOpen">☺</button>
+      <button type="button" class="re-btn" title="表情" @click="emojiOpen = !emojiOpen"><SmileIcon class="re-icon" /></button>
       <button type="button" class="re-btn" title="插入链接" @click="insertLink"><LinkIcon class="re-icon" /></button>
       <label class="re-btn" title="插入图片">
         <ImageIcon class="re-icon" />
@@ -131,7 +131,7 @@
 
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { ImageIcon, LinkIcon } from 'tdesign-icons-vue-next'
+import { ImageIcon, LinkIcon, SmileIcon } from 'tdesign-icons-vue-next'
 import { communityApi, type Member } from '@/api/community'
 import { request } from '@/api/http'
 import type { RichSegment, SegStyle } from '@/api/post'

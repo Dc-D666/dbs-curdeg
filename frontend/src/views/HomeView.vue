@@ -14,9 +14,10 @@
       </nav>
     </header>
 
-    <!-- 部署时间：仅当 URL 带 ?debug=1 时对开发者显示，避免暴露给终端用户 -->
-    <p v-if="isDebug && buildTime" class="deploy-time" title="前端构建/部署时间，每次 push 由 cron 自动更新">
-      更新时间：{{ buildTime }}
+    <!-- 部署时间窄条（常显，精确到分）：服务器 cron 每 3 分钟拉取重建前端，
+         此时间即最近一次部署，用于人工确认 cron 有无生效/漏跑 -->
+    <p v-if="buildTime" class="deploy-banner" title="前端最近一次构建/部署时间（北京时间）：cron 每 3 分钟自动拉取重建，时间长时间不变说明 cron 未跑或无新提交">
+      最近更新 {{ buildTime }}
     </p>
 
     <!-- 三栏工作台：桌面三栏 / 移动端上中下三栏 -->
@@ -25,6 +26,7 @@
       :cid="currentCid"
       embedded-in-tab
       @change="onChangeChannel"
+      @load-error="onWorkspaceLoadError"
     />
 
     <!-- 无默认频道：加载中 / 加载失败（可重试）/ 确实没加入（引导去发现页） -->
@@ -45,7 +47,7 @@
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import ChannelWorkspace from '@/components/ChannelWorkspace.vue'
 import { communityApi } from '@/api/community'
@@ -54,14 +56,16 @@ import { tokenStore } from '@/api/http'
 import { formatBeijing } from '@/utils/time'
 import { errMessage } from '@/utils/error'
 
+// 显式组件名：供 App.vue 的 <keep-alive :include> 匹配（返回首页保留工作台状态，#37）
+defineOptions({ name: 'HomeView' })
+
 const auth = useAuthStore()
 const router = useRouter()
 
-// 首页更新时间：构建时由 Vite define 注入（__BUILD_TIME__），显示为北京时间。
-// 服务器 cron 每次 push 都会重编前端，因此该时间可用于确认部署是否生效。
-const buildTime = ref(formatBeijing(__BUILD_TIME__))
-// 仅在本机开发者调试（URL 带 ?debug=1）时展示部署时间，避免面向终端用户暴露
-const isDebug = /[?&]debug=1/.test(window.location.search)
+// 首页更新时间：构建时由 Vite define 注入（__BUILD_TIME__），北京时间、精确到分
+// （formatBeijing 固定输出 YYYY-MM-DD HH:mm:ss，截掉秒即可）。
+// 服务器 cron 每次拉取都重编前端，该时间即最近一次部署，可确认 cron 是否生效。
+const buildTime = computed(() => formatBeijing(__BUILD_TIME__).slice(0, 16))
 
 // 桌面宽屏判定：≥1024px 时三栏工作台全宽铺开
 const isWide = ref(window.innerWidth >= 1024)
@@ -87,6 +91,11 @@ function pickDefault() {
     currentCid.value = saved
     return
   }
+  pickFromMine()
+}
+
+/** 从「我的频道」里选第一个作为默认（无记忆/记忆失效时）。 */
+function pickFromMine() {
   if (!tokenStore.access) return // 未登录且无记忆 → 引导
   picking.value = true
   loadError.value = ''
@@ -105,6 +114,15 @@ function pickDefault() {
     .finally(() => {
       picking.value = false
     })
+}
+
+/** 工作台报告频道加载失败：记忆指向已退出/已解散频道时不能死在「频道不存在」，
+ *  清掉失效记忆并自动回退到我加入的第一个频道（游客则落到「去发现」引导）。 */
+function onWorkspaceLoadError(notFound: boolean) {
+  if (!notFound) return // 网络错误：工作台内已有可重试的错误态，不自动切换
+  localStorage.removeItem(LAST_CHANNEL_KEY)
+  currentCid.value = null
+  if (tokenStore.access) pickFromMine()
 }
 
 function retryPick() {
@@ -143,8 +161,7 @@ function onLogout() {
   max-width: none;
   padding: 0;
 }
-.home.wide .home-header,
-.home.wide .deploy-time {
+.home.wide .home-header {
   max-width: var(--page-max);
   margin-left: auto;
   margin-right: auto;
@@ -164,12 +181,19 @@ function onLogout() {
   font-weight: 700;
   color: var(--brand);
 }
-.deploy-time {
-  margin: 0;
-  padding: var(--sp-1) 0 0;
+/* 部署时间窄条：全宽贴边（负 margin 抵消 .home 的横向 padding）、caption 级中性色 */
+.deploy-banner {
+  margin: 0 calc(-1 * var(--sp-4));
+  padding: 4px var(--sp-4);
   font-size: var(--fs-caption);
   color: var(--text-3);
-  text-align: right;
+  text-align: center;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+/* 宽屏下 .home 无横向 padding，窄条天然全宽 */
+.home.wide .deploy-banner {
+  margin: 0;
 }
 .nav {
   display: flex;

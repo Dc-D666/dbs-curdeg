@@ -16,7 +16,8 @@
         placeholder="补充细节，支持 Markdown（**粗体** `代码`）…"
       />
       <div class="qc-foot">
-        <span class="qc-hint">支持 Markdown 快捷语法 · 最多 5000 字</span>
+        <!-- 字数计数（#44）：标题 128 / 正文 5000，实时显示余量 -->
+        <span class="qc-hint">标题 {{ title.length }}/128 · 正文 {{ content.length }}/5000</span>
         <div class="qc-actions">
           <t-button variant="outline" size="small" @click="collapse">取消</t-button>
           <t-button theme="primary" size="small" :loading="submitting" @click="submit">

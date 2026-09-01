@@ -11,6 +11,8 @@
       <div class="field">
         <label class="field-label">标题</label>
         <t-input v-model.trim="form.title" size="large" maxlength="128" placeholder="用一句话概括你的核心观点/疑问（如：如何在 Vue 3 中做性能调优？）" clearable />
+        <!-- 标题字数计数（#44） -->
+        <span v-if="form.title.length" class="char-count">{{ form.title.length }}/128</span>
         <div class="ai-bar">
           <span class="ai-bar-label"><AiIcon class="ai-bar-cal-icon" /> AI 帮写</span>
           <t-button size="small" variant="outline" :loading="aiBusy === 'title'" :disabled="!!aiBusy" @click="aiRun('title')">
@@ -24,6 +26,10 @@
           </t-button>
           <t-button size="small" variant="outline" :loading="drawBusy" :disabled="!!aiBusy" @click="aiDraw">
             <template #icon><ImageIcon /></template> 文生图
+          </t-button>
+          <!-- 流式生成中可随时停止：冷启动可能十几秒，不能让用户干等（#28） -->
+          <t-button v-if="aiBusy" size="small" variant="outline" theme="danger" @click="cancelAi">
+            停止生成
           </t-button>
         </div>
       </div>
@@ -150,6 +156,17 @@ const drawPrompt = ref('')
 const aiBusy = ref<'write' | 'polish' | 'title' | ''>('')
 const aiText = ref('')
 let aiMode: 'append' | 'replace' = 'append'
+// 中途停止：流式请求的 AbortController（停止后保留已生成的部分内容）
+let aiAbort: AbortController | null = null
+
+function isAbortError(e: unknown): boolean {
+  // DOMException（浏览器 fetch abort）/ 带 AbortError 名字的 Error 都算主动停止
+  return e instanceof Error && e.name === 'AbortError'
+}
+
+function cancelAi() {
+  aiAbort?.abort()
+}
 
 function aiPlainContent(): string {
   return form.rich
@@ -165,31 +182,49 @@ async function aiRun(action: 'write' | 'polish' | 'title') {
   }
   aiBusy.value = action
   aiText.value = ''
+  aiAbort = new AbortController()
   // 先留底：AI 失败时回填，避免用户原标题被清空后永久丢失
   const before = action === 'title' ? form.title : ''
   try {
     if (action === 'title') {
       // 直接打字机写入标题输入框
       form.title = ''
-      await streamPost('/api/v1/ai/assist', { action, title: before, content: aiPlainContent() }, (d) => {
-        form.title += d
-      })
+      await streamPost(
+        '/api/v1/ai/assist',
+        { action, title: before, content: aiPlainContent() },
+        (d) => {
+          form.title += d
+        },
+        { signal: aiAbort.signal },
+      )
       if (!form.title.trim()) form.title = before
     } else {
       aiMode = action === 'polish' ? 'replace' : 'append'
-      await streamPost('/api/v1/ai/assist', { action, title: form.title, content: aiPlainContent() }, (d) => {
-        aiText.value += d
-      })
+      await streamPost(
+        '/api/v1/ai/assist',
+        { action, title: form.title, content: aiPlainContent() },
+        (d) => {
+          aiText.value += d
+        },
+        { signal: aiAbort.signal },
+      )
       if (!aiText.value) aiText.value = '（AI 未返回内容）'
     }
     toast('AI 生成完成，可继续编辑', 'success')
   } catch (e) {
-    // 失败回填原标题（生成过半也还原，保证用户内容不丢）
-    if (action === 'title') form.title = before
-    toast(e instanceof Error ? e.message : 'AI 生成失败', 'error')
-    aiText.value = ''
+    if (isAbortError(e)) {
+      // 用户主动停止：保留已生成的部分内容（标题为空则还原留底），不算错误
+      if (action === 'title' && !form.title.trim()) form.title = before
+      toast('已停止生成，已保留的部分可继续编辑', 'info')
+    } else {
+      // 失败回填原标题（生成过半也还原，保证用户内容不丢）
+      if (action === 'title') form.title = before
+      toast(e instanceof Error ? e.message : 'AI 生成失败', 'error')
+      aiText.value = ''
+    }
   } finally {
     aiBusy.value = ''
+    aiAbort = null
   }
 }
 
@@ -325,9 +360,11 @@ function tryRestoreDraft() {
     return
   }
   const when = d.savedAt ? new Date(d.savedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : ''
+  // 文案明示后果：点「取消」即删除草稿且无法找回，避免误删（#29）
+  const whenText = when ? `检测到 ${when} 保存的草稿` : '检测到一份未发布的草稿'
   confirmDialog(
     '发现未发布草稿',
-    when ? `检测到 ${when} 保存的草稿，是否恢复？` : '检测到未发布的草稿，是否恢复？',
+    `${whenText}，是否恢复？注意：选择「取消」将删除这份草稿，删除后无法找回。`,
     false,
   ).then((ok) => {
     if (ok) {
@@ -446,6 +483,14 @@ async function onSubmit() {
 .field-label {
   font-size: var(--fs-caption);
   color: var(--td-text-color-secondary);
+}
+/* 字数计数（#44） */
+.char-count {
+  display: block;
+  text-align: right;
+  font-size: var(--fs-caption);
+  color: var(--td-text-color-placeholder);
+  font-variant-numeric: tabular-nums;
 }
 .field-hint {
   margin: 0;

@@ -44,6 +44,9 @@ import ErrorState from '@/components/ErrorState.vue'
 import { toast } from '@/utils/toast'
 import { errMessage } from '@/utils/error'
 
+// 显式组件名：供 App.vue 的 <keep-alive :include> 匹配（返回本页保留列表状态，#37）
+defineOptions({ name: 'FavoritesView' })
+
 const items = ref<FavoriteItem[]>([])
 const page = ref(0)
 const total = ref(0)

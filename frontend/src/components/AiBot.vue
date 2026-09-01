@@ -11,7 +11,7 @@
         <span><RobotIcon class="ai-head-icon" /> 频道问答助手</span>
         <div class="ai-head-ops">
           <button class="ai-bot-clear" title="清空会话" :disabled="busy" @click="clearSession">清空</button>
-          <button class="ai-bot-close" title="关闭" @click="open = false">✕</button>
+          <button class="ai-bot-close" title="关闭" @click="open = false"><CloseIcon class="ai-close-icon" /></button>
         </div>
       </header>
       <div ref="bodyEl" class="ai-bot-body">
@@ -41,7 +41,7 @@
 <script setup lang="ts">
 import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { RobotIcon } from 'tdesign-icons-vue-next'
+import { CloseIcon, RobotIcon } from 'tdesign-icons-vue-next'
 import { tokenStore } from '@/api/http'
 import { streamPost } from '@/utils/sse'
 import { useAuthStore } from '@/stores/auth'
@@ -297,8 +297,13 @@ function gotoPost(id: number) {
   border: none;
   background: transparent;
   color: #fff;
-  font-size: 14px;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+}
+.ai-close-icon {
+  width: 14px;
+  height: 14px;
 }
 .ai-bot-body {
   flex: 1;

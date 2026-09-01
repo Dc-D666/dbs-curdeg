@@ -3,11 +3,12 @@
     <t-skeleton v-if="loading" :row="4" />
     <EmptyState v-else-if="items.length === 0" :text="emptyText" :action-text="actionText" :to="actionTo" />
     <div v-else class="list">
-      <div
+      <!-- router-link：键盘可 Tab/Enter 打开，屏幕阅读器可导航（#38） -->
+      <router-link
         v-for="c in items"
         :key="c.id"
+        :to="`/c/${c.id}`"
         class="card"
-        @click="router.push(`/c/${c.id}`)"
       >
         <img v-if="c.avatar_url" :src="c.avatar_url" class="card-avatar" alt="" />
         <span v-else class="card-avatar card-avatar-fallback">{{ (c.name || '频').slice(0, 1) }}</span>
@@ -26,13 +27,12 @@
           </div>
         </div>
         <ChevronRightIcon class="card-arrow" />
-      </div>
+      </router-link>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { useRouter } from 'vue-router'
 import { ChevronRightIcon } from 'tdesign-icons-vue-next'
 import type { Community } from '@/api/community'
 import EmptyState from '@/components/EmptyState.vue'
@@ -47,8 +47,6 @@ withDefaults(
   }>(),
   { emptyText: '暂无频道', actionText: '', actionTo: '' },
 )
-
-const router = useRouter()
 </script>
 
 <style scoped>
@@ -69,10 +67,16 @@ const router = useRouter()
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
   cursor: pointer;
+  text-decoration: none;
+  color: inherit;
   transition: border-color 0.15s;
 }
 .card:hover {
   border-color: var(--brand);
+}
+.card:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
 }
 .card-avatar {
   width: 44px;

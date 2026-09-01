@@ -1,6 +1,12 @@
 <template>
-  <div class="app-shell">
-    <router-view />
+  <div class="app-shell" :class="{ 'has-tabbar': showTabbar }">
+    <!-- 列表页缓存：从帖子/频道详情返回后，搜索关键词、分页结果、滚动位置不丢（#37）。
+         仅色含无副作用的列表页；详情/表单页不缓存（各有自己的加载/草稿机制）。 -->
+    <router-view v-slot="{ Component }">
+      <keep-alive :include="KEEP_ALIVE_VIEWS">
+        <component :is="Component" />
+      </keep-alive>
+    </router-view>
 
     <nav v-if="showTabbar" class="tabbar">
       <router-link v-for="t in tabs" :key="t.path" :to="t.path" class="tab-item"
@@ -27,6 +33,12 @@
     <!-- 撤销 Snackbar（B） -->
     <UndoSnackbar />
 
+    <!-- 全局单例灯箱（#59）：所有卡片/详情页共用 -->
+    <GlobalLightbox />
+
+    <!-- 桌面端快捷键帮助入口（#60） -->
+    <ShortcutHint />
+
     <!-- 帖子阅读右侧抽屉（P1 ①：保持一致上下文） -->
     <PostDrawer />
   </div>
@@ -36,7 +48,6 @@
 import { computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { HomeIcon, BrowseIcon, UserIcon, NotificationIcon } from 'tdesign-icons-vue-next'
-import http from '@/api/http'
 import { useNotificationStore } from '@/stores/notification'
 import { useWebSocket } from '@/composables/useWebSocket'
 import { useGlobalShortcuts } from '@/composables/useGlobalShortcuts'
@@ -45,9 +56,14 @@ import PostDrawer from '@/components/PostDrawer.vue'
 import NewPostsPill from '@/components/NewPostsPill.vue'
 import NetworkBanner from '@/components/NetworkBanner.vue'
 import UndoSnackbar from '@/components/UndoSnackbar.vue'
+import GlobalLightbox from '@/components/GlobalLightbox.vue'
+import ShortcutHint from '@/components/ShortcutHint.vue'
 
 const route = useRoute()
 const notif = useNotificationStore()
+
+// 需要缓存的列表页（按组件名匹配，各视图内用 defineOptions 显式声明）
+const KEEP_ALIVE_VIEWS = ['HomeView', 'DiscoverView', 'MyFeedView', 'FavoritesView']
 
 const tabs = [
   { path: '/', label: '首页', icon: HomeIcon },
@@ -66,14 +82,6 @@ onMounted(async () => {
   useGlobalShortcuts()
   // WebSocket 通知（登录后自动连接，未读角标实时更新）
   useWebSocket()
-  try {
-    // /ping 返回裸 {message:"pong"}（无统一 code 包装）。注意 http 实例 baseURL 已是 /api/v1，
-    // 这里必须用相对路径 /ping，否则会拼成 /api/v1/api/v1/ping → 404。
-    const res = await http.get<{ message: string }>('/ping')
-    console.log('[SDUdiscord] 后端连通:', res.data?.message)
-  } catch (e) {
-    console.warn('[SDUdiscord] 后端未连通:', e)
-  }
 })
 </script>
 
@@ -110,6 +118,10 @@ button {
 }
 .app-shell {
   min-height: 100vh;
+}
+/* 只有主 tab 页需要为底部 tabbar 留空间；全屏页（帖子/频道/发帖/登录等）
+ * 无 tabbar，不能无条件垫 56px，否则底部永远多出一段空白 */
+.app-shell.has-tabbar {
   padding-bottom: var(--tabbar-height);
 }
 /* 错误态的兜底出口链接（配合 components/ErrorState.vue 使用） */

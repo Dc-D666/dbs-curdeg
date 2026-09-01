@@ -19,20 +19,23 @@
         :class="{ unread: !n.is_read }"
         @click="goto(n)"
       >
-        <t-avatar :image="n.actor_avatar || undefined" size="40px" class="ntf-avatar">
-          <template #icon>{{ n.actor_nickname.slice(0, 1) || '系' }}</template>
-        </t-avatar>
+        <!-- 未读红点挂在头像右上角（#47）：原定位在条目右侧，与「删除」按钮区域重叠易误触 -->
+        <span class="ntf-avatar-wrap">
+          <t-avatar :image="n.actor_avatar || undefined" size="40px" class="ntf-avatar">
+            <template #icon>{{ n.actor_nickname.slice(0, 1) || '系' }}</template>
+          </t-avatar>
+          <span v-if="!n.is_read" class="ntf-dot" />
+        </span>
         <div class="ntf-body">
           <div class="ntf-row1">
             <span class="ntf-actor">{{ n.actor_nickname }}</span>
             <span class="ntf-type">{{ typeLabel(n.type) }}</span>
-            <span class="ntf-time">{{ fmtTime(n.created_at) }}</span>
+            <span class="ntf-time">{{ timeAgo(n.created_at) }}</span>
           </div>
           <p class="ntf-title-text">{{ n.title }}</p>
           <p v-if="n.summary" class="ntf-summary">{{ n.summary }}</p>
           <p v-if="n.community_name" class="ntf-community">来自频道《{{ n.community_name }}》</p>
         </div>
-        <span v-if="!n.is_read" class="ntf-dot" />
         <t-button
           variant="text"
           size="small"
@@ -66,6 +69,7 @@ import { useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useNotificationStore } from '@/stores/notification'
 import ErrorState from '@/components/ErrorState.vue'
+import { timeAgo } from '@/utils/time'
 import type { NotificationItem } from '@/api/notification'
 
 const router = useRouter()
@@ -85,19 +89,6 @@ function typeLabel(t: string) {
   return typeLabels[t] || t
 }
 
-function fmtTime(t: string | null) {
-  if (!t) return ''
-  const s = t.replace('T', ' ').slice(0, 16)
-  const d = new Date(t.replace(' ', 'T'))
-  if (Number.isNaN(d.getTime())) return s
-  const now = Date.now()
-  const diff = now - d.getTime()
-  if (diff < 60_000) return '刚刚'
-  if (diff < 3600_000) return `${Math.floor(diff / 60_000)} 分钟前`
-  if (diff < 86400_000) return `${Math.floor(diff / 3600_000)} 小时前`
-  return s
-}
-
 function goto(n: NotificationItem) {
   if (!n.is_read) store.markRead(n.id).catch(() => {})
   // ref_id 跳转约定：评论/赞/@ → 帖子；关注/审核 → 频道；系统通知按 ref_id 是否等于频道 id 区分
@@ -111,6 +102,7 @@ function goto(n: NotificationItem) {
     if (n.ref_id) path = `/c/${n.ref_id}`
   }
   if (path) router.push(path)
+  else MessagePlugin.info('该通知没有可跳转的内容')
 }
 
 function loadMore() {
@@ -190,8 +182,11 @@ onMounted(() => {
 .ntf-item:active {
   background: var(--bg-secondary);
 }
-.ntf-avatar {
+.ntf-avatar-wrap {
+  position: relative;
   flex-shrink: 0;
+}
+.ntf-avatar {
   background: var(--brand-weak);
   color: var(--brand);
 }
@@ -244,14 +239,16 @@ onMounted(() => {
   font-size: var(--fs-caption);
   color: var(--text-3);
 }
+/* 未读红点：头像右上角，不再与右侧删除按钮争位（#47） */
 .ntf-dot {
   position: absolute;
-  top: 16px;
-  right: 10px;
+  top: 0;
+  right: -2px;
   width: 8px;
   height: 8px;
   border-radius: 50%;
   background: var(--danger);
+  box-shadow: 0 0 0 2px var(--bg-card);
 }
 .ntf-del {
   align-self: flex-start;

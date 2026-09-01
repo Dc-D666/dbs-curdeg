@@ -3,6 +3,12 @@ import { tokenStore } from '@/api/http'
 
 const router = createRouter({
   history: createWebHistory(),
+  // 列表页→详情→返回：浏览器前进/后退（savedPosition）恢复滚动位置；
+  // 新导航回顶部。配合 App.vue 的 <keep-alive> 让“搜索状态+滚动位置”都不丢（#37）
+  scrollBehavior(_to, _from, savedPosition) {
+    if (savedPosition) return savedPosition
+    return { top: 0 }
+  },
   routes: [
     { path: '/', name: 'home', component: () => import('@/views/HomeView.vue') },
     { path: '/discover', name: 'discover', component: () => import('@/views/DiscoverView.vue') },

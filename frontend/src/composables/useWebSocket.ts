@@ -76,8 +76,10 @@ export function connect() {
     } else if (msg.type === 'notification') {
       useNotificationStore().bumpUnread(1)
     } else if (msg.type === 'feed_new') {
-      // 频道新内容（发帖/评论）→ 浮动药丸计数 +1
-      useLiveStore().increment(1)
+      // 频道新内容（发帖/评论）→ 按频道计数（载荷含 community_id），
+      // 药丸只展示与当前浏览频道相关的计数，避免「点了查看却什么都没有」
+      const communityId = (msg.data as { community_id?: number } | undefined)?.community_id
+      if (typeof communityId === 'number') useLiveStore().increment(communityId, 1)
     }
     // pong：忽略（心跳只是保活）
   }

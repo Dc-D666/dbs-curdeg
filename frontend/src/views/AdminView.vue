@@ -7,7 +7,17 @@
       <h1 class="page-title">管理后台</h1>
     </header>
 
-    <t-tabs v-model="tab" class="tabs">
+    <!-- 加载失败：无权限/频道不存在给明确错误页（不再只底部一行小字），网络故障可重试 -->
+    <ErrorState
+      v-if="loadFailed"
+      :text="loadError"
+      :retryable="!notFound && !noPermission"
+      @retry="init"
+    >
+      <router-link :to="`/c/${cid}`" class="state-link">返回频道</router-link>
+    </ErrorState>
+
+    <t-tabs v-else v-model="tab" class="tabs">
       <!-- 成员管理 -->
       <t-tab-panel value="members" label="成员管理">
         <div class="panel">
@@ -33,8 +43,8 @@
                 <t-tag size="small" variant="light" theme="warning" class="m-lv">Lv.{{ m.level }}</t-tag>
               </div>
               <div class="m-sub">
-                <span v-if="m.shutup_expire_at" class="m-muted">🔇 禁言至 {{ formatTime(m.shutup_expire_at) }}</span>
-                <span v-if="m.is_blocked" class="m-blocked">🚫 已移出</span>
+                <span v-if="m.shutup_expire_at" class="m-muted"><SoundMute1Icon class="m-sub-icon" /> 禁言至 {{ formatTime(m.shutup_expire_at) }}</span>
+                <span v-if="m.is_blocked" class="m-blocked"><ErrorCircleIcon class="m-sub-icon" /> 已移出</span>
                 <span v-else class="m-muted">@{{ m.username }}</span>
               </div>
             </div>
@@ -161,21 +171,28 @@
       <t-tab-panel value="ops" label="操作日志">
         <div class="panel">
           <div class="ops-toolbar">
-            <span class="op-count">共 {{ ops.length }} 条</span>
+            <!-- 真实总数（来自接口 total），不再用本地数组长度冒充 -->
+            <span class="op-count">共 {{ opsTotal }} 条（已加载 {{ ops.length }} 条）</span>
             <t-button variant="outline" size="small" @click="exportOps">导出 CSV</t-button>
           </div>
           <div class="op-row" v-for="o in ops" :key="o.id">
             <span class="op-time">{{ formatTime(o.created_at) }}</span>
             <t-tag size="small" variant="light" theme="primary" class="op-action">{{ actionLabel(o.action) }}</t-tag>
             <span class="op-operator">{{ o.operator_nickname }}</span>
-            <span v-if="o.detail" class="op-detail" :title="JSON.stringify(o.detail)">{{ JSON.stringify(o.detail) }}</span>
+            <!-- 人性化展示 detail，不再把原始 JSON 直接给管理员看；悬停可看完整原始数据 -->
+            <span v-if="fmtOpDetail(o)" class="op-detail" :title="JSON.stringify(o.detail)">{{ fmtOpDetail(o) }}</span>
           </div>
           <t-empty v-if="ops.length === 0" description="暂无操作记录" />
+          <t-button
+            v-if="ops.length < opsTotal"
+            variant="outline"
+            block
+            class="load-more-ops"
+            @click="loadMoreOps()"
+          >加载更多（{{ ops.length }}/{{ opsTotal }}）</t-button>
         </div>
       </t-tab-panel>
     </t-tabs>
-
-    <p v-if="msg" class="msg">{{ msg }}</p>
 
     <!-- 禁言时长弹窗 -->
     <t-dialog
@@ -195,13 +212,15 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { ArrowLeftIcon } from 'tdesign-icons-vue-next'
+import { ArrowLeftIcon, ErrorCircleIcon, SoundMute1Icon } from 'tdesign-icons-vue-next'
 import { useAuthStore } from '@/stores/auth'
 import { communityApi, manageApi, roleApi, type Community, type Member, type MyRole, type OpLogItem, type RoleItem } from '@/api/community'
 import { toast } from '@/utils/toast'
 import { formatTime } from '@/utils/time'
 import { confirmDialog } from '@/utils/confirm'
-import { tokenStore } from '@/api/http'
+import { ApiError } from '@/api/http'
+import { loadErrorMessage } from '@/utils/error'
+import ErrorState from '@/components/ErrorState.vue'
 
 const route = useRoute()
 const auth = useAuthStore()
@@ -216,8 +235,15 @@ const membersHasMore = computed(() => members.value.length < membersTotal.value)
 const membersLoading = ref(false)
 const memberKeyword = ref('')
 const roles = ref<RoleItem[]>([])
+// 操作日志：分页拉取 + 真实总数（不再用本地数组长度冒充总数）
 const ops = ref<OpLogItem[]>([])
-const msg = ref('')
+const opsPage = ref(0)
+const opsTotal = ref(0)
+// 首屏加载失败态：区分无权限 / 频道不存在 / 网络故障（可重试）
+const loadFailed = ref(false)
+const loadError = ref('')
+const notFound = ref(false)
+const noPermission = ref(false)
 const roleSel = reactive<Record<number, number>>({})
 const roleSaving = ref(false)
 const roleForm = reactive({ name: '', color: '#1a73e8', level: 1, is_level_role: false })
@@ -272,6 +298,35 @@ function actionLabel(a: string): string {
   return ACTION_LABELS[a] ?? a
 }
 
+/** 操作日志 detail 常见字段的人性化文案（后端写入的 key 集合见各 service 的 log_op 调用）。 */
+const DETAIL_KEY_LABELS: Record<string, string> = {
+  author_id: '作者',
+  user_id: '用户',
+  hours: '时长',
+  is_top: '置顶',
+  is_essence: '精华',
+  name: '名称',
+  sort: '排序',
+}
+
+/** 把 detail 对象转成可读文本，替代直接展示 JSON.stringify 结果。 */
+function fmtOpDetail(o: OpLogItem): string {
+  if (!o.detail) return ''
+  const entries = Object.entries(o.detail)
+  if (entries.length === 0) return ''
+  return entries
+    .map(([k, v]) => {
+      const label = DETAIL_KEY_LABELS[k] ?? k
+      let val: string
+      if (k === 'hours') val = `${v} 小时`
+      else if (typeof v === 'boolean') val = v ? '是' : '否'
+      else if (k.endsWith('_id')) val = `#${v}`
+      else val = String(v)
+      return `${label}：${val}`
+    })
+    .join(' · ')
+}
+
 function canManage(m: Member): boolean {
   return m.user_id !== auth.user?.id && m.member_type !== 0
 }
@@ -304,18 +359,44 @@ async function onMemberSearch() {
   await loadMembers(1)
 }
 
-onMounted(async () => {
+/** 首屏加载：失败时给出完整错误页（无权限/不存在/可重试），不再只在底部留一行小字。 */
+async function init() {
+  loadFailed.value = false
+  loadError.value = ''
+  notFound.value = false
+  noPermission.value = false
   try {
     if (!auth.user) await auth.fetchMe()
     community.value = await communityApi.get(cid)
     myRole.value = await roleApi.my(cid)
     await reloadRoles()
     await reloadMembers()
-    ops.value = (await manageApi.ops(cid, 1, 50)).items
+    await loadOps(1)
   } catch (e) {
-    msg.value = e instanceof Error ? e.message : '加载失败'
+    if (e instanceof ApiError && e.status === 403) {
+      noPermission.value = true
+      loadError.value = '你没有该频道的管理权限（仅频道主 / 管理员 / 被授权身份可进入）'
+    } else {
+      const r = loadErrorMessage(e, '频道')
+      notFound.value = r.notFound
+      loadError.value = r.text
+    }
+    loadFailed.value = true
   }
-})
+}
+
+async function loadOps(page: number, append = false) {
+  const data = await manageApi.ops(cid, page, 50)
+  ops.value = append ? [...ops.value, ...data.items] : data.items
+  opsPage.value = page
+  opsTotal.value = data.total
+}
+
+function loadMoreOps() {
+  return loadOps(opsPage.value + 1, true)
+}
+
+onMounted(init)
 
 function openShutup(m: Member) {
   shutupTarget.value = m
@@ -547,9 +628,8 @@ async function exportOps() {
   border-radius: var(--td-radius-large);
   padding: var(--sp-4);
 }
-.msg {
-  color: var(--td-error-color);
-  font-size: var(--fs-caption);
+.load-more-ops {
+  margin-top: var(--sp-2);
 }
 .members-toolbar {
   display: flex;
@@ -588,6 +668,13 @@ async function exportOps() {
 }
 .m-blocked {
   color: var(--td-error-color);
+}
+/* 状态小图标：中性色随文案（禁言/移出），不用彩色 */
+.m-sub-icon {
+  width: 12px;
+  height: 12px;
+  vertical-align: -1px;
+  margin-right: 2px;
 }
 .m-actions {
   display: flex;

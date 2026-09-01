@@ -43,6 +43,8 @@ import EmptyState from '@/components/EmptyState.vue'
 import { postApi, type PostItem } from '@/api/post'
 import { toast } from '@/utils/toast'
 
+// 显式组件名：供 App.vue 的 <keep-alive :include> 匹配（返回本页保留列表状态，#37）
+defineOptions({ name: 'MyFeedView' })
 const items = ref<PostItem[]>([])
 const cursor = ref<string | null>(null)
 const hasMore = ref(false)
@@ -62,7 +64,7 @@ async function loadMore() {
     cursor.value = data.next_cursor
     hasMore.value = data.has_more
   } catch (e) {
-    console.error('加载关注流失败', e)
+    // console.error 遗留清理（#50）：错误态已展示给用户，无需再打控制台
     if (items.value.length === 0) {
       loadError.value = e instanceof Error ? e.message : '加载失败，请稍后重试'
     } else {

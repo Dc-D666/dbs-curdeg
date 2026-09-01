@@ -49,6 +49,8 @@
         <div class="actions">
           <template v-if="community.is_member">
             <t-button v-if="community.my_member_type !== 0" variant="outline" @click="onLeave">退出频道</t-button>
+            <!-- 频道主不能退出（须解散），不能让按钮无声消失（#53） -->
+            <span v-else class="owner-exit-hint">频道主不可退出，如需关闭频道请使用下方「解散频道」</span>
           </template>
           <t-button v-else theme="primary" :loading="joining" @click="onJoin">
             {{ joining ? '处理中…' : '加入频道' }}
@@ -162,11 +164,20 @@
             <span class="manage-type">{{ memberTypeName(m.member_type) }}</span>
           </div>
           <p v-if="members.length === 0" class="manage-empty">暂无成员</p>
+          <!-- 大频道成员 >50：不再静默截断，提供继续拉取（#52） -->
+          <t-button
+            v-if="members.length < membersTotal"
+            variant="text"
+            size="small"
+            class="manage-more"
+            @click="loadMoreMembers"
+          >加载更多成员（{{ members.length }}/{{ membersTotal }}）</t-button>
         </div>
 
         <div v-if="community.join_setting === 1" class="owner-row">
           <span class="owner-label">加入审核</span>
-          <t-button variant="outline" size="small" @click="toggleRequests">{{ requestsOpen ? '收起' : `${requests.length} 条待审` }}</t-button>
+          <!-- 待审数用接口 total（#52）：本地数组只拉了前 50 条，大频道会少报 -->
+          <t-button variant="outline" size="small" @click="toggleRequests">{{ requestsOpen ? '收起' : `${requestsTotal || requests.length} 条待审` }}</t-button>
         </div>
         <div v-if="requestsOpen" class="manage-list">
           <div v-for="r in requests" :key="r.id" class="manage-item">
@@ -176,6 +187,13 @@
             <t-button variant="outline" size="small" theme="danger" @click="handleRequest(r, false)">驳回</t-button>
           </div>
           <p v-if="requests.length === 0" class="manage-empty">暂无待审申请</p>
+          <t-button
+            v-if="requests.length < requestsTotal"
+            variant="text"
+            size="small"
+            class="manage-more"
+            @click="loadMoreRequests"
+          >加载更多申请（{{ requests.length }}/{{ requestsTotal }}）</t-button>
         </div>
 
         <div class="owner-row">
@@ -183,7 +201,7 @@
           <t-button variant="outline" size="small" theme="danger" @click="onDissolve">解散</t-button>
         </div>
 
-        <p v-if="ownerMsg" class="msg">{{ ownerMsg }}</p>
+        <p v-if="ownerMsg" class="msg" :class="{ 'msg-error': ownerMsgIsError }">{{ ownerMsg }}</p>
       </section>
       </template>
 
@@ -358,6 +376,12 @@ const notFound = ref(false)
 const joining = ref(false)
 const activeBoard = ref<number | null>(null)
 const ownerMsg = ref('')
+// 区分成功/失败提示：失败的 ownerMsg 不能用固定绿色（#24）
+const ownerMsgIsError = ref(false)
+function setOwnerMsg(text: string, isError = false) {
+  ownerMsg.value = text
+  ownerMsgIsError.value = isError
+}
 const statusForm = reactive({ status: 0 })
 
 // 桌面三栏工作台判定（≥1024px）+ 社区切换器（我的频道）
@@ -404,8 +428,13 @@ const boardForm = reactive({ name: '', description: '' })
 const boardCreating = ref(false)
 const membersOpen = ref(false)
 const members = ref<Member[]>([])
+// 成员/待审分页：接口每页最多 50，大频道需续拉且总数用接口 total（#52）
+const membersPage = ref(0)
+const membersTotal = ref(0)
 const requestsOpen = ref(false)
 const requests = ref<JoinRequestItem[]>([])
+const requestsPage = ref(0)
+const requestsTotal = ref(0)
 
 // 话题（P0）
 const topics = ref<TopicItem[]>([])
@@ -497,16 +526,23 @@ async function loadFeed(reset = false) {
   }
   feedLoading.value = true
   try {
-    const data = await postApi.feed(id, feedSort.value, feedCursor.value, 20, activeBoard.value)
-    if (cid.value !== id) return // 切换频道：丢弃过期结果
-    // 按 id 去重：置顶帖每页都会返回，避免"加载更多"后重复
-    const seen = new Set(feedItems.value.map((p) => p.id))
-    const merged = reset
-      ? data.items
-      : [...feedItems.value, ...data.items.filter((p) => !seen.has(p.id))]
-    feedItems.value = merged
-    feedCursor.value = data.next_cursor
-    feedHasMore.value = data.has_more
+    // 置顶帖每页重复返回，去重后可能整页 0 新条目：自动续拉下一页（#55），
+    // 上限 5 页防服务端异常时死循环
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const data = await postApi.feed(id, feedSort.value, feedCursor.value, 20, activeBoard.value)
+      if (cid.value !== id) return // 切换频道：丢弃过期结果
+      // 按 id 去重：置顶帖每页都会返回，避免"加载更多"后重复
+      const seen = new Set(feedItems.value.map((p) => p.id))
+      const fresh = data.items.filter((p) => !seen.has(p.id))
+      const merged = reset
+        ? data.items
+        : [...feedItems.value, ...fresh]
+      feedItems.value = merged
+      feedCursor.value = data.next_cursor
+      feedHasMore.value = data.has_more
+      // 有新条目或没有下一页则结束；整页重复/空页则续拉下一页（#55）
+      if (fresh.length > 0 || !feedHasMore.value) break
+    }
   } catch (e) {
     toast(e instanceof Error ? e.message : '加载失败', 'error')
   } finally {
@@ -548,9 +584,14 @@ async function loadAll() {
   hotPosts.value = []
   members.value = []
   requests.value = []
+  membersPage.value = 0
+  membersTotal.value = 0
+  requestsPage.value = 0
+  requestsTotal.value = 0
   membersOpen.value = false
   requestsOpen.value = false
   ownerMsg.value = ''
+  ownerMsgIsError.value = false
   loadError.value = ''
   notFound.value = false
   try {
@@ -624,15 +665,15 @@ async function onCoverUpload(e: Event) {
   const input = e.target as HTMLInputElement
   const file = input.files?.[0]
   if (!file) return
-  ownerMsg.value = '上传中…'
+  setOwnerMsg('上传中…')
   const fd = new FormData()
   fd.append('file', file)
   try {
     const up = await request<{ url: string }>({ url: '/uploads', method: 'POST', data: fd })
     community.value = await communityApi.update(cid.value, { avatar_url: up.url, cover_url: up.url })
-    ownerMsg.value = '图片已更新'
+    setOwnerMsg('图片已更新')
   } catch (err) {
-    ownerMsg.value = err instanceof Error ? err.message : '上传失败'
+    setOwnerMsg(err instanceof Error ? err.message : '上传失败', true)
   }
 }
 
@@ -640,15 +681,15 @@ async function onStatusSave() {
   ownerMsg.value = ''
   try {
     community.value = await communityApi.updateStatus(cid.value, statusForm.status)
-    ownerMsg.value = '状态已保存'
+    setOwnerMsg('状态已保存')
   } catch (err) {
-    ownerMsg.value = err instanceof Error ? err.message : '保存失败'
+    setOwnerMsg(err instanceof Error ? err.message : '保存失败', true)
   }
 }
 
 async function onCreateBoard() {
   if (!boardForm.name) {
-    ownerMsg.value = '请填写版块名称'
+    setOwnerMsg('请填写版块名称', true)
     return
   }
   boardCreating.value = true
@@ -661,9 +702,9 @@ async function onCreateBoard() {
     if (activeBoard.value === null && community.value.boards.length > 0) {
       activeBoard.value = community.value.boards[0].id
     }
-    ownerMsg.value = '版块已创建'
+    setOwnerMsg('版块已创建')
   } catch (err) {
-    ownerMsg.value = err instanceof Error ? err.message : '创建失败'
+    setOwnerMsg(err instanceof Error ? err.message : '创建失败', true)
   } finally {
     boardCreating.value = false
   }
@@ -672,37 +713,62 @@ async function onCreateBoard() {
 async function toggleMembers() {
   membersOpen.value = !membersOpen.value
   if (membersOpen.value && members.value.length === 0) {
-    try {
-      const data = await communityApi.members(cid.value, 1, 50)
-      members.value = data.items
-    } catch (e) {
-      toast(e instanceof Error ? e.message : '加载成员失败', 'error')
-    }
+    await loadMembers(1)
   }
+}
+
+async function loadMembers(page: number, append = false) {
+  try {
+    const data = await communityApi.members(cid.value, page, 50)
+    members.value = append ? [...members.value, ...data.items] : data.items
+    membersPage.value = page
+    membersTotal.value = data.total
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '加载成员失败', 'error')
+  }
+}
+
+function loadMoreMembers() {
+  return loadMembers(membersPage.value + 1, true)
 }
 
 async function toggleRequests() {
   requestsOpen.value = !requestsOpen.value
   if (requestsOpen.value && requests.value.length === 0) {
-    await loadRequests()
+    await loadRequests(1)
   }
 }
 
-async function loadRequests() {
+async function loadRequests(page: number, append = false) {
   try {
-    const data = await communityApi.joinRequests(cid.value, 1, 50)
-    requests.value = data.items
+    const data = await communityApi.joinRequests(cid.value, page, 50)
+    requests.value = append ? [...requests.value, ...data.items] : data.items
+    requestsPage.value = page
+    requestsTotal.value = data.total
   } catch (e) {
     toast(e instanceof Error ? e.message : '加载申请失败', 'error')
   }
 }
 
+function loadMoreRequests() {
+  return loadRequests(requestsPage.value + 1, true)
+}
+
+/** 加入申请审核：驳回对申请人不可逆，先二次确认（#54）。 */
 async function handleRequest(r: JoinRequestItem, approve: boolean) {
+  if (!approve) {
+    const ok = await confirmDialog(
+      '驳回加入申请',
+      `确定驳回 ${r.user_nickname || r.username} 的加入申请？申请人将收到「未通过」的系统通知。`,
+    )
+    if (!ok) return
+  }
   try {
     await communityApi.handleJoinRequest(cid.value, r.id, approve)
     requests.value = requests.value.filter((x) => x.id !== r.id)
+    requestsTotal.value = Math.max(0, requestsTotal.value - 1)
     community.value = await communityApi.get(cid.value)
-    ownerMsg.value = approve ? '已通过申请' : '已驳回申请'
+    setOwnerMsg(approve ? '已通过申请' : '已驳回申请')
   } catch (e) {
     toast(e instanceof Error ? e.message : '操作失败', 'error')
   }
@@ -824,7 +890,17 @@ async function onDissolve() {
 .actions {
   margin-top: var(--sp-4);
   display: flex;
+  align-items: center;
   gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+/* 频道主退出解释（#53）：按钮位置换成说明文字而不是无声消失 */
+.owner-exit-hint {
+  font-size: var(--fs-caption);
+  color: var(--text-3);
+}
+.manage-more {
+  align-self: flex-start;
 }
 .board-tabs {
   display: flex;
@@ -877,6 +953,10 @@ async function onDissolve() {
   margin: var(--sp-2) 0 0;
   font-size: var(--fs-caption);
   color: var(--success);
+}
+/* 失败信息不能用成功色（固定绿色会误导用户以为操作成功） */
+.msg-error {
+  color: var(--danger);
 }
 .board-input {
   flex: 1;
@@ -1073,8 +1153,9 @@ async function onDissolve() {
 .wb-grid {
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr) 300px;
-  /* 顶部条 nav-height + .app-shell 底部常驻 tabbar 留白，避免多出 56px 空白/滚动条 */
-  height: calc(100vh - var(--nav-height) - var(--tabbar-height));
+  /* /c/:id 不是 tab 页（无底部 tabbar，app-shell 也不再垫 tabbar 高度），
+   * 只需减去宽屏顶部条高度；多减 tabbar 会在底部留出 56px 空白 */
+  height: calc(100vh - var(--nav-height));
   min-height: 0;
 }
 .wb-left {

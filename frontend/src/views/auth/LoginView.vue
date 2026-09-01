@@ -1,6 +1,8 @@
 <template>
   <main class="auth-page">
     <div class="auth-card">
+      <!-- 登录/注册页是全屏无 tab 页，必须有返回站点的出口（#41） -->
+      <router-link to="/" class="auth-brand">SDUdiscord</router-link>
       <h1 class="auth-title">登录</h1>
       <p class="auth-sub">使用用户名或邮箱登录 SDUdiscord</p>
 
@@ -19,15 +21,22 @@
 
         <div class="field">
           <label class="field-label">密码</label>
+          <!-- 显示密码开关：避免盲输错密码只能删掉重来（#42） -->
           <t-input
             v-model="form.password"
             size="large"
-            type="password"
+            :type="showPwd ? 'text' : 'password'"
             placeholder="密码"
-            autocomplete="current-password"
+            :autocomplete="showPwd ? 'off' : 'current-password'"
             clearable
             required
-          />
+          >
+            <template #suffix>
+              <button type="button" class="pwd-toggle" :aria-label="showPwd ? '隐藏密码' : '显示密码'" @click="showPwd = !showPwd">
+                {{ showPwd ? '隐藏' : '显示' }}
+              </button>
+            </template>
+          </t-input>
         </div>
 
         <p v-if="error" class="error">{{ error }}</p>
@@ -58,6 +67,7 @@ const auth = useAuthStore()
 const form = reactive({ account: '', password: '' })
 const loading = ref(false)
 const error = ref('')
+const showPwd = ref(false)
 
 async function onSubmit() {
   if (loading.value) return
@@ -99,6 +109,17 @@ async function onSubmit() {
   padding: var(--sp-5) var(--sp-4) var(--sp-4);
   box-shadow: var(--td-shadow-2);
 }
+.auth-brand {
+  display: inline-block;
+  margin-bottom: var(--sp-2);
+  font-size: var(--fs-body);
+  font-weight: 700;
+  color: var(--brand);
+  text-decoration: none;
+}
+.auth-brand:hover {
+  text-decoration: underline;
+}
 .auth-title {
   margin: 0;
   font-size: var(--fs-page);
@@ -122,6 +143,17 @@ async function onSubmit() {
 .field-label {
   font-size: var(--fs-caption);
   color: var(--td-text-color-secondary);
+}
+.pwd-toggle {
+  border: none;
+  background: transparent;
+  padding: 2px 4px;
+  color: var(--td-text-color-secondary);
+  font-size: var(--fs-caption);
+  cursor: pointer;
+}
+.pwd-toggle:hover {
+  color: var(--brand);
 }
 .error {
   margin: 0;

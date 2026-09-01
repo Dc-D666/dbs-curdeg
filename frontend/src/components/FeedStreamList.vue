@@ -83,11 +83,17 @@ async function loadMore() {
   loading.value = true
   loadError.value = ''
   try {
-    const data = await currentFeed(cursor.value)
-    const seen = new Set(items.value.map((p) => p.id))
-    items.value = [...items.value, ...data.items.filter((p) => !seen.has(p.id))]
-    cursor.value = data.next_cursor
-    hasMore.value = data.has_more
+    // 置顶帖每页重复返回，去重后可能整页 0 新条目：此时自动续拉下一页（#55），
+    // 否则点「加载更多」列表毫无变化，用户以为卡死。上限 5 页防服务端异常时死循环。
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const data = await currentFeed(cursor.value)
+      const seen = new Set(items.value.map((p) => p.id))
+      const fresh = data.items.filter((p) => !seen.has(p.id))
+      items.value = [...items.value, ...fresh]
+      cursor.value = data.next_cursor
+      hasMore.value = data.has_more
+      if (fresh.length > 0 || !hasMore.value) break
+    }
   } catch (e) {
     if (items.value.length === 0) {
       loadError.value = e instanceof Error ? e.message : '加载失败，请稍后重试'

@@ -9,6 +9,7 @@
  */
 import { onBeforeUnmount, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { toast } from '@/utils/toast'
 
 const EDITABLE_TAGS = ['INPUT', 'TEXTAREA', 'SELECT']
 
@@ -38,7 +39,11 @@ export function useGlobalShortcuts() {
   /** 找到视口内最近的 FeedCard，按 dir 滚动到下一/上一张。 */
   function navFeed(dir: 1 | -1) {
     const cards = Array.from(document.querySelectorAll<HTMLElement>('.feed-card'))
-    if (cards.length === 0) return
+    // 无 feed 时给反馈（#60）：而不是无声无息让用户以为快捷键坏掉
+    if (cards.length === 0) {
+      toast('当前页面没有可切换的帖子（J/K 在信息流页使用）', 'info')
+      return
+    }
     const viewport = window.innerHeight
     // 当前激活：最接近视口中线的卡片
     let activeIdx = 0

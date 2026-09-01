@@ -2,7 +2,7 @@
   <main class="discover">
     <header class="page-header">
       <h1 class="page-title">发现</h1>
-      <t-button theme="primary" size="small" @click="showCreate = true">创建频道</t-button>
+      <t-button theme="primary" size="small" @click="openCreate">创建频道</t-button>
     </header>
 
     <!-- 全站最热门频道 Top10 -->
@@ -52,7 +52,8 @@
       <div v-if="searchLoading" class="state">搜索中…</div>
       <EmptyState v-else-if="searchResults.length === 0" text="没有找到相关帖子" />
       <div v-else class="list">
-        <article v-for="p in searchResults" :key="p.id" class="card" @click="goPost(p.id)">
+        <!-- router-link：键盘可 Tab/Enter 打开，屏幕阅读器可导航（#38） -->
+        <router-link v-for="p in searchResults" :key="p.id" :to="`/p/${p.id}`" class="card">
           <div class="card-head">
             <h3 class="card-name search-title" v-html="p.highlight_title || p.title"></h3>
             <span v-if="p.is_top" class="tag tag-top">置顶</span>
@@ -66,7 +67,7 @@
             <span>{{ p.like_count }} 赞 · {{ p.comment_count }} 评</span>
             <span class="search-time">{{ timeAgo(p.created_at) }}</span>
           </div>
-        </article>
+        </router-link>
       </div>
       <t-button
         v-if="hasMoreSearchResults"
@@ -135,6 +136,9 @@ import { searchApi, type HotKeyword, type SearchResult } from '@/api/search'
 import { tokenStore } from '@/api/http'
 import { toast } from '@/utils/toast'
 import { timeAgo } from '@/utils/time'
+
+// 显式组件名：供 App.vue 的 <keep-alive :include> 匹配（返回本页保留搜索状态，#37）
+defineOptions({ name: 'DiscoverView' })
 
 const router = useRouter()
 
@@ -206,15 +210,21 @@ function clearSearch() {
   searchQ.value = ''
 }
 
-function goPost(id: number) {
-  router.push(`/p/${id}`)
+/** 打开创建弹层：未登录时先引导登录，避免游客填完表单点确认才被告知要登录、已填内容全丢。 */
+function openCreate() {
+  if (!tokenStore.access) {
+    toast('登录后即可创建频道，登录完会自动回来', 'info')
+    router.push(`/login?redirect=${encodeURIComponent('/discover')}`)
+    return
+  }
+  showCreate.value = true
 }
 
 async function onCreate() {
   if (creating.value) return
-  // 未登录先跳登录页（登录后回跳继续创建）
+  // 兜底：openCreate 已拦游客，这里防止登录态过期后提交
   if (!tokenStore.access) {
-    router.push(`/login?redirect=${encodeURIComponent('/discover')}`)
+    openCreate()
     return
   }
   creating.value = true
@@ -256,9 +266,26 @@ async function onCreate() {
   display: flex;
   gap: var(--sp-3);
   overflow-x: auto;
-  padding-bottom: var(--sp-1);
+  padding: var(--sp-1) var(--sp-2) var(--sp-2);
+  margin-left: calc(-1 * var(--sp-2));
+  margin-right: calc(-1 * var(--sp-2));
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
+  /* 两端渐隐遮罩：滚动条已隐藏，用“内容被裁切”暗示可横滑（#51） */
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    #000 14px,
+    #000 calc(100% - 14px),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    #000 14px,
+    #000 calc(100% - 14px),
+    transparent 100%
+  );
 }
 .hot-channels::-webkit-scrollbar {
   display: none;
@@ -270,10 +297,11 @@ async function onCreate() {
   align-items: center;
   gap: 4px;
   text-decoration: none;
-  max-width: 64px;
+  /* 64px 只能显 4 个汉字，长名字几乎必然截断（#51） */
+  max-width: 84px;
 }
 .hot-channel-name {
-  max-width: 64px;
+  max-width: 84px;
   font-size: 11px;
   color: var(--text-2);
   overflow: hidden;
@@ -353,15 +381,22 @@ async function onCreate() {
   gap: var(--sp-3);
 }
 .card {
+  display: block;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
   padding: var(--sp-4);
   cursor: pointer;
+  text-decoration: none;
+  color: inherit;
   transition: border-color 0.15s;
 }
 .card:hover {
   border-color: var(--brand);
+}
+.card:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
 }
 .card-head {
   display: flex;

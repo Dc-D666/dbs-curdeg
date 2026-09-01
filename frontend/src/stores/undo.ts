@@ -15,6 +15,8 @@ import { ref } from 'vue'
 export const useUndoStore = defineStore('undo', () => {
   const message = ref('')
   const visible = ref(false)
+  /** 当前Snackbar 的自动生效倒计时（ms），供组件渲染进度条 */
+  const duration = ref(5000)
   let onUndo: (() => void) | null = null
   let onCommit: (() => void) | null = null
   let timer: ReturnType<typeof setTimeout> | null = null
@@ -58,6 +60,7 @@ export const useUndoStore = defineStore('undo', () => {
     message.value = msg
     onUndo = undoFn
     onCommit = commitFn ?? null
+    duration.value = durationMs
     visible.value = true
     clear()
     timer = setTimeout(() => {
@@ -73,5 +76,5 @@ export const useUndoStore = defineStore('undo', () => {
     fn?.()
   }
 
-  return { message, visible, notify, undo, hide, commitPending }
+  return { message, visible, duration, notify, undo, hide, commitPending }
 })

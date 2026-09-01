@@ -1,9 +1,7 @@
 <template>
   <main class="me">
     <header class="me-header">
-      <router-link to="/" class="back">
-        <ArrowLeftIcon class="back-icon" /> 返回
-      </router-link>
+      <!-- 本页是底部 tab 之一（「我的」），无需页面内返回入口，避免两套返回语义 -->
       <h1 class="me-title">个人中心</h1>
     </header>
 
@@ -14,7 +12,8 @@
       </t-avatar>
       <div class="profile-main">
         <p class="nickname">{{ accountName }}</p>
-        <p class="meta">@{{ accountName }} · 注册于 {{ createdDate || '—' }}</p>
+        <!-- @后必须是 username（唯一标识），不是可重名的昵称；未加载时不再闪现「未登录」 -->
+        <p class="meta">@{{ usernameText }} · 注册于 {{ createdDate || '—' }}</p>
       </div>
     </section>
 
@@ -96,14 +95,22 @@
 
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
-import { ArrowLeftIcon, ChatIcon, ChevronRightIcon, DashboardIcon, KeyIcon, NotificationIcon, StarIcon, UserIcon, UsergroupIcon } from 'tdesign-icons-vue-next'
+import { ChatIcon, ChevronRightIcon, DashboardIcon, KeyIcon, NotificationIcon, StarIcon, UserIcon, UsergroupIcon } from 'tdesign-icons-vue-next'
 import { useAuthStore } from '@/stores/auth'
 import { confirmDialog } from '@/utils/confirm'
 import { toast } from '@/utils/toast'
 
 const auth = useAuthStore()
 const initial = computed(() => (auth.user?.nickname || auth.user?.username || 'U').slice(0, 1).toUpperCase())
-const accountName = computed(() => auth.user?.nickname || auth.user?.username || '未登录')
+// 加载中不闪现「未登录」：区分 loaded 前后的兑底文案
+const accountName = computed(() => {
+  if (!auth.loaded) return '加载中…'
+  return auth.user?.nickname || auth.user?.username || '未登录'
+})
+const usernameText = computed(() => {
+  if (!auth.loaded) return '…'
+  return auth.user?.username || '—'
+})
 const createdDate = computed(() => (auth.user?.created_at || '').slice(0, 10))
 
 // 进入个人中心时确保用户态已拉取，避免账号卡片显示空白
@@ -128,20 +135,9 @@ async function onLogout() {
 .me-header {
   display: flex;
   align-items: center;
-  gap: var(--sp-3);
+  justify-content: center;
   height: var(--nav-height);
   border-bottom: 1px solid var(--border);
-}
-.back {
-  color: var(--text-3);
-  font-size: var(--fs-body);
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-.back-icon {
-  width: 16px;
-  height: 16px;
 }
 .me-title {
   margin: 0;

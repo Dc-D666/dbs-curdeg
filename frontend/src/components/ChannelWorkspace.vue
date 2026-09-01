@@ -142,6 +142,7 @@
               :key="c.id"
               class="ws-chip"
               :class="{ active: c.id === cid }"
+              :title="c.name"
               @click="switchChannel(c.id)"
             >
               <UserAvatar :name="c.name" :src="c.avatar_url" :size="30" />
@@ -244,7 +245,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { communityApi, type Community, type TopicItem } from '@/api/community'
 import { postApi, type PostItem } from '@/api/post'
@@ -254,6 +255,7 @@ import UserAvatar from '@/components/UserAvatar.vue'
 import SkeletonFeed from '@/components/SkeletonFeed.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import { usePostDrawer } from '@/stores/postDrawer'
+import { useLiveStore } from '@/stores/live'
 import { tokenStore } from '@/api/http'
 import { toast } from '@/utils/toast'
 import { confirmDialog } from '@/utils/confirm'
@@ -264,9 +266,14 @@ const props = withDefaults(
   defineProps<{ cid: number; embeddedInTab?: boolean }>(),
   { embeddedInTab: false },
 )
-const emit = defineEmits<{ (e: 'change', cid: number): void }>()
+const emit = defineEmits<{
+  (e: 'change', cid: number): void
+  /** 频道加载失败（notFound=true 表示记忆/传入的频道已不存在，供首页回退处理） */
+  (e: 'load-error', notFound: boolean): void
+}>()
 
 const router = useRouter()
+const live = useLiveStore()
 const community = ref<Community | null>(null)
 const loading = ref(true)
 const loadError = ref('')
@@ -426,15 +433,23 @@ async function loadFeed(reset = false) {
   }
   feedLoading.value = true
   try {
-    const data = await postApi.feed(id, feedSort.value, feedCursor.value, 20, activeBoard.value)
-    if (props.cid !== id) return
-    const seen = new Set(feedItems.value.map((p) => p.id))
-    const merged = reset
-      ? data.items
-      : [...feedItems.value, ...data.items.filter((p) => !seen.has(p.id))]
-    feedItems.value = merged
-    feedCursor.value = data.next_cursor
-    feedHasMore.value = data.has_more
+    // 置顶帖每页重复返回，去重后可能整页 0 新条目：自动续拉下一页（#55），
+    // 上限 5 页防服务端异常时死循环
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const data = await postApi.feed(id, feedSort.value, feedCursor.value, 20, activeBoard.value)
+      if (props.cid !== id) return // 已切频道：丢弃过期结果
+      // 按 id 去重：置顶帖每页都会返回，避免"加载更多"后重复
+      const seen = new Set(feedItems.value.map((p) => p.id))
+      const fresh = data.items.filter((p) => !seen.has(p.id))
+      const merged = reset
+        ? data.items
+        : [...feedItems.value, ...fresh]
+      feedItems.value = merged
+      feedCursor.value = data.next_cursor
+      feedHasMore.value = data.has_more
+      // 有新条目或没有下一页则结束；整页重复/空页则续拉下一页
+      if (fresh.length > 0 || !feedHasMore.value) break
+    }
   } catch (e) {
     toast(e instanceof Error ? e.message : '加载失败', 'error')
   } finally {
@@ -483,13 +498,24 @@ async function loadAll() {
       const r = loadErrorMessage(e, '频道', '频道不存在或已解散')
       notFound.value = r.notFound
       loadError.value = r.text
+      emit('load-error', r.notFound)
     }
   } finally {
     if (props.cid === id) loading.value = false
   }
 }
 
-watch(() => props.cid, () => loadAll())
+watch(
+  () => props.cid,
+  (id) => {
+    loadAll()
+    live.setActive(id)
+  },
+)
+
+// 首页被 <keep-alive> 缓存：切走时组件不卸载，需用 deactivated 释放频道上下文
+onActivated(() => live.setActive(props.cid))
+onDeactivated(() => live.setActive(null))
 
 // P1 ③：收到「新讨论」药丸的查看请求 → 重拉当前版块首屏
 function onLiveRefresh() {
@@ -499,10 +525,13 @@ function onLiveRefresh() {
 onMounted(() => {
   loadAll()
   loadMyChannels()
+  // 声明当前频道上下文：新内容药丸只统计该频道的新帖（#31）
+  live.setActive(props.cid)
   window.addEventListener('live:refresh', onLiveRefresh)
   window.addEventListener('resize', onResize)
 })
 onBeforeUnmount(() => {
+  live.setActive(null)
   window.removeEventListener('live:refresh', onLiveRefresh)
   window.removeEventListener('resize', onResize)
 })
@@ -802,9 +831,25 @@ async function onLeave() {
   display: flex;
   gap: var(--sp-3);
   overflow-x: auto;
-  padding: var(--sp-2) 0 var(--sp-1);
+  padding: var(--sp-2) var(--sp-2) var(--sp-1);
+  margin: 0 calc(-1 * var(--sp-2));
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
+  /* 两端渐隐遮罩：滚动条已隐藏，用“内容被裁切”暗示可横滑（#51） */
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    #000 14px,
+    #000 calc(100% - 14px),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    #000 14px,
+    #000 calc(100% - 14px),
+    transparent 100%
+  );
 }
 .ws-chips::-webkit-scrollbar {
   display: none;
@@ -827,7 +872,8 @@ async function onLeave() {
   font-weight: 600;
 }
 .ws-chip-name {
-  max-width: 60px;
+  /* 60px 只能显 5 个汉字，长名字几乎必然截断（#51） */
+  max-width: 72px;
   font-size: 11px;
   color: var(--text-3);
   overflow: hidden;

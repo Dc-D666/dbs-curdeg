@@ -31,7 +31,7 @@
       <p v-if="user.bio" class="bio">{{ user.bio }}</p>
       <p v-else class="bio empty">这个人很懒，什么都没写</p>
       <p v-if="user.province || user.city" class="location">
-        📍 {{ user.province }} {{ user.city }}
+        <LocationIcon class="loc-icon" /> {{ user.province }} {{ user.city }}
       </p>
       <p class="follow-stats">关注 <b>{{ followCount }}</b> 人</p>
 
@@ -69,7 +69,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeftIcon } from 'tdesign-icons-vue-next'
+import { ArrowLeftIcon, LocationIcon } from 'tdesign-icons-vue-next'
 import { userApi, type PublicUser } from '@/api/user'
 import { postApi, type PostItem } from '@/api/post'
 import { useAuthStore } from '@/stores/auth'
@@ -265,6 +265,12 @@ async function toggleFollow() {
   margin: var(--sp-2) 0 0;
   font-size: var(--fs-caption);
   color: var(--text-3);
+}
+/* 位置图标：中性色随文案 */
+.loc-icon {
+  width: 12px;
+  height: 12px;
+  vertical-align: -1px;
 }
 .follow-stats {
   margin: var(--sp-2) 0 0;

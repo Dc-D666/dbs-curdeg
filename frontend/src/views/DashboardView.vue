@@ -24,10 +24,19 @@
           <section class="panel">
             <div class="panel-title-row">
               <h3 class="panel-title">近 7 天发帖趋势</h3>
-              <t-button variant="outline" size="small" @click="exportTrend">导出 CSV</t-button>
+              <!-- 峰值参考：纯 CSS 柱图无 y 轴，至少给出刻度锚点（#57） -->
+              <div class="trend-ops">
+                <span v-if="trendMax > 0" class="trend-max">峰值 {{ trendMax }} 帖/天</span>
+                <t-button variant="outline" size="small" :loading="exporting" @click="exportTrend">{{ exporting ? '导出中…' : '导出 CSV' }}</t-button>
+              </div>
             </div>
-            <div v-if="trend.length" class="trend">
-              <div v-for="t in trend" :key="t.date" class="trend-col">
+            <div v-if="trend.length" class="trend" role="img" :aria-label="`近7天发帖趋势，峰值${trendMax}帖`">
+              <div
+                v-for="t in trend"
+                :key="t.date"
+                class="trend-col"
+                :title="`${t.date}：${t.count} 帖`"
+              >
                 <span class="trend-val">{{ t.count }}</span>
                 <div class="trend-bar" :style="{ height: barHeight(t.count) }" />
                 <span class="trend-date">{{ t.date.slice(5) }}</span>
@@ -36,12 +45,17 @@
             <p v-else class="muted">近 7 天暂无发帖</p>
           </section>
         </template>
-        <div v-else class="state">{{ error }}</div>
+        <!-- 总览加载失败：不能只给一行错误文本，必须可重试 -->
+        <ErrorState v-else :text="error" @retry="retryOverview" />
       </t-tab-panel>
 
       <!-- 举报处理 -->
       <t-tab-panel value="reports" label="举报处理">
         <div class="panel">
+          <div class="reports-toolbar">
+            <span v-if="reportsPage > 0" class="reports-count">共 {{ reportsTotal }} 条举报（已加载 {{ reports.length }} 条）</span>
+            <span v-else-if="reportsLoading" class="reports-count">加载中…</span>
+          </div>
           <div class="report-row" v-for="r in reports" :key="r.id">
             <div class="report-main">
               <span class="report-type">{{ reportTypeName(r.target_type) }} #{{ r.target_id }}</span>
@@ -49,14 +63,24 @@
               <span class="report-status">{{ reportStatusName(r.status) }}</span>
             </div>
             <p v-if="r.detail" class="report-detail">{{ r.detail }}</p>
-            <p class="report-meta">举报人：{{ r.reporter_nickname }} · {{ r.created_at }}</p>
+            <p class="report-meta">举报人：{{ r.reporter_nickname }} · {{ formatTime(r.created_at) }}</p>
             <div class="report-ops">
               <t-button v-if="r.status === 0" variant="outline" size="small" @click="handleReport(r, 'processing')">受理</t-button>
               <t-button variant="outline" size="small" @click="handleReport(r, 'done')">办结</t-button>
               <t-button variant="outline" size="small" theme="danger" @click="handleReport(r, 'rejected')">驳回</t-button>
             </div>
           </div>
-          <t-empty v-if="reports.length === 0" description="暂无举报" />
+          <div v-if="reportsLoading && reports.length === 0" class="state">加载中…</div>
+          <t-empty v-else-if="reports.length === 0" description="暂无举报" />
+          <!-- 举报不再只拉前 50 条静默截断：分页 + 总数可见 -->
+          <t-button
+            v-if="reports.length < reportsTotal"
+            variant="outline"
+            block
+            class="load-more"
+            :loading="reportsLoading"
+            @click="loadMoreReports()"
+          >{{ reportsLoading ? '加载中…' : `加载更多（${reports.length}/${reportsTotal}）` }}</t-button>
         </div>
       </t-tab-panel>
 
@@ -113,11 +137,14 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ArrowLeftIcon } from 'tdesign-icons-vue-next'
 import { request } from '@/api/http'
 import { adminApi, type ReportItem, type SensitiveWordItem } from '@/api/admin'
 import { toast } from '@/utils/toast'
+import { formatTime } from '@/utils/time'
+import { confirmDialog } from '@/utils/confirm'
+import ErrorState from '@/components/ErrorState.vue'
 
 const tab = ref<'overview' | 'reports' | 'words' | 'configs' | 'ai'>('overview')
 const loading = ref(true)
@@ -125,8 +152,11 @@ const error = ref('')
 const stats = ref<Record<string, any> | null>(null)
 const trend = ref<Array<{ date: string; count: number }>>([])
 
-// 举报
+// 举报：分页拉取（不再只拉前 50 条静默截断）
 const reports = ref<ReportItem[]>([])
+const reportsPage = ref(0)
+const reportsTotal = ref(0)
+const reportsLoading = ref(false)
 // 敏感词
 const words = ref<SensitiveWordItem[]>([])
 const wordForm = reactive({ word: '', category: '其他' })
@@ -140,6 +170,12 @@ function barHeight(count: number): string {
   const max = Math.max(1, ...trend.value.map((t) => t.count))
   return `${Math.max(8, Math.round((count / max) * 120))}px`
 }
+
+/** 趋势峰值（y 轴锚点，#57） */
+const trendMax = computed(() => Math.max(0, ...trend.value.map((t) => t.count)))
+
+// CSV 导出中状态：避免慢网络下重复点击（#57）
+const exporting = ref(false)
 
 function reportTypeName(t: number): string {
   return t === 1 ? '帖子' : t === 2 ? '评论' : t === 3 ? '用户' : t === 4 ? '频道' : '内容'
@@ -163,12 +199,31 @@ async function loadOverview() {
   }
 }
 
-async function loadReports() {
+/** 总览失败重试：回到加载态重新拉取。 */
+async function retryOverview() {
+  loading.value = true
+  error.value = ''
+  stats.value = null
+  await loadOverview()
+}
+
+async function loadReports(page: number, append = false) {
+  if (reportsLoading.value) return
+  reportsLoading.value = true
   try {
-    reports.value = (await adminApi.reports(undefined, 1, 50)).items
+    const data = await adminApi.reports(undefined, page, 20)
+    reports.value = append ? [...reports.value, ...data.items] : data.items
+    reportsPage.value = page
+    reportsTotal.value = data.total
   } catch (e) {
     toast(e instanceof Error ? e.message : '加载失败', 'error')
+  } finally {
+    reportsLoading.value = false
   }
+}
+
+function loadMoreReports() {
+  return loadReports(reportsPage.value + 1, true)
 }
 
 async function loadWords() {
@@ -196,11 +251,17 @@ async function loadAiConfigs() {
   }
 }
 
+/** 举报处理：办结/驳回会改变举报状态且影响申请人反馈，先二次确认（#56）。 */
 async function handleReport(r: ReportItem, action: 'processing' | 'done' | 'rejected') {
+  if (action === 'done') {
+    if (!(await confirmDialog('办结举报', `确定办结该举报（${reportTypeName(r.target_type)} #${r.target_id}）？办结后不可再受理。`))) return
+  } else if (action === 'rejected') {
+    if (!(await confirmDialog('驳回举报', `确定驳回该举报（${reportTypeName(r.target_type)} #${r.target_id}）？驳回后将不再跟进。`))) return
+  }
   try {
     await adminApi.handleReport(r.id, action)
     toast('已处理')
-    await loadReports()
+    await loadReports(1)
   } catch (e) {
     toast(e instanceof Error ? e.message : '操作失败', 'error')
   }
@@ -227,7 +288,9 @@ async function toggleWord(w: SensitiveWordItem, enabled: boolean) {
   }
 }
 
+/** 删除敏感词：立即从审核词库移除，先二次确认（#56）。 */
 async function removeWord(w: SensitiveWordItem) {
+  if (!(await confirmDialog('删除敏感词', `确定删除敏感词「${w.word}」（${w.category}）？删除后相关内容将不再被拦截。`))) return
   try {
     await adminApi.deleteSensitiveWord(w.id)
     words.value = words.value.filter((x) => x.id !== w.id)
@@ -258,6 +321,8 @@ async function toggleAi(feature: string, enabled: boolean) {
 }
 
 async function exportTrend() {
+  if (exporting.value) return
+  exporting.value = true
   try {
     const res = await adminApi.exportDashboard(7)
     if (!res.ok) return
@@ -270,12 +335,14 @@ async function exportTrend() {
     URL.revokeObjectURL(url)
   } catch {
     toast('导出失败', 'error')
+  } finally {
+    exporting.value = false
   }
 }
 
 onMounted(async () => {
   await loadOverview()
-  loadReports()
+  loadReports(1)
   loadWords()
   loadConfigs()
   loadAiConfigs()
@@ -371,6 +438,18 @@ onMounted(async () => {
   align-items: flex-end;
   gap: 8px;
   height: 160px;
+  /* x 轴基线（#57）：纯 CSS 柱图至少有坐标锚点 */
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 2px;
+}
+.trend-ops {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+.trend-max {
+  font-size: var(--fs-caption);
+  color: var(--text-3);
 }
 .trend-col {
   flex: 1;
@@ -380,6 +459,16 @@ onMounted(async () => {
   gap: 4px;
   height: 100%;
   justify-content: flex-end;
+  cursor: default;
+  border-radius: 4px;
+}
+/* 悬停高亮（#57）：配合 title 提示当天的具体数据 */
+.trend-col:hover .trend-bar {
+  background: var(--brand-hover);
+}
+.trend-col:hover .trend-date {
+  color: var(--text-2);
+  font-weight: 600;
 }
 .trend-val {
   font-size: var(--fs-caption);
@@ -399,6 +488,19 @@ onMounted(async () => {
 .muted {
   color: var(--text-3);
   font-size: var(--fs-caption);
+}
+.reports-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--sp-2);
+}
+.reports-count {
+  font-size: var(--fs-caption);
+  color: var(--text-3);
+}
+.load-more {
+  margin-top: var(--sp-2);
 }
 .report-row {
   padding: var(--sp-3) 0;

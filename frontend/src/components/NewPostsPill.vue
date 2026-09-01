@@ -1,7 +1,7 @@
 <template>
   <Transition name="pill">
     <button v-if="show" class="new-pill" @click="view">
-      <span class="pill-dot" />有 {{ live.count }} 条新讨论，点击查看
+      <span class="pill-dot" />有 {{ relevantCount }} 条新讨论，点击查看
     </button>
   </Transition>
 </template>
@@ -17,12 +17,21 @@ const live = useLiveStore()
 // 仅在信息流页顶部显示（首页/发现/频道/关注），避免设置页也弹
 const FEED_ROUTES = new Set(['home', 'discover', 'community', 'my-feed'])
 const isFeedRoute = computed(() => FEED_ROUTES.has(route.name as string))
-const show = computed(() => isFeedRoute.value && live.count > 0)
+
+// 当前上下文相关的新内容数：按路由判定当前频道（不依赖组件挂载顺序，
+// keep-alive 缓存页 deactivated 后 activeCid 可能滞后，路由参数永远准确）：
+//   /c/:id 频道页 → 该频道；首页工作台 → activeCid；发现/关注聚合流 → 全部
+const relevantCount = computed(() => {
+  if (route.name === 'community') return live.countFor(Number(route.params.id))
+  if (route.name === 'home') return live.countFor(live.activeCid)
+  return live.total
+})
+const show = computed(() => isFeedRoute.value && relevantCount.value > 0)
 
 // 自动消失：出现后 8s 若无点击则清零（F2）
 const autoDismiss = ref<ReturnType<typeof setTimeout> | null>(null)
 watch(
-  () => live.count,
+  relevantCount,
   (v) => {
     if (autoDismiss.value) clearTimeout(autoDismiss.value)
     if (v > 0) {

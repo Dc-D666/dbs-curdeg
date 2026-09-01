@@ -93,7 +93,7 @@
             <template #icon><AiIcon /></template> 生成 AI 核心摘要
           </t-button>
           <div v-else-if="summary" class="ai-summary">
-            <b>✨ 核心摘要：</b><span class="ai-summary-text">{{ typedSummary }}<span v-if="typing" class="ai-cursor">▍</span></span>
+            <b><AiIcon class="ai-summary-icon" /> 核心摘要：</b><span class="ai-summary-text">{{ typedSummary }}<span v-if="typing" class="ai-cursor">▍</span></span>
           </div>
         </div>
 
@@ -101,7 +101,7 @@
           <div v-for="att in attachments" :key="att.id" class="attachment">
             <img v-if="att.media_type === 1" :src="att.url" class="att-img" alt="" @click="openAttPreview(att)" />
             <video v-else-if="att.media_type === 2" :src="att.url" class="att-video" controls />
-            <a v-else :href="att.url" target="_blank" rel="noopener" class="att-file">📎 {{ attUrlName(att.url) }}</a>
+            <a v-else :href="att.url" target="_blank" rel="noopener" class="att-file"><AttachIcon class="att-file-icon" /> {{ attUrlName(att.url) }}</a>
             <t-button v-if="canManage" variant="text" size="small" theme="danger" class="att-del" @click="removeAttachment(att.id)">删除</t-button>
           </div>
         </div>
@@ -122,14 +122,18 @@
       <section class="panel comment-panel">
         <h3 class="panel-title">评论</h3>
 
-        <div class="comment-input-row">
-          <t-input
-            v-model="commentInput"
-            placeholder="写下你的评论…"
-            maxlength="2000"
-            @enter="submitComment"
-          />
-          <t-button theme="primary" size="small" :loading="sending" @click="submitComment">发送</t-button>
+        <div class="comment-input-block">
+          <div class="comment-input-row">
+            <t-input
+              v-model="commentInput"
+              placeholder="写下你的评论…"
+              maxlength="2000"
+              @enter="submitComment"
+            />
+            <t-button theme="primary" size="small" :loading="sending" @click="submitComment">发送</t-button>
+          </div>
+          <!-- 字数计数：maxlength 截断前让用户看见余量（#44） -->
+          <span v-if="commentInput.length" class="char-count">{{ commentInput.length }}/2000</span>
         </div>
 
         <p v-if="commentsLoading && comments.length === 0" class="state">加载中…</p>
@@ -161,6 +165,7 @@
                 maxlength="2000"
                 @enter="submitReply"
               />
+              <span v-if="replyInput.length" class="char-count">{{ replyInput.length }}/2000</span>
               <div class="inline-reply-ops">
                 <t-button size="small" variant="text" @click="closeReply">取消</t-button>
                 <t-button size="small" theme="primary" :loading="sending" @click="submitReply">发送</t-button>
@@ -197,13 +202,6 @@
           @click="loadComments(commentPage + 1)"
         >{{ commentsLoading ? '加载中…' : '加载更多评论' }}</t-button>
       </section>
-
-      <Lightbox
-        ref="lightboxRef"
-        :images="post.images"
-        :index="previewIndex"
-        @update:index="(i: number) => (previewIndex = i)"
-      />
     </template>
 
 
@@ -235,16 +233,16 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { AiIcon, ArrowLeftIcon } from 'tdesign-icons-vue-next'
+import { AiIcon, ArrowLeftIcon, AttachIcon } from 'tdesign-icons-vue-next'
 import { communityApi } from '@/api/community'
 import EmptyState from '@/components/EmptyState.vue'
-import Lightbox from '@/components/Lightbox.vue'
 import { postApi, type AttachmentItem, type CommentItem, type PostItem } from '@/api/post'
 import { tokenStore } from '@/api/http'
 import { request } from '@/api/http'
 import { useAuthStore } from '@/stores/auth'
 import { useInteractionStore } from '@/stores/interaction'
 import { useUndoStore } from '@/stores/undo'
+import { useLightboxStore } from '@/stores/lightbox'
 import { toast } from '@/utils/toast'
 import { confirmDialog } from '@/utils/confirm'
 import { formatTime } from '@/utils/time'
@@ -281,18 +279,22 @@ function goBack() {
   else router.push(post.value ? `/c/${post.value.community_id}` : '/discover')
 }
 
-// 图片灯箱（P1）：缩放/切换/Esc，替代旧的全屏遮罩
-const lightboxRef = ref<InstanceType<typeof Lightbox> | null>(null)
-const previewIndex = ref(0)
+// 图片灯箱（P1）：全局单例（#59），缩放/切换/Esc，替代旧的全屏遮罩
+const lightbox = useLightboxStore()
 
 function openGallery(i: number) {
-  previewIndex.value = i
-  lightboxRef.value?.open()
+  lightbox.open(post.value?.images ?? [], i)
 }
 function openAttPreview(att: AttachmentItem) {
-  // 附件图片：仅在属于帖子图库时复用灯箱，否则忽略（保持旧行为）
-  const idx = post.value?.images.indexOf(att.url) ?? -1
-  if (idx >= 0) openGallery(idx)
+  const imgs = post.value?.images ?? []
+  const idx = imgs.indexOf(att.url)
+  if (idx >= 0) {
+    // 附件图属于帖子图库：复用完整灯箱
+    openGallery(idx)
+    return
+  }
+  // 不在图库内：单图独立预览，不再无任何反应（#45）
+  lightbox.open([att.url], 0)
 }
 
 // 收藏 / 举报 / AI 摘要 / 附件（P0）
@@ -319,6 +321,35 @@ const commentsLoading = ref(false)
 const commentInput = ref('')
 const sending = ref(false)
 const replyInput = ref('')
+
+// 评论草稿：游客输入评论后点发送会跳登录（组件卸载），返回后输入必须还在。
+// 以 pid 为键存 sessionStorage（会话级，不长期残留），发送成功即清除。
+const COMMENT_DRAFT_PREFIX = 'draft:comment:'
+const commentDraftKey = computed(() => `${COMMENT_DRAFT_PREFIX}${pid.value}`)
+
+function saveCommentDraft(text: string) {
+  try {
+    if (text.trim()) sessionStorage.setItem(commentDraftKey.value, text)
+    else sessionStorage.removeItem(commentDraftKey.value)
+  } catch {
+    /* 隐私模式等场景静默忽略 */
+  }
+}
+
+function restoreCommentDraft() {
+  try {
+    const saved = sessionStorage.getItem(commentDraftKey.value)
+    if (saved && !commentInput.value) commentInput.value = saved
+  } catch {
+    /* ignore */
+  }
+}
+
+watch(commentInput, (v) => saveCommentDraft(v))
+watch(pid, () => {
+  // 切换帖子：新草稿在加载完成后恢复（loadPost 会重置列表但不碰输入框）
+  restoreCommentDraft()
+})
 // 行内回复目标：commentId 为楼中楼挂载点（顶层评论），replyToUserId 用于「回复 @某人」
 const replyTarget = ref<{ commentId: number; nickname: string; replyToUserId?: number } | null>(null)
 const replyBoxEl = ref<HTMLDivElement | null>(null)
@@ -417,7 +448,10 @@ async function loadPost() {
   if (pid.value === id && post.value) loadComments(1)
 }
 
-onMounted(loadPost)
+onMounted(() => {
+  loadPost()
+  restoreCommentDraft()
+})
 // 独立 /p/:id 之间切换（如相关帖子/分享短链）：组件复用，需重载
 watch(pid, (n, o) => {
   if (n !== o) loadPost()
@@ -509,9 +543,20 @@ async function toggleFollow() {
   }
 }
 
-/** 分享：生成短链并复制（阶段 5）。 */
+/** 分享：生成短链并复制（阶段 5）。阅读是公开的，游客分享不应被强制登录 ——
+ *  直接复制原生帖子链接即可；登录用户才生成短链（后端 /shares 需登录）。 */
 async function sharePost() {
-  if (!post.value || !requireLogin()) return
+  if (!post.value) return
+  if (!tokenStore.access) {
+    const url = `${window.location.origin}/p/${post.value.id}`
+    try {
+      await navigator.clipboard.writeText(url)
+      toast('链接已复制，发送给好友即可打开', 'success')
+    } catch {
+      toast(`请手动复制：${url}`, 'info')
+    }
+    return
+  }
   try {
     const { code } = await request<{ code: string }>({
       url: '/shares',
@@ -586,9 +631,15 @@ async function submitReport() {
   }
 }
 
-/** AI 摘要（P0）。 */
+/** AI 摘要（P0）。接口按账号限流（后端需登录），游客点击时说明原因并引导登录，
+ *  而不是无声跳转让用户莫名其妙。 */
 async function genSummary() {
-  if (!post.value || !requireLogin()) return
+  if (!post.value) return
+  if (!tokenStore.access) {
+    toast('AI 摘要需登录后使用（接口按账号限流，防止滥用）', 'info')
+    router.push(`/login?redirect=${encodeURIComponent(route.fullPath)}`)
+    return
+  }
   summarizing.value = true
   try {
     const r = await postApi.aiSummary(post.value.id)
@@ -645,6 +696,7 @@ async function submitComment() {
     commentTotal.value += 1
     comments.value = [...comments.value, item]
     commentInput.value = ''
+    saveCommentDraft('') // 发送成功：清掉草稿
     flashItem(item.id)
   } catch (e) {
     toast(e instanceof Error ? e.message : '发送失败', 'error')
@@ -1065,6 +1117,12 @@ async function onDeletePost() {
 .ai-summary-text {
   word-break: break-word;
 }
+/* 摘要标签小图标：中性色随文案 */
+.ai-summary-icon {
+  width: 12px;
+  height: 12px;
+  vertical-align: -1px;
+}
 .ai-cursor {
   display: inline-block;
   width: 2px;
@@ -1085,8 +1143,9 @@ async function onDeletePost() {
   gap: var(--sp-2);
 }
 .attachment {
-  position: relative;
   display: inline-flex;
+  align-items: flex-start;
+  gap: 2px;
 }
 .att-img {
   max-width: 180px;
@@ -1110,10 +1169,17 @@ async function onDeletePost() {
   font-size: var(--fs-caption);
   text-decoration: none;
 }
+.att-file-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  margin-right: 4px;
+}
+/* 删除按钮放在卡片内部（#46）：原绝对定位 top:-6px/right:-6px 超出卡片边界，
+   窄屏与相邻附件重叠易误触 */
 .att-del {
-  position: absolute;
-  top: -6px;
-  right: -6px;
+  position: static;
+  flex-shrink: 0;
 }
 .report-select {
   width: 100%;
@@ -1161,9 +1227,23 @@ async function onDeletePost() {
   color: var(--text-3);
   cursor: pointer;
 }
+.comment-input-block {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
 .comment-input-row {
   display: flex;
   gap: var(--sp-2);
+}
+/* 字数计数（#44）：右对齐小字，仅在有输入时出现；
+   display:block 使其在 flex 列与普通块容器（行内回复框）中都右对齐 */
+.char-count {
+  display: block;
+  text-align: right;
+  font-size: var(--fs-caption);
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
 }
 .comment-list {
   margin: var(--sp-3) 0 0;
