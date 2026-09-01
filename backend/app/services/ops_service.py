@@ -98,11 +98,12 @@ def _board_map(db: Session, community_id: int) -> dict[int, str]:
     return {b.id: b.name for b in rows}
 
 
-def _post_rank(db: Session, community_id: int, board_id: int | None) -> list[dict]:
-    """帖子多维排名：热度 / 浏览量 / 点赞 / 评论。"""
+def _post_rank(db: Session, community_id: int, board_id: int | None, start: datetime, end: datetime) -> list[dict]:
+    """帖子排名：周期内新增帖子的活跃度（赞×1+评×2+藏×3）降序 Top10。"""
     stmt = (
         select(Post)
-        .where(Post.community_id == community_id, Post.status == 0)
+        .where(Post.community_id == community_id, Post.status == 0,
+               Post.created_at >= start, Post.created_at < end)
         .order_by((Post.like_count + 2 * Post.comment_count + 3 * Post.favorite_count).desc(), Post.view_count.desc(), Post.id.desc())
         .limit(10)
     )
@@ -157,7 +158,13 @@ def _member_rank(db: Session, community_id: int) -> list[dict]:
 
 
 def ops_center(db: Session, community: Community, board_id: int | None = None) -> dict:
-    """频道运营中心完整数据（须先经 can_view_ops 校验权限）。"""
+    """频道运营中心完整数据（须先经 can_view_ops 校验权限）。
+
+    结构：
+    - yesterday：昨日数据（含今日对比）
+    - user：用户数据（成员数/帖子数累计；其余按 昨日/7天/30天 周期）
+    - content：内容数据（帖子/浏览量/赞/评论 + 帖子排名，按 昨日/7天/30天 周期）
+    """
     today = date.today()
     yesterday = today - timedelta(days=1)
     ys, ye = _day_bounds(yesterday)
@@ -167,7 +174,7 @@ def ops_center(db: Session, community: Community, board_id: int | None = None) -
     bid = board_id if board_id in board_map or board_id is None else None
     board_filter = [Post.board_id == bid] if bid else []
 
-    # 昨日数据
+    # ---------- 昨日数据（含今日对比） ----------
     yesterday_data = {
         "new_members": _event_count(db, community.id, EVENT_JOIN, ys, ye),
         "left_members": _event_count(db, community.id, EVENT_LEAVE, ys, ye),
@@ -179,9 +186,10 @@ def ops_center(db: Session, community: Community, board_id: int | None = None) -
         "visitors": _event_distinct_users(db, community.id, EVENT_VISIT, ys, ye),
         "posts": _count(db, Post, Post.community_id == community.id, Post.status == 0,
                         Post.created_at >= ys, Post.created_at < ye, *board_filter),
-        # 昨日浏览量：本频道正常帖子 view_count 总和（全局口径，不受板块筛选影响）
+        # 昨日浏览量：昨日新增帖子的 view_count 之和（当日真实值，非累计）
         "views": _sum(db, Post, Post.view_count,
-                      Post.community_id == community.id, Post.status == 0),
+                      Post.community_id == community.id, Post.status == 0,
+                      Post.created_at >= ys, Post.created_at < ye, *board_filter),
         "post_authors": _distinct(db, Post, Post.author_id, Post.community_id == community.id,
                                   Post.status == 0, Post.created_at >= ys, Post.created_at < ye, *board_filter),
         "new_likes": _count(
@@ -210,29 +218,129 @@ def ops_center(db: Session, community: Community, board_id: int | None = None) -
                         Post.created_at >= ts, Post.created_at < te, *board_filter),
     }
 
-    # 用户数据
+    # ---------- 用户数据：累计只统计成员数+帖子数，其余按周期 ----------
     total_members = _count(db, Member, Member.community_id == community.id, Member.is_blocked.is_(False))
-    all_visits = _count(
-        db, CommunityEventLog, CommunityEventLog.community_id == community.id,
-        CommunityEventLog.event == EVENT_VISIT,
-    )
-    all_visitors = _event_distinct_users(
-        db, community.id, EVENT_VISIT, datetime(1970, 1, 1), datetime.max
-    )
-    active_today = len(set(
-        _active_user_ids(db, community.id, ts, te)
-    ))
+    total_posts = _count(db, Post, Post.community_id == community.id, Post.status == 0, *board_filter)
+
+    # 按周期聚合（昨日 / 近7天 / 近30天），7/30 带每日序列
+    def _user_period(days: int) -> dict:
+        if days == 1:
+            start, end = ys, ye
+        else:
+            start_d = today - timedelta(days=days - 1)
+            start, _ = _day_bounds(start_d)
+            end = te  # 覆盖到今天结束
+        new_members = _event_count(db, community.id, EVENT_JOIN, start, end)
+        visits = _count(
+            db, CommunityEventLog, CommunityEventLog.community_id == community.id,
+            CommunityEventLog.event == EVENT_VISIT,
+            CommunityEventLog.created_at >= start, CommunityEventLog.created_at < end,
+        )
+        visitors = _event_distinct_users(db, community.id, EVENT_VISIT, start, end)
+        active = len(set(_active_user_ids(db, community.id, start, end)))
+        return {
+            "new_members": new_members,
+            "visits": visits,
+            "visitors": visitors,
+            "active_members": active,
+            "active_rate": round(active * 100 / total_members, 1) if total_members else 0,
+        }
+
+    # 近 N 天每日序列（用户维度：新增成员/访问/访问人数/活跃）
+    def _user_series(days: int) -> dict:
+        start_d = today - timedelta(days=days - 1)
+        dates: list[str] = []
+        new_members: list[int] = []
+        visits: list[int] = []
+        visitors: list[int] = []
+        active: list[int] = []
+        for i in range(days - 1, -1, -1):
+            d = today - timedelta(days=i)
+            s, e = _day_bounds(d)
+            dates.append(d.isoformat())
+            new_members.append(_event_count(db, community.id, EVENT_JOIN, s, e))
+            visits.append(_count(
+                db, CommunityEventLog, CommunityEventLog.community_id == community.id,
+                CommunityEventLog.event == EVENT_VISIT,
+                CommunityEventLog.created_at >= s, CommunityEventLog.created_at < e,
+            ))
+            visitors.append(_event_distinct_users(db, community.id, EVENT_VISIT, s, e))
+            active.append(len(set(_active_user_ids(db, community.id, s, e))))
+        return {"dates": dates, "new_members": new_members, "visits": visits,
+                "visitors": visitors, "active_members": active}
+
+    # 近 N 天每日序列（内容维度：帖子/浏览量/赞/评论）
+    def _content_series(days: int) -> dict:
+        start_d = today - timedelta(days=days - 1)
+        dates: list[str] = []
+        posts: list[int] = []
+        views: list[int] = []
+        likes: list[int] = []
+        comments: list[int] = []
+        for i in range(days - 1, -1, -1):
+            d = today - timedelta(days=i)
+            s, e = _day_bounds(d)
+            dates.append(d.isoformat())
+            posts.append(_count(db, Post, Post.community_id == community.id, Post.status == 0,
+                                Post.created_at >= s, Post.created_at < e, *board_filter))
+            views.append(_sum(db, Post, Post.view_count,
+                              Post.community_id == community.id, Post.status == 0,
+                              Post.created_at >= s, Post.created_at < e, *board_filter))
+            likes.append(_count(
+                db, PostLike, PostLike.created_at >= s, PostLike.created_at < e,
+                PostLike.post_id.in_(
+                    select(Post.id).where(Post.community_id == community.id, Post.status == 0)
+                ),
+            ))
+            comments.append(_count(
+                db, Comment, Comment.status == 0, Comment.created_at >= s, Comment.created_at < e,
+                Comment.post_id.in_(
+                    select(Post.id).where(Post.community_id == community.id, Post.status == 0)
+                ),
+            ))
+        return {"dates": dates, "posts": posts, "views": views, "likes": likes, "comments": comments}
+
+    def _content_period(days: int) -> dict:
+        if days == 1:
+            start, end = ys, ye
+        else:
+            start_d = today - timedelta(days=days - 1)
+            start, _ = _day_bounds(start_d)
+            end = te  # 覆盖到今天结束
+        return {
+            "posts": _count(db, Post, Post.community_id == community.id, Post.status == 0,
+                            Post.created_at >= start, Post.created_at < end, *board_filter),
+            "views": _sum(db, Post, Post.view_count,
+                          Post.community_id == community.id, Post.status == 0,
+                          Post.created_at >= start, Post.created_at < end, *board_filter),
+            "likes": _count(
+                db, PostLike, PostLike.created_at >= start, PostLike.created_at < end,
+                PostLike.post_id.in_(
+                    select(Post.id).where(Post.community_id == community.id, Post.status == 0)
+                ),
+            ),
+            "comments": _count(
+                db, Comment, Comment.status == 0, Comment.created_at >= start, Comment.created_at < end,
+                Comment.post_id.in_(
+                    select(Post.id).where(Post.community_id == community.id, Post.status == 0)
+                ),
+            ),
+            "post_rank": _post_rank(db, community.id, bid, start, end),
+        }
+
     user_data = {
         "total_members": total_members,
-        "all_visits": all_visits,
-        "all_visitors": all_visitors,
-        "active_members_today": active_today,
-        "active_rate": round(active_today * 100 / total_members, 1) if total_members else 0,
+        "total_posts": total_posts,
         "member_rank": _member_rank(db, community.id),
+        "yesterday": _user_period(1),
+        "d7": {**_user_period(7), "series": _user_series(7)},
+        "d30": {**_user_period(30), "series": _user_series(30)},
     }
 
-    # 内容分析（按板块）
-    content_analysis = {
+    content_data = {
+        "yesterday": _content_period(1),
+        "d7": {**_content_period(7), "series": _content_series(7)},
+        "d30": {**_content_period(30), "series": _content_series(30)},
         "boards": [
             {
                 "board_id": b[0], "board_name": b[1],
@@ -240,28 +348,9 @@ def ops_center(db: Session, community: Community, board_id: int | None = None) -
                     db, Post, Post.community_id == community.id, Post.board_id == b[0],
                     Post.status == 0, Post.created_at >= ys, Post.created_at < ye,
                 ),
-                # 累计浏览量：板块内正常帖子 view_count 总和
                 "views": _sum(
                     db, Post, Post.view_count,
                     Post.community_id == community.id, Post.board_id == b[0], Post.status == 0,
-                ),
-                "yesterday_views": _count(
-                    db, Post, Post.community_id == community.id, Post.board_id == b[0], Post.status == 0,
-                    Post.created_at >= ys, Post.created_at < ye,
-                ),
-                "yesterday_new_likes": _count(
-                    db, PostLike, PostLike.created_at >= ys, PostLike.created_at < ye,
-                    PostLike.post_id.in_(
-                        select(Post.id).where(Post.community_id == community.id,
-                                              Post.board_id == b[0], Post.status == 0)
-                    ),
-                ),
-                "yesterday_new_comments": _count(
-                    db, Comment, Comment.status == 0, Comment.created_at >= ys, Comment.created_at < ye,
-                    Comment.post_id.in_(
-                        select(Post.id).where(Post.community_id == community.id,
-                                              Post.board_id == b[0], Post.status == 0)
-                    ),
                 ),
                 "deleted_posts": _count(
                     db, Post, Post.community_id == community.id, Post.board_id == b[0],
@@ -275,9 +364,8 @@ def ops_center(db: Session, community: Community, board_id: int | None = None) -
     return {
         "yesterday": yesterday_data,
         "today": today_data,
-        "user_data": user_data,
-        "content_analysis": content_analysis,
-        "post_rank": _post_rank(db, community.id, bid),
+        "user": user_data,
+        "content": content_data,
         "date": yesterday.isoformat(),
         "note": "新增成员/退出成员/访问数据统计自日志上线起，历史存量不追溯",
     }

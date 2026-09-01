@@ -10,7 +10,7 @@
     <section class="panel">
       <div class="field">
         <label class="field-label">标题</label>
-        <t-input v-model.trim="form.title" size="large" maxlength="128" placeholder="用一句话概括你的核心观点/疑问（如：如何在 Vue 3 中做性能调优？）" clearable />
+        <t-input v-model.trim="form.title" size="large" maxlength="128" placeholder="标题" clearable />
         <!-- 标题字数计数（#44） -->
         <span v-if="form.title.length" class="char-count">{{ form.title.length }}/128</span>
         <div class="ai-bar">

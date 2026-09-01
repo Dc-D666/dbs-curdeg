@@ -50,7 +50,7 @@
             </div>
           </aside>
 
-          <section ref="feedContainerRef" class="ws-main">
+          <section class="ws-main">
             <!-- 发现模式：中间栏显示发现帖子流（热门/已加入 + 搜索） -->
             <template v-if="leftMode === 'discover'">
               <div class="ws-discover">
@@ -101,7 +101,7 @@
               </div>
             </template>
 
-            <!-- 频道模式：频道头 + 内联发帖 + 信息流 -->
+            <!-- 频道模式：频道头 + 信息流（内部滚动）+ 底部发帖容器 -->
             <template v-else>
               <div class="ws-channel-head">
                 <img v-if="community.avatar_url" :src="community.avatar_url" class="ws-avatar" alt="" />
@@ -120,32 +120,35 @@
                 </div>
               </div>
 
-              <!-- 发帖容器：贴到中间栏底部（符合"下方发帖"操作习惯），信息流在其上方滚动 -->
-              <div class="ws-composer-anchor">
-                <QuickComposer v-if="community.is_member && activeBoardInfo" :cid="community.id" :bid="activeBoard ?? 0" @posted="onQuickPosted" />
+              <!-- 信息流：独立滚动区域（flex 拉伸），不遮挡发帖容器 -->
+              <div ref="feedContainerRef" class="ws-feed-scroll">
+                <div v-if="activeBoardInfo" class="ws-feed">
+                  <div class="feed-toolbar">
+                    <t-radio-group v-model="feedSort" variant="default-filled" size="small">
+                      <t-radio-button value="latest">最新</t-radio-button>
+                      <t-radio-button value="hot">热门</t-radio-button>
+                    </t-radio-group>
+                    <t-button
+                      v-if="community.is_member"
+                      theme="primary"
+                      size="small"
+                      @click="router.push(`/c/${community.id}/boards/${activeBoard}/post/new`)"
+                    >发帖</t-button>
+                  </div>
+                  <SkeletonFeed v-if="feedLoading && feedItems.length === 0" :count="2" />
+                  <EmptyState v-else-if="feedItems.length === 0" text="这里还没有任何讨论，成为第一个开帖分享的人吧！" />
+                  <div v-else class="feed-list">
+                    <FeedCard v-for="p in feedItems" :key="p.id" :post="p" />
+                  </div>
+                  <t-button v-if="feedHasMore" variant="outline" block class="load-more" :loading="feedLoading" @click="loadFeed()">
+                    {{ feedLoading ? '加载中…' : '加载更多' }}
+                  </t-button>
+                </div>
               </div>
 
-              <div v-if="activeBoardInfo" class="ws-feed">
-                <div class="feed-toolbar">
-                  <t-radio-group v-model="feedSort" variant="default-filled" size="small">
-                    <t-radio-button value="latest">最新</t-radio-button>
-                    <t-radio-button value="hot">热门</t-radio-button>
-                  </t-radio-group>
-                  <t-button
-                    v-if="community.is_member"
-                    theme="primary"
-                    size="small"
-                    @click="router.push(`/c/${community.id}/boards/${activeBoard}/post/new`)"
-                  >发帖</t-button>
-                </div>
-                <SkeletonFeed v-if="feedLoading && feedItems.length === 0" :count="2" />
-                <EmptyState v-else-if="feedItems.length === 0" text="这里还没有任何讨论，成为第一个开帖分享的人吧！" />
-                <div v-else class="feed-list">
-                  <FeedCard v-for="p in feedItems" :key="p.id" :post="p" />
-                </div>
-                <t-button v-if="feedHasMore" variant="outline" block class="load-more" :loading="feedLoading" @click="loadFeed()">
-                  {{ feedLoading ? '加载中…' : '加载更多' }}
-                </t-button>
+              <!-- 发帖容器：固定在中间栏底部，作为 flex 子项不遮挡信息流 -->
+              <div class="ws-composer-anchor">
+                <QuickComposer v-if="community.is_member && activeBoardInfo" :cid="community.id" :bid="activeBoard ?? 0" @posted="onQuickPosted" />
               </div>
             </template>
           </section>
@@ -765,8 +768,17 @@ async function onLeave() {
   padding: var(--sp-3);
 }
 .ws-main {
-  overflow-y: auto;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   padding: var(--sp-4);
+}
+/* 信息流滚动区域：flex 拉伸占满中间栏剩余空间，独立滚动，不被发帖容器遮挡 */
+.ws-feed-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: var(--sp-1);
 }
 .ws-right {
   border-left: 1px solid var(--border);
@@ -831,6 +843,23 @@ async function onLeave() {
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+/* 板块在频道下缩进，避免与频道同级平齐的错觉 */
+.ws-boards {
+  padding-left: var(--sp-4);
+}
+.ws-board {
+  position: relative;
+}
+.ws-board::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--border-strong);
 }
 .ws-channel,
 .ws-board {
@@ -921,23 +950,26 @@ async function onLeave() {
 .ws-feed .feed-toolbar {
   margin-bottom: var(--sp-3);
 }
-/* 发帖容器：固定到屏幕最底端（不是内容区底部），始终悬浮在视口底部；
-   信息流区域底部预留等高手势空间，避免内容被遮挡 */
+/* 发帖容器：作为中间栏 flex 子项固定在底部，不遮挡信息流与滚动条 */
 .ws-composer-anchor {
-  position: fixed;
-  left: 240px;
-  right: 300px;
-  bottom: 0;
-  z-index: 50;
+  flex-shrink: 0;
+  margin-top: var(--sp-3);
   background: var(--surface);
   border-top: 1px solid var(--border);
-  box-shadow: var(--shadow-md);
+  border-radius: var(--radius-card);
   padding: var(--sp-2) var(--sp-3);
 }
-/* 移动端发帖容器：占满全宽，同样固定屏幕最底端 */
+/* 移动端发帖容器：占满全宽，固定屏幕最底端（window 滚动场景） */
 .ws-composer-anchor.mobile {
+  position: fixed;
   left: 0;
   right: 0;
+  bottom: 0;
+  z-index: 50;
+  border-radius: 0;
+  border-top: 1px solid var(--border);
+  box-shadow: var(--shadow-md);
+  margin-top: 0;
   padding: var(--sp-2) var(--sp-3);
   padding-bottom: calc(var(--sp-2) + env(safe-area-inset-bottom, 0px));
 }
@@ -945,7 +977,7 @@ async function onLeave() {
   margin-bottom: 0;
 }
 .ws-feed {
-  padding-bottom: 72px;
+  padding-bottom: var(--sp-3);
 }
 .feed-toolbar {
   display: flex;
@@ -992,6 +1024,9 @@ async function onLeave() {
 }
 /* 发现模式（中间栏） */
 .ws-discover {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   padding: var(--sp-2) 0;
 }
 .ws-discover-tabs {

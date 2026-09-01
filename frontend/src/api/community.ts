@@ -263,26 +263,49 @@ export interface OpsCenterData {
     visits: number
     posts: number
   }
-  user_data: {
+  user: {
     total_members: number
-    all_visits: number
-    all_visitors: number
-    active_members_today: number
-    active_rate: number
+    total_posts: number
     member_rank: Array<{ user_id: number; nickname: string; level: number; member_type: number; posts: number; comments: number }>
+    yesterday: { new_members: number; visits: number; visitors: number; active_members: number; active_rate: number }
+    d7: OpsPeriod & { series: OpsSeries }
+    d30: OpsPeriod & { series: OpsSeries }
   }
-  content_analysis: {
+  content: {
+    yesterday: OpsContentPeriod
+    d7: OpsContentPeriod & { series: OpsContentSeries }
+    d30: OpsContentPeriod & { series: OpsContentSeries }
     boards: Array<{
       board_id: number
       board_name: string
       yesterday_posts: number
       views: number
-      yesterday_views: number
-      yesterday_new_likes: number
-      yesterday_new_comments: number
       deleted_posts: number
     }>
   }
+}
+
+export interface OpsPeriod {
+  new_members: number
+  visits: number
+  visitors: number
+  active_members: number
+  active_rate: number
+}
+
+export interface OpsSeries {
+  dates: string[]
+  new_members: number[]
+  visits: number[]
+  visitors: number[]
+  active_members: number[]
+}
+
+export interface OpsContentPeriod {
+  posts: number
+  views: number
+  likes: number
+  comments: number
   post_rank: Array<{
     id: number
     title: string
@@ -294,6 +317,14 @@ export interface OpsCenterData {
     heat: number
     created_at: string
   }>
+}
+
+export interface OpsContentSeries {
+  dates: string[]
+  posts: number[]
+  views: number[]
+  likes: number[]
+  comments: number[]
 }
 
 export interface FeedStrategy {

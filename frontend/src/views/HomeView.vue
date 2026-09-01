@@ -208,9 +208,6 @@ function onLogout() {
   padding: 0;
 }
 .home.wide .home-header {
-  max-width: var(--page-max);
-  margin-left: auto;
-  margin-right: auto;
   padding-left: var(--sp-4);
   padding-right: var(--sp-4);
 }

@@ -245,10 +245,16 @@ def test_ops_center_owner_only_and_data(ctx):
     res = client.get(f"/api/v1/communities/{ctx['cid']}/ops-center", headers=_auth(ctx["owner"]))
     assert res.status_code == 200, res.text
     d = res.json()["data"]
-    assert "yesterday" in d and "today" in d and "user_data" in d
-    assert "content_analysis" in d and "post_rank" in d
-    assert d["user_data"]["total_members"] >= 1
-    assert d["content_analysis"]["boards"], "应有默认版块的分析数据"
+    assert "yesterday" in d and "today" in d and "user" in d and "content" in d
+    # 用户数据：昨日/7天/30天周期齐全，累计只含成员数+帖子数
+    assert d["user"]["total_members"] >= 1
+    assert {"yesterday", "d7", "d30"} <= set(d["user"].keys())
+    assert "series" in d["user"]["d7"] and "series" in d["user"]["d30"]
+    # 内容数据：三周期 + 帖子排名
+    assert {"yesterday", "d7", "d30"} <= set(d["content"].keys())
+    assert "post_rank" in d["content"]["yesterday"]
+    assert "series" in d["content"]["d7"]
+    assert d["content"]["boards"], "应有默认版块的分析数据"
 
 
 def test_ops_center_counts_join_leave_visit(ctx):
@@ -263,10 +269,11 @@ def test_ops_center_counts_join_leave_visit(ctx):
     d = client.get(f"/api/v1/communities/{cid}/ops-center", headers=_auth(ctx["owner"])).json()["data"]
     # join 事件：今日新增成员 >=1（normal）
     assert d["today"]["new_members"] >= 1
-    # 访问次数 >=2（一次 normal + 一次 owner）
-    assert d["user_data"]["all_visits"] >= 2
+    # 今日/昨日访问次数（join 之后发生，落在今日周期）
+    assert d["user"]["yesterday"]["visits"] >= 0
+    assert d["user"]["d7"]["visits"] >= 2
     # 访问人数（去重 user_id）>=2
-    assert d["user_data"]["all_visitors"] >= 2
+    assert d["user"]["d7"]["visitors"] >= 2
 
 
 # ---------- 频道管理：转让 / 全员禁言 / 帖子移动 / 频道级通知设置 ----------

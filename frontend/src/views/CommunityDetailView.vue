@@ -118,12 +118,6 @@
       </section>
 
       <section v-if="activeBoardInfo" class="panel feed-panel">
-        <QuickComposer
-          v-if="community.is_member"
-          :cid="cid"
-          :bid="activeBoard ?? 0"
-          @posted="onQuickPosted"
-        />
         <div class="feed-toolbar">
           <t-radio-group v-model="feedSort" variant="default-filled" size="small">
             <t-radio-button value="latest">最新</t-radio-button>
@@ -233,6 +227,11 @@
 
         <p v-if="ownerMsg" class="msg" :class="{ 'msg-error': ownerMsgIsError }">{{ ownerMsg }}</p>
       </section>
+
+      <!-- 移动端发帖容器：固定屏幕最底端 -->
+      <div v-if="community.is_member && activeBoardInfo" class="detail-composer-anchor">
+        <QuickComposer :cid="cid" :bid="activeBoard ?? 0" @posted="onQuickPosted" />
+      </div>
       </template>
 
       <!-- 三栏宽屏工作台（桌面 ≥1024px） -->
@@ -300,8 +299,7 @@
               </div>
             </div>
 
-            <QuickComposer v-if="community.is_member && activeBoardInfo" :cid="cid" :bid="activeBoard ?? 0" @posted="onQuickPosted" />
-
+            <div class="wb-scroll">
             <div v-if="activeBoardInfo" class="wb-feed">
               <div class="feed-toolbar">
                 <t-radio-group v-model="feedSort" variant="default-filled" size="small">
@@ -332,6 +330,12 @@
               </div>
               <p class="owner-hint">头像/封面、频道状态、版块、成员与违规管理请前往管理后台。</p>
             </section>
+            </div>
+
+            <!-- 发帖容器：固定在底部，不遮挡信息流 -->
+            <div class="wb-composer-anchor">
+              <QuickComposer v-if="community.is_member && activeBoardInfo" :cid="cid" :bid="activeBoard ?? 0" @posted="onQuickPosted" />
+            </div>
           </section>
 
           <!-- 右栏：成员 + 话题 + 今日热议 -->
@@ -924,6 +928,25 @@ async function onPlatformBan(ban: boolean) {
   margin: 0 auto;
   padding: 0 var(--sp-4) var(--sp-6);
 }
+/* 移动端发帖容器：固定屏幕最底端，不遮挡信息流（页面底部预留空间） */
+.detail-composer-anchor {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 50;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  box-shadow: var(--shadow-md);
+  padding: var(--sp-2) var(--sp-3);
+  padding-bottom: calc(var(--sp-2) + env(safe-area-inset-bottom, 0px));
+}
+.detail-composer-anchor .quick-composer {
+  margin-bottom: 0;
+}
+.detail:not(.wb) {
+  padding-bottom: calc(var(--sp-6) + 84px);
+}
 .page-header {
   display: flex;
   align-items: center;
@@ -1315,8 +1338,29 @@ async function onPlatformBan(ban: boolean) {
   padding: var(--sp-3);
 }
 .wb-main {
-  overflow-y: auto;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   padding: var(--sp-4);
+}
+/* 信息流滚动区域：flex 拉伸，独立滚动，不被发帖容器遮挡 */
+.wb-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: var(--sp-1);
+}
+/* 发帖容器：作为中栏 flex 子项固定在底部 */
+.wb-composer-anchor {
+  flex-shrink: 0;
+  margin-top: var(--sp-3);
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: var(--sp-2) var(--sp-3);
+}
+.wb-composer-anchor .quick-composer {
+  margin-bottom: 0;
 }
 .wb-right {
   border-left: 1px solid var(--border);
