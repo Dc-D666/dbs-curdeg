@@ -132,11 +132,12 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import FeedStreamList from '@/components/FeedStreamList.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
 import EmptyState from '@/components/EmptyState.vue'
+import { useInfiniteScroll } from '@/composables/useInfiniteScroll'
 import { communityApi, type Community } from '@/api/community'
 import { searchApi, type HotKeyword, type SearchResult } from '@/api/search'
 import { tokenStore } from '@/api/http'
@@ -215,6 +216,10 @@ function clearSearch() {
   hasMoreSearchResults.value = false
   searchQ.value = ''
 }
+
+// 搜索结果滚动到底自动加载下一页
+const searchScrollEnabled = computed(() => searching.value && hasMoreSearchResults.value && !searchLoading.value)
+useInfiniteScroll({ enabled: searchScrollEnabled, load: loadMoreSearch })
 
 /** 打开创建弹层：未登录时先引导登录，避免游客填完表单点确认才被告知要登录、已填内容全丢。 */
 function openCreate() {

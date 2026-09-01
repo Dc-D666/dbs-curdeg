@@ -182,8 +182,8 @@ export const communityApi = {
       params: boardId ? { board_id: boardId } : undefined,
     })
   },
-  boards(cid: number) {
-    return request<Board[]>({ url: `/communities/${cid}/boards` })
+  boards(cid: number, includeAll = false) {
+    return request<Board[]>({ url: `/communities/${cid}/boards`, params: includeAll ? { include_all: true } : undefined })
   },
   createBoard(cid: number, data: { name: string; description?: string; sort?: number; allow_post_role_ids?: number[]; allow_anonymous?: boolean }) {
     return request<Board>({ url: `/communities/${cid}/boards`, method: 'POST', data })

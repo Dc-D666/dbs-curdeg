@@ -356,6 +356,18 @@ def _board_out(db: Session, board: Board) -> BoardOut:
     return out
 
 
+def all_boards(db: Session, community: Community) -> list[BoardOut]:
+    """全部板块（含已关闭），管理后台使用；按 sort + id 排序。"""
+    rows = (
+        db.execute(
+            select(Board).where(Board.community_id == community.id).order_by(Board.sort, Board.id)
+        )
+        .scalars()
+        .all()
+    )
+    return [_board_out(db, b) for b in rows]
+
+
 def delete_board(db: Session, community: Community, user: User, board: Board) -> None:
     _ensure_owner(db, community, user)
     board.status = 2  # 关闭（软删）
@@ -452,7 +464,7 @@ def list_join_requests(db: Session, community: Community, user: User, page: int,
     _ensure_admin(db, community, user)
     stmt = (
         select(JoinRequest)
-        .where(JoinRequest.community_id == community.id)
+        .where(JoinRequest.community_id == community.id, JoinRequest.status == JOIN_PENDING)
         .order_by(JoinRequest.id.desc())
         .offset((page - 1) * page_size)
         .limit(page_size)
@@ -460,7 +472,9 @@ def list_join_requests(db: Session, community: Community, user: User, page: int,
     reqs = db.execute(stmt).scalars().all()
     total = len(
         db.execute(
-            select(JoinRequest.id).where(JoinRequest.community_id == community.id)
+            select(JoinRequest.id).where(
+                JoinRequest.community_id == community.id, JoinRequest.status == JOIN_PENDING
+            )
         ).scalars().all()
     )
     return {"items": _decorate_join_reqs(db, reqs), "total": total, "page": page, "page_size": page_size}

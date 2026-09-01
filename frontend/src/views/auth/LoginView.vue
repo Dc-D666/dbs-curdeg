@@ -8,7 +8,7 @@
       <h1 class="auth-title">登录</h1>
       <p class="auth-sub">使用用户名或邮箱登录 SDUdiscord</p>
 
-      <t-form class="auth-form" label-align="top" @submit.prevent="onSubmit">
+      <t-form class="auth-form" label-align="top" @submit="onSubmit">
         <t-form-item label="用户名 / 邮箱">
           <t-input
             v-model="form.account"

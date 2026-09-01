@@ -28,7 +28,7 @@
 
     <section class="panel">
       <h3 class="panel-title">基本信息</h3>
-      <t-form class="form" label-align="top" @submit.prevent="onSave">
+      <t-form class="form" label-align="top" @submit="onSave">
         <t-form-item label="昵称">
           <t-input v-model="form.nickname" size="large" maxlength="64" clearable placeholder="设置一个昵称" />
         </t-form-item>

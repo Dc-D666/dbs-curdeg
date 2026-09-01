@@ -50,7 +50,7 @@
             </div>
           </aside>
 
-          <section class="ws-main">
+          <section ref="feedContainerRef" class="ws-main">
             <!-- 发现模式：中间栏显示发现帖子流（热门/已加入 + 搜索） -->
             <template v-if="leftMode === 'discover'">
               <div class="ws-discover">
@@ -333,6 +333,7 @@ import { confirmDialog } from '@/utils/confirm'
 import { loadErrorMessage } from '@/utils/error'
 import { timeAgo } from '@/utils/time'
 import ErrorState from '@/components/ErrorState.vue'
+import { useInfiniteScroll } from '@/composables/useInfiniteScroll'
 
 const props = withDefaults(
   defineProps<{ cid: number; embeddedInTab?: boolean }>(),
@@ -563,11 +564,16 @@ const activeBoardInfo = computed(
 )
 
 // 信息流
+const feedContainerRef = ref<HTMLElement | null>(null)
 const feedItems = ref<PostItem[]>([])
 const feedSort = ref<'latest' | 'hot'>('latest')
 const feedCursor = ref<string | null>(null)
 const feedHasMore = ref(false)
 const feedLoading = ref(false)
+
+// 滚动到底自动加载下一页（桌面滚动容器为 .ws-main，移动端回退 window）
+const feedScrollEnabled = computed(() => feedHasMore.value && !feedLoading.value && leftMode.value === 'channel' && !!activeBoard.value)
+useInfiniteScroll({ container: feedContainerRef, enabled: feedScrollEnabled, load: () => loadFeed(false) })
 
 async function loadFeed(reset = false) {
   if (!activeBoard.value || feedLoading.value) return

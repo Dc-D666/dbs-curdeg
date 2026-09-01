@@ -55,11 +55,12 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ArrowLeftIcon, LinkIcon } from 'tdesign-icons-vue-next'
 import { postApi, type ShareItem } from '@/api/post'
 import EmptyState from '@/components/EmptyState.vue'
 import ErrorState from '@/components/ErrorState.vue'
+import { useInfiniteScroll } from '@/composables/useInfiniteScroll'
 import { timeAgo } from '@/utils/time'
 import { confirmDialog } from '@/utils/confirm'
 import { errMessage } from '@/utils/error'
@@ -109,6 +110,10 @@ function load() {
 function loadMore() {
   loadPage(page.value + 1)
 }
+
+// 滚动到底自动加载下一页
+const scrollEnabled = computed(() => hasMore.value && !loading.value)
+useInfiniteScroll({ enabled: scrollEnabled, load: loadMore })
 
 async function copy(s: ShareItem) {
   try {

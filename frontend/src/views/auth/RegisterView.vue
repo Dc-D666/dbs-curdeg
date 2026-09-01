@@ -8,7 +8,7 @@
       <h1 class="auth-title">注册</h1>
       <p class="auth-sub">创建 SDUdiscord 账号</p>
 
-      <t-form class="auth-form" label-align="top" @submit.prevent="onSubmit" novalidate>
+      <t-form class="auth-form" label-align="top" novalidate @submit="onSubmit">
         <t-form-item label="用户名">
           <t-input
             ref="usernameRef"

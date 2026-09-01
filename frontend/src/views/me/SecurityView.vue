@@ -14,7 +14,7 @@
 
     <section class="panel">
       <h3 class="panel-title">修改密码</h3>
-      <t-form class="form" label-align="top" @submit.prevent="onChangePassword">
+      <t-form class="form" label-align="top" @submit="onChangePassword">
         <t-form-item label="原密码">
           <t-input v-model="pwForm.old_password" size="large" type="password" autocomplete="current-password" />
         </t-form-item>

@@ -201,6 +201,7 @@ import { adminApi, type AdminReviewItem, type ReportItem, type SensitiveWordItem
 import { toast } from '@/utils/toast'
 import { formatTime } from '@/utils/time'
 import { confirmDialog } from '@/utils/confirm'
+import { useInfiniteScroll } from '@/composables/useInfiniteScroll'
 import ErrorState from '@/components/ErrorState.vue'
 
 const tab = ref<'announce' | 'overview' | 'reports' | 'reviews' | 'words' | 'configs' | 'ai'>('overview')
@@ -303,6 +304,10 @@ function loadMoreReports() {
   return loadReports(reportsPage.value + 1, true)
 }
 
+// 举报列表滚动到底自动加载下一页
+const reportsScrollEnabled = computed(() => tab.value === 'reports' && reports.value.length < reportsTotal.value && !reportsLoading.value)
+useInfiniteScroll({ enabled: reportsScrollEnabled, load: loadMoreReports })
+
 // ---------- 内容审核（AI 申诉转人工复审） ----------
 
 const adminReviews = ref<AdminReviewItem[]>([])
@@ -341,6 +346,10 @@ function onReviewFilter() {
 function loadMoreReviews() {
   return loadReviewList(reviewsPage.value + 1, true)
 }
+
+// 审核列表滚动到底自动加载下一页
+const reviewsScrollEnabled = computed(() => tab.value === 'reviews' && adminReviews.value.length < reviewsTotal.value && !reviewsLoading.value)
+useInfiniteScroll({ enabled: reviewsScrollEnabled, load: loadMoreReviews })
 
 /** 人工复审（仅转人工状态）：通过恢复被下架的帖子 / 维持驳回，均通知作者。 */
 async function handleReview(r: AdminReviewItem, approve: boolean) {

@@ -49,11 +49,12 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ArrowLeftIcon } from 'tdesign-icons-vue-next'
 import { postApi, type ReviewItem } from '@/api/post'
 import EmptyState from '@/components/EmptyState.vue'
 import ErrorState from '@/components/ErrorState.vue'
+import { useInfiniteScroll } from '@/composables/useInfiniteScroll'
 import { timeAgo } from '@/utils/time'
 import { confirmDialog } from '@/utils/confirm'
 import { errMessage } from '@/utils/error'
@@ -101,6 +102,10 @@ function load() {
 function loadMore() {
   loadPage(page.value + 1)
 }
+
+// 滚动到底自动加载下一页
+const scrollEnabled = computed(() => hasMore.value && !loading.value)
+useInfiniteScroll({ enabled: scrollEnabled, load: loadMore })
 
 /** 申诉被 AI 驳回的内容 → AI 复审（通过/驳回/转人工三态），结果刷新到列表。 */
 async function onAppeal(r: ReviewItem) {

@@ -171,7 +171,7 @@ def transfer_community(
 
 
 class AllMuteRequest(BaseModel):
-    hours: int = Field(ge=0, le=720, description="禁言小时数；0 表示解除")
+    hours: float = Field(ge=0, le=720, description="禁言小时数（支持小数，如 0.5=30 分钟）；0 表示解除")
 
 
 @router.put("/{community_id}/all-mute")

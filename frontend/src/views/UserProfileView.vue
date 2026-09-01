@@ -77,6 +77,7 @@ import { tokenStore } from '@/api/http'
 import FeedCard from '@/components/FeedCard.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import ErrorState from '@/components/ErrorState.vue'
+import { useInfiniteScroll } from '@/composables/useInfiniteScroll'
 import { toast } from '@/utils/toast'
 import { loadErrorMessage } from '@/utils/error'
 
@@ -139,6 +140,10 @@ async function loadPosts(reset = false) {
 function loadMorePosts() {
   loadPosts(false)
 }
+
+// 滚动到底自动加载下一页
+const postsScrollEnabled = computed(() => postsHasMore.value && !postsLoading.value)
+useInfiniteScroll({ enabled: postsScrollEnabled, load: loadMorePosts })
 
 async function reloadPosts() {
   await loadPosts(true)

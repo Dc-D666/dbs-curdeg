@@ -38,11 +38,12 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ArrowLeftIcon, DeleteIcon, StarIcon } from 'tdesign-icons-vue-next'
 import { postApi, type FavoriteItem } from '@/api/post'
 import EmptyState from '@/components/EmptyState.vue'
 import ErrorState from '@/components/ErrorState.vue'
+import { useInfiniteScroll } from '@/composables/useInfiniteScroll'
 import { toast } from '@/utils/toast'
 import { errMessage } from '@/utils/error'
 
@@ -78,6 +79,10 @@ function retry() {
   page.value = 0
   load(1)
 }
+
+// 滚动到底自动加载下一页
+const scrollEnabled = computed(() => items.value.length < total.value && !loading.value)
+useInfiniteScroll({ enabled: scrollEnabled, load: () => load(page.value + 1) })
 
 async function remove(f: FavoriteItem) {
   try {

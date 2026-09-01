@@ -35,11 +35,12 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ArrowLeftIcon, ArrowRightIcon } from 'tdesign-icons-vue-next'
 import FeedCard from '@/components/FeedCard.vue'
 import SkeletonFeed from '@/components/SkeletonFeed.vue'
 import EmptyState from '@/components/EmptyState.vue'
+import { useInfiniteScroll } from '@/composables/useInfiniteScroll'
 import { postApi, type PostItem } from '@/api/post'
 import { toast } from '@/utils/toast'
 
@@ -82,6 +83,10 @@ function retryLoad() {
   loadError.value = ''
   loadMore()
 }
+
+// 滚动到底自动加载下一页
+const scrollEnabled = computed(() => hasMore.value && !loading.value)
+useInfiniteScroll({ enabled: scrollEnabled, load: loadMore })
 </script>
 
 <style scoped>

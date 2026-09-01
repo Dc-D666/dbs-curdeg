@@ -131,10 +131,11 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { adminApi, type AdminCommunityItem, type AdminUserItem } from '@/api/admin'
 import UserAvatar from '@/components/UserAvatar.vue'
 import ErrorState from '@/components/ErrorState.vue'
+import { useInfiniteScroll } from '@/composables/useInfiniteScroll'
 import { request } from '@/api/http'
 import { toast } from '@/utils/toast'
 import { confirmDialog } from '@/utils/confirm'
@@ -190,6 +191,10 @@ function onChSearch() {
   loadChannels(1)
 }
 
+// 频道列表滚动到底自动加载下一页
+const chScrollEnabled = computed(() => tab.value === 'channels' && channels.value.length < chTotal.value && !chLoading.value)
+useInfiniteScroll({ enabled: chScrollEnabled, load: () => loadChannels(chPage.value + 1, true) })
+
 async function onBanChannel(c: ChRow, ban: boolean) {
   const action = ban ? '封禁频道' : '解除封禁'
   const tip = ban
@@ -239,6 +244,10 @@ async function loadUsers(page: number, append = false) {
 function onUSearch() {
   loadUsers(1)
 }
+
+// 用户列表滚动到底自动加载下一页
+const uScrollEnabled = computed(() => tab.value === 'users' && users.value.length < uTotal.value && !uLoading.value)
+useInfiniteScroll({ enabled: uScrollEnabled, load: () => loadUsers(uPage.value + 1, true) })
 
 async function onBanUser(u: URow, ban: boolean) {
   const name = u.nickname || u.username
