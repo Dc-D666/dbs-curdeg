@@ -4,7 +4,7 @@
       <router-link to="/" class="back">
         <ArrowLeftIcon class="back-icon" /> 返回主页
       </router-link>
-      <h1 class="page-title">{{ community?.name || '频道设置' }}</h1>
+      <h1 class="page-title">{{ pageTitle }}</h1>
     </header>
 
     <div v-if="loading" class="state"><t-skeleton :row="5" animation="gradient" /></div>
@@ -12,7 +12,7 @@
 
     <template v-else>
       <!-- 频道基本资料 -->
-      <section class="panel">
+      <section v-if="sub === 'basic'" class="panel">
         <h3 class="panel-title">频道基本资料</h3>
         <div class="row">
           <span class="label">频道头像</span>
@@ -46,7 +46,7 @@
       </section>
 
       <!-- 我的资料 -->
-      <section class="panel">
+      <section v-else-if="sub === 'me'" class="panel">
         <h3 class="panel-title">我的资料</h3>
         <div class="row">
           <span class="label">频道内昵称</span>
@@ -57,7 +57,7 @@
       </section>
 
       <!-- 我的等级 -->
-      <section class="panel">
+      <section v-else-if="sub === 'level'" class="panel">
         <h3 class="panel-title">我的等级</h3>
         <div class="level-card">
           <span class="level-num">Lv.{{ myMember.level }}</span>
@@ -70,7 +70,7 @@
       </section>
 
       <!-- 频道消息 -->
-      <section class="panel">
+      <section v-else-if="sub === 'msgs'" class="panel">
         <h3 class="panel-title">频道消息</h3>
         <div class="toolbar">
           <span v-if="msgTotal" class="count">共 {{ msgTotal }} 条（已加载 {{ msgs.length }}）</span>
@@ -96,7 +96,7 @@
       </section>
 
       <!-- 消息接收类型 -->
-      <section class="panel">
+      <section v-else-if="sub === 'notify'" class="panel">
         <h3 class="panel-title">消息接收类型</h3>
         <div v-for="s in settingRows" :key="s.key" class="switch-row">
           <div class="switch-side">
@@ -108,19 +108,8 @@
         <p class="hint">本频道的消息接收类型；未开启的类型将不在「频道消息」展示。系统通知始终接收。</p>
       </section>
 
-      <!-- 频道管理（仅频道主/有权限） -->
-      <section v-if="canManage" class="panel">
-        <h3 class="panel-title">频道管理</h3>
-        <p class="hint">板块、成员、身份组、操作日志、帖子等管理能力，请前往频道管理后台。</p>
-        <t-button theme="primary" @click="router.push(`/c/${cid}/admin`)">进入管理后台</t-button>
-      </section>
-
-      <!-- 运营中心（仅频道主/有成员数据权限） -->
-      <section v-if="canOps" class="panel">
-        <h3 class="panel-title">运营中心</h3>
-        <p class="hint">查看本频道的昨日数据、用户数据、内容分析与排名。</p>
-        <t-button theme="primary" @click="router.push(`/c/${cid}/ops`)">进入运营中心</t-button>
-      </section>
+      <!-- 未识别的子页面：给出入口返回主页 -->
+      <t-empty v-else description="该设置页面不存在" />
     </template>
   </main>
 </template>
@@ -142,6 +131,17 @@ defineOptions({ name: 'ChannelSettingsView' })
 const route = useRoute()
 const router = useRouter()
 const cid = computed(() => Number(route.params.id))
+
+// 独立子页面：basic/me/level/msgs/notify，各自一个 URL，互不堆叠
+const validSubs = ['basic', 'me', 'level', 'msgs', 'notify'] as const
+const sub = computed(() => {
+  const s = String(route.params.sub || 'basic')
+  return (validSubs as readonly string[]).includes(s) ? s : 'basic'
+})
+const subTitle: Record<string, string> = {
+  basic: '频道基本资料', me: '我的资料', level: '我的等级', msgs: '频道消息', notify: '消息接收类型',
+}
+const pageTitle = computed(() => subTitle[sub.value] || '频道设置')
 
 const loading = ref(true)
 const loadError = ref('')
@@ -173,8 +173,6 @@ const settingRows: Array<{ key: keyof NotifySettings; label: string; desc: strin
 ]
 
 const memberTypeName = computed(() => myMember.value.member_type === 0 ? '频道主' : myMember.value.member_type === 1 ? '管理员' : '成员')
-const canManage = computed(() => !!community.value?.my_perms.includes('super') || !!community.value?.my_perms.includes('role_manage') || !!community.value?.my_perms.includes('member_manage'))
-const canOps = computed(() => !!community.value?.is_owner || !!community.value?.my_perms.includes('member_manage') || !!community.value?.my_perms.includes('moderate'))
 
 const typeLabels: Record<string, string> = {
   mention: '@提及', like: '点赞', comment: '评论', follow: '关注',
@@ -190,10 +188,11 @@ async function init() {
     community.value = c
     form.name = c.name
     form.profile = c.profile
-    loadQr()
-    loadMyMember()
-    loadNotifySettings()
-    loadMsgs(1)
+    // 按子页面按需加载，互不堆叠
+    if (sub.value === 'basic') loadQr()
+    if (sub.value === 'me' || sub.value === 'level') loadMyMember()
+    if (sub.value === 'notify') loadNotifySettings()
+    if (sub.value === 'msgs') loadMsgs(1)
   } catch (e) {
     loadError.value = errMessage(e, '频道设置加载失败')
   } finally {

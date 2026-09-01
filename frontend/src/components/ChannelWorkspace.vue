@@ -151,23 +151,23 @@
           </section>
 
           <aside class="ws-right">
-            <!-- 查看和设置：分项入口（各跳转频道设置页对应区块），不再叠加重复的总入口 -->
+            <!-- 查看和设置：每个入口独立子页面（互不堆叠） -->
             <div class="ws-panel">
               <div class="ws-rail-title">查看和设置</div>
               <div class="ws-mgmt">
-                <router-link :to="`/c/${cid}/settings`" class="ws-mgmt-item">
+                <router-link :to="`/c/${cid}/settings/basic`" class="ws-mgmt-item">
                   <FlagIcon class="ws-mgmt-icon" />频道基本资料
                 </router-link>
-                <router-link :to="`/c/${cid}/settings`" class="ws-mgmt-item">
+                <router-link :to="`/c/${cid}/settings/me`" class="ws-mgmt-item">
                   <UserCircleIcon class="ws-mgmt-icon" />我的资料
                 </router-link>
-                <router-link :to="`/c/${cid}/settings`" class="ws-mgmt-item">
+                <router-link :to="`/c/${cid}/settings/level`" class="ws-mgmt-item">
                   <StarIcon class="ws-mgmt-icon" />我的等级
                 </router-link>
-                <router-link :to="`/c/${cid}/settings`" class="ws-mgmt-item">
+                <router-link :to="`/c/${cid}/settings/msgs`" class="ws-mgmt-item">
                   <NotificationIcon class="ws-mgmt-icon" />频道消息
                 </router-link>
-                <router-link :to="`/c/${cid}/settings`" class="ws-mgmt-item">
+                <router-link :to="`/c/${cid}/settings/notify`" class="ws-mgmt-item">
                   <ControlPlatformIcon class="ws-mgmt-icon" />消息接收类型
                 </router-link>
                 <router-link v-if="showMgmtEntries" :to="`/c/${cid}/admin`" class="ws-mgmt-item">
@@ -253,24 +253,24 @@
           <QuickComposer v-if="community.is_member && activeBoardInfo" :cid="community.id" :bid="activeBoard ?? 0" @posted="onQuickPosted" />
         </div>
 
-        <!-- 移动端查看和设置：与桌面右侧一致，集中入口 -->
+        <!-- 移动端查看和设置：每个入口独立子页面 -->
         <div class="ws-bottom">
           <div class="ws-panel">
             <div class="ws-rail-title">查看和设置</div>
             <div class="ws-mgmt">
-              <router-link :to="`/c/${cid}/settings`" class="ws-mgmt-item">
+              <router-link :to="`/c/${cid}/settings/basic`" class="ws-mgmt-item">
                 <FlagIcon class="ws-mgmt-icon" />频道基本资料
               </router-link>
-              <router-link :to="`/c/${cid}/settings`" class="ws-mgmt-item">
+              <router-link :to="`/c/${cid}/settings/me`" class="ws-mgmt-item">
                 <UserCircleIcon class="ws-mgmt-icon" />我的资料
               </router-link>
-              <router-link :to="`/c/${cid}/settings`" class="ws-mgmt-item">
+              <router-link :to="`/c/${cid}/settings/level`" class="ws-mgmt-item">
                 <StarIcon class="ws-mgmt-icon" />我的等级
               </router-link>
-              <router-link :to="`/c/${cid}/settings`" class="ws-mgmt-item">
+              <router-link :to="`/c/${cid}/settings/msgs`" class="ws-mgmt-item">
                 <NotificationIcon class="ws-mgmt-icon" />频道消息
               </router-link>
-              <router-link :to="`/c/${cid}/settings`" class="ws-mgmt-item">
+              <router-link :to="`/c/${cid}/settings/notify`" class="ws-mgmt-item">
                 <ControlPlatformIcon class="ws-mgmt-icon" />消息接收类型
               </router-link>
               <router-link v-if="showMgmtEntries" :to="`/c/${cid}/admin`" class="ws-mgmt-item">
