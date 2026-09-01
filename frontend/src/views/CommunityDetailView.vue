@@ -197,6 +197,12 @@
         </div>
 
         <div class="owner-row">
+          <span class="owner-label">AI 频道助手</span>
+          <t-button variant="outline" size="small" :loading="aiEnsuring" @click="onEnsureAi">启用</t-button>
+          <span class="owner-hint">创建虚拟助手成员，可在发帖评论中 @ 提问</span>
+        </div>
+
+        <div class="owner-row">
           <span class="owner-label">解散频道</span>
           <t-button variant="outline" size="small" theme="danger" @click="onDissolve">解散</t-button>
         </div>
@@ -785,6 +791,21 @@ async function onDissolve() {
     router.push('/discover')
   } catch (e) {
     toast(e instanceof Error ? e.message : '解散失败', 'error')
+  }
+}
+
+// AI 频道助手：幂等创建虚拟成员（已存在则直接返回），@ 助手即可触发问答
+const aiEnsuring = ref(false)
+async function onEnsureAi() {
+  if (aiEnsuring.value) return
+  aiEnsuring.value = true
+  try {
+    const r = await communityApi.ensureAiAssistant(cid.value)
+    setOwnerMsg(`AI 助手「${r.nickname}」已就位，发帖时 @ 助手即可提问`)
+  } catch (e) {
+    setOwnerMsg(e instanceof Error ? e.message : 'AI 助手创建失败', true)
+  } finally {
+    aiEnsuring.value = false
   }
 }
 </script>

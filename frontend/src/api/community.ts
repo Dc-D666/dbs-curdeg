@@ -177,6 +177,27 @@ export const communityApi = {
   },
 }
 
+// ---------- Feed 热度策略（阶段 5，文档⑮） ----------
+
+export interface FeedStrategy {
+  sort_rule: number // 0最新 1热度 2精华优先
+  weight_like: number
+  weight_comment: number
+  weight_favorite: number
+  decay_hours: number
+  top_weight: number
+  cache_ttl: number
+}
+
+export const feedStrategyApi = {
+  get(cid: number) {
+    return request<FeedStrategy>({ url: `/communities/${cid}/feed-strategy` })
+  },
+  update(cid: number, patch: Partial<FeedStrategy>) {
+    return request<FeedStrategy>({ url: `/communities/${cid}/feed-strategy`, method: 'PUT', data: patch })
+  },
+}
+
 // ---------- 身份组（阶段 4） ----------
 
 export const roleApi = {

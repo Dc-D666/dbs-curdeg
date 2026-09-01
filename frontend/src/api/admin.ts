@@ -115,4 +115,26 @@ export const adminApi = {
   setUserStatus(userId: number, status: number) {
     return request<{ id: number; status: number }>({ url: `/admin/users/${userId}/status`, method: 'PUT', data: { status } })
   },
+  // 内容审核记录（文档⑪人工复审）
+  reviews(status?: number, page = 1, pageSize = 20) {
+    return request<Page<AdminReviewItem>>({ url: '/admin/reviews', params: { status, page, page_size: pageSize } })
+  },
+  handleReview(reviewId: number, approve: boolean) {
+    return request<null>({ url: `/admin/reviews/${reviewId}/handle`, method: 'POST', data: { approve } })
+  },
+}
+
+export interface AdminReviewItem {
+  id: number
+  content_type: number // 1帖子 2评论
+  content_id: number
+  status: number // 0待审 1通过 2驳回 3转人工
+  violation_type: string
+  violation_detail: string
+  review_method: number
+  appeal_at: string | null
+  result: string
+  reviewed_at: string | null
+  created_at: string | null
+  post_title: string
 }

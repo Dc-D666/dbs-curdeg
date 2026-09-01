@@ -181,6 +181,44 @@ export const postApi = {
   aiSummary(postId: number) {
     return request<{ summary: string }>({ url: '/ai/summary', method: 'POST', data: { post_id: postId } })
   },
+  // 我的审核记录 + 申诉（文档⑪：AI 驳回可申诉复审）
+  myReviews(page = 1, pageSize = 20) {
+    return request<Page<ReviewItem>>({ url: '/ai/reviews/me', params: { page, page_size: pageSize } })
+  },
+  appealReview(reviewId: number) {
+    return request<ReviewItem>({ url: `/ai/reviews/${reviewId}/appeal`, method: 'POST' })
+  },
+  // 我的短链（文档⑭记录查询/失效）
+  myShares(page = 1, pageSize = 20) {
+    return request<Page<ShareItem>>({ url: '/shares', params: { page, page_size: pageSize } })
+  },
+  invalidateShare(code: string) {
+    return request<null>({ url: `/shares/${code}`, method: 'DELETE' })
+  },
+}
+
+export interface ReviewItem {
+  id: number
+  content_type: number // 1帖子 2评论
+  content_id: number
+  status: number // 0待审 1通过 2驳回 3转人工
+  violation_type: string
+  violation_detail: string
+  review_method: number // 0AI快审 1AI复审 2人工
+  appeal_at: string | null
+  result: string
+  reviewed_at: string | null
+  created_at: string | null
+}
+
+export interface ShareItem {
+  code: string
+  target_type: number // 1频道 2帖子 3用户
+  target_id: number
+  creator_id: number
+  visit_count: number
+  expires_at: string | null
+  created_at: string | null
 }
 
 export interface FavoriteItem {

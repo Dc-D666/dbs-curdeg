@@ -84,6 +84,49 @@
         </div>
       </t-tab-panel>
 
+      <!-- 内容审核（AI 驳回申诉转人工复审，文档⑪） -->
+      <t-tab-panel value="reviews" label="内容审核">
+        <div class="panel">
+          <div class="reviews-toolbar">
+            <!-- 只看待处理（转人工）的记录：其余状态仅供回溯 -->
+            <t-radio-group v-model="reviewFilter" variant="default-filled" size="small" @change="onReviewFilter">
+              <t-radio value="manual">待人工复审</t-radio>
+              <t-radio value="all">全部</t-radio>
+            </t-radio-group>
+            <span v-if="reviewsTotal > 0" class="reports-count">共 {{ reviewsTotal }} 条（已加载 {{ adminReviews.length }} 条）</span>
+          </div>
+          <div class="report-row" v-for="r in adminReviews" :key="r.id">
+            <div class="report-main">
+              <span class="report-type">{{ r.content_type === 1 ? '帖子' : '评论' }} #{{ r.content_id }}</span>
+              <span v-if="r.post_title" class="review-post-title">《{{ r.post_title }}》</span>
+              <span class="report-reason">{{ r.violation_type || 'AI 审核' }}</span>
+              <span class="report-status">{{ reviewStatusName(r.status) }}</span>
+            </div>
+            <p v-if="r.violation_detail" class="report-detail">{{ r.violation_detail }}</p>
+            <p class="report-meta">
+              {{ reviewMethodName(r.review_method) }}
+              <template v-if="r.appeal_at"> · 用户已申诉（{{ formatTime(r.appeal_at) }}）</template>
+              <template v-else> · {{ formatTime(r.created_at) }}</template>
+            </p>
+            <!-- 仅转人工状态可人工处理：通过恢复帖子 / 维持驳回 -->
+            <div v-if="r.status === 3" class="report-ops">
+              <t-button variant="outline" size="small" @click="handleReview(r, true)">通过并恢复</t-button>
+              <t-button variant="outline" size="small" theme="danger" @click="handleReview(r, false)">维持驳回</t-button>
+            </div>
+          </div>
+          <div v-if="reviewsLoading && adminReviews.length === 0" class="state">加载中…</div>
+          <t-empty v-else-if="adminReviews.length === 0" description="暂无审核记录" />
+          <t-button
+            v-if="adminReviews.length < reviewsTotal"
+            variant="outline"
+            block
+            class="load-more"
+            :loading="reviewsLoading"
+            @click="loadMoreReviews()"
+          >{{ reviewsLoading ? '加载中…' : `加载更多（${adminReviews.length}/${reviewsTotal}）` }}</t-button>
+        </div>
+      </t-tab-panel>
+
       <!-- 敏感词库 -->
       <t-tab-panel value="words" label="敏感词库">
         <div class="panel">
@@ -140,13 +183,13 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ArrowLeftIcon } from 'tdesign-icons-vue-next'
 import { request } from '@/api/http'
-import { adminApi, type ReportItem, type SensitiveWordItem } from '@/api/admin'
+import { adminApi, type AdminReviewItem, type ReportItem, type SensitiveWordItem } from '@/api/admin'
 import { toast } from '@/utils/toast'
 import { formatTime } from '@/utils/time'
 import { confirmDialog } from '@/utils/confirm'
 import ErrorState from '@/components/ErrorState.vue'
 
-const tab = ref<'overview' | 'reports' | 'words' | 'configs' | 'ai'>('overview')
+const tab = ref<'overview' | 'reports' | 'reviews' | 'words' | 'configs' | 'ai'>('overview')
 const loading = ref(true)
 const error = ref('')
 const stats = ref<Record<string, any> | null>(null)
@@ -224,6 +267,58 @@ async function loadReports(page: number, append = false) {
 
 function loadMoreReports() {
   return loadReports(reportsPage.value + 1, true)
+}
+
+// ---------- 内容审核（AI 申诉转人工复审） ----------
+
+const adminReviews = ref<AdminReviewItem[]>([])
+const reviewsPage = ref(0)
+const reviewsTotal = ref(0)
+const reviewsLoading = ref(false)
+// manual=只看转人工（待处理）；all=全部状态回溯
+const reviewFilter = ref<'manual' | 'all'>('manual')
+
+function reviewStatusName(s: number): string {
+  return s === 0 ? '待审核' : s === 1 ? '已通过' : s === 2 ? '已驳回' : s === 3 ? '转人工复审' : '未知'
+}
+function reviewMethodName(m: number): string {
+  return m === 0 ? 'AI 快审' : m === 1 ? 'AI 复审' : m === 2 ? '人工审核' : '审核'
+}
+
+async function loadReviewList(page: number, append = false) {
+  if (reviewsLoading.value) return
+  reviewsLoading.value = true
+  try {
+    const data = await adminApi.reviews(reviewFilter.value === 'manual' ? 3 : undefined, page, 20)
+    adminReviews.value = append ? [...adminReviews.value, ...data.items] : data.items
+    reviewsPage.value = page
+    reviewsTotal.value = data.total
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '加载失败', 'error')
+  } finally {
+    reviewsLoading.value = false
+  }
+}
+
+function onReviewFilter() {
+  loadReviewList(1)
+}
+
+function loadMoreReviews() {
+  return loadReviewList(reviewsPage.value + 1, true)
+}
+
+/** 人工复审（仅转人工状态）：通过恢复被下架的帖子 / 维持驳回，均通知作者。 */
+async function handleReview(r: AdminReviewItem, approve: boolean) {
+  const action = approve ? '通过并恢复' : '维持驳回'
+  if (!(await confirmDialog('人工复审', `确定对${r.content_type === 1 ? '帖子' : '评论'} #${r.content_id}执行「${action}」？作者将收到结果通知。`))) return
+  try {
+    await adminApi.handleReview(r.id, approve)
+    toast('已处理')
+    await loadReviewList(1)
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '操作失败', 'error')
+  }
 }
 
 async function loadWords() {
@@ -343,6 +438,7 @@ async function exportTrend() {
 onMounted(async () => {
   await loadOverview()
   loadReports(1)
+  loadReviewList(1)
   loadWords()
   loadConfigs()
   loadAiConfigs()
@@ -498,6 +594,21 @@ onMounted(async () => {
 .reports-count {
   font-size: var(--fs-caption);
   color: var(--text-3);
+}
+.reviews-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--sp-2);
+}
+.review-post-title {
+  font-size: var(--fs-caption);
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 200px;
 }
 .load-more {
   margin-top: var(--sp-2);

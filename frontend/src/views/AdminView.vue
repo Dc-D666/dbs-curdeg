@@ -192,6 +192,59 @@
           >加载更多（{{ ops.length }}/{{ opsTotal }}）</t-button>
         </div>
       </t-tab-panel>
+
+      <!-- Feed 热度策略（文档⑮） -->
+      <t-tab-panel value="strategy" label="Feed 策略">
+        <div class="panel">
+          <ErrorState v-if="strategyError" :text="strategyError" :retryable="true" @retry="loadStrategy" />
+          <template v-else-if="strategyLoaded">
+            <p class="strategy-hint">
+              热度分 =（赞 × 权重 + 评 × 权重 + 藏 × 权重 + 置顶加成）× 时间衰减 exp(-发布时长 / 衰减系数)。改动保存后即时生效并清空热度缓存。
+            </p>
+            <div class="strategy-form">
+              <div class="strategy-field strategy-field-wide">
+                <label class="field-label">默认排序规则</label>
+                <t-radio-group v-model="strategyForm.sort_rule" variant="default-filled">
+                  <t-radio :value="0">最新发布</t-radio>
+                  <t-radio :value="1">热度排序</t-radio>
+                  <t-radio :value="2">精华优先</t-radio>
+                </t-radio-group>
+              </div>
+              <div class="strategy-field">
+                <label class="field-label">点赞权重</label>
+                <t-input-number v-model="strategyForm.weight_like" :min="0" :max="100" theme="column" />
+              </div>
+              <div class="strategy-field">
+                <label class="field-label">评论权重</label>
+                <t-input-number v-model="strategyForm.weight_comment" :min="0" :max="100" theme="column" />
+              </div>
+              <div class="strategy-field">
+                <label class="field-label">收藏权重</label>
+                <t-input-number v-model="strategyForm.weight_favorite" :min="0" :max="100" theme="column" />
+              </div>
+              <div class="strategy-field">
+                <label class="field-label">时间衰减（小时）</label>
+                <t-input-number v-model="strategyForm.decay_hours" :min="1" :max="720" theme="column" />
+              </div>
+              <div class="strategy-field">
+                <label class="field-label">置顶帖权重</label>
+                <t-input-number v-model="strategyForm.top_weight" :min="0" :max="10000" theme="column" />
+              </div>
+              <div class="strategy-field">
+                <label class="field-label">热度缓存秒数</label>
+                <t-input-number v-model="strategyForm.cache_ttl" :min="30" :max="86400" theme="column" />
+              </div>
+            </div>
+            <div class="strategy-ops">
+              <t-button theme="primary" size="small" :loading="strategySaving" :disabled="!strategyChanged" @click="saveStrategy">
+                {{ strategySaving ? '保存中…' : '保存策略' }}
+              </t-button>
+              <t-button v-if="strategyChanged" variant="outline" size="small" @click="resetStrategy">还原</t-button>
+            </div>
+          </template>
+          <p v-else class="strategy-hint">加载中…</p>
+        </div>
+      </t-tab-panel>
     </t-tabs>
 
     <!-- 禁言时长弹窗 -->
@@ -210,11 +263,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ArrowLeftIcon, ErrorCircleIcon, SoundMute1Icon } from 'tdesign-icons-vue-next'
 import { useAuthStore } from '@/stores/auth'
-import { communityApi, manageApi, roleApi, type Community, type Member, type MyRole, type OpLogItem, type RoleItem } from '@/api/community'
+import { communityApi, feedStrategyApi, manageApi, roleApi, type Community, type Member, type MyRole, type OpLogItem, type RoleItem } from '@/api/community'
 import { toast } from '@/utils/toast'
 import { formatTime } from '@/utils/time'
 import { confirmDialog } from '@/utils/confirm'
@@ -226,7 +279,7 @@ const route = useRoute()
 const auth = useAuthStore()
 const cid = Number(route.params.id)
 
-const tab = ref<'members' | 'roles' | 'ops'>('members')
+const tab = ref<'members' | 'roles' | 'ops' | 'strategy'>('members')
 const community = ref<Community | null>(null)
 const members = ref<Member[]>([])
 const membersPage = ref(1)
@@ -249,6 +302,59 @@ const roleSaving = ref(false)
 const roleForm = reactive({ name: '', color: '#1a73e8', level: 1, is_level_role: false })
 const myRole = ref<MyRole | null>(null)
 const levelRoleMap = reactive<Record<number, boolean>>({})
+
+// ---------- Feed 热度策略（文档⑮） ----------
+
+const strategyForm = reactive({
+  sort_rule: 1,
+  weight_like: 1,
+  weight_comment: 2,
+  weight_favorite: 3,
+  decay_hours: 24,
+  top_weight: 100,
+  cache_ttl: 300,
+})
+const strategyLoaded = ref(false)
+const strategyError = ref('')
+const strategySaving = ref(false)
+// 保存后更新「已保存基线」，用于变更检测（显示保存/还原按钮）
+let strategyBaseline = { ...strategyForm }
+const strategyChanged = computed(() =>
+  (Object.keys(strategyForm) as Array<keyof typeof strategyForm>).some(
+    (k) => strategyForm[k] !== strategyBaseline[k],
+  ),
+)
+
+async function loadStrategy() {
+  strategyError.value = ''
+  try {
+    const s = await feedStrategyApi.get(cid)
+    Object.assign(strategyForm, s)
+    strategyBaseline = { ...strategyForm }
+    strategyLoaded.value = true
+  } catch (e) {
+    strategyError.value = e instanceof Error ? e.message : '策略加载失败'
+  }
+}
+
+function resetStrategy() {
+  Object.assign(strategyForm, strategyBaseline)
+}
+
+async function saveStrategy() {
+  if (strategySaving.value) return
+  strategySaving.value = true
+  try {
+    const s = await feedStrategyApi.update(cid, { ...strategyForm })
+    Object.assign(strategyForm, s)
+    strategyBaseline = { ...strategyForm }
+    toast('热度策略已保存，缓存已清空', 'success')
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '保存失败', 'error')
+  } finally {
+    strategySaving.value = false
+  }
+}
 
 /** 可编辑范围：频道主恒可；否则仅排序（sort）在本人之后的身份组 */
 function canEditRole(r: RoleItem): boolean {
@@ -397,6 +503,11 @@ function loadMoreOps() {
 }
 
 onMounted(init)
+
+// Feed 策略 tab 懒加载：首次切到才拉（GET 未配置时返回默认值，接口轻）
+watch(tab, (t) => {
+  if (t === 'strategy' && !strategyLoaded.value && !strategyError.value) loadStrategy()
+})
 
 function openShutup(m: Member) {
   shutupTarget.value = m
@@ -797,5 +908,31 @@ async function exportOps() {
   margin: 0 0 var(--sp-2);
   font-size: var(--fs-body);
   color: var(--td-text-color-secondary);
+}
+/* Feed 热度策略表单 */
+.strategy-hint {
+  margin: 0 0 var(--sp-3);
+  font-size: var(--fs-caption);
+  color: var(--td-text-color-placeholder);
+  line-height: 1.6;
+}
+.strategy-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--sp-4) var(--sp-3);
+}
+.strategy-field-wide {
+  grid-column: 1 / -1;
+}
+.strategy-field .field-label {
+  display: block;
+  margin-bottom: var(--sp-1);
+  font-size: var(--fs-caption);
+  color: var(--td-text-color-secondary);
+}
+.strategy-ops {
+  display: flex;
+  gap: var(--sp-2);
+  margin-top: var(--sp-4);
 }
 </style>

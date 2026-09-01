@@ -62,6 +62,18 @@
           <span class="row-hint">关注频道的动态</span>
           <ChevronRightIcon class="row-arrow" />
         </router-link>
+        <router-link to="/me/reviews" class="row">
+          <span class="row-icon"><CheckCircleIcon class="row-icon-svg" /></span>
+          <span class="row-label">审核记录</span>
+          <span class="row-hint">AI 审核结果与申诉</span>
+          <ChevronRightIcon class="row-arrow" />
+        </router-link>
+        <router-link to="/me/shares" class="row">
+          <span class="row-icon"><ShareIcon class="row-icon-svg" /></span>
+          <span class="row-label">我的短链</span>
+          <span class="row-hint">分享链接管理与失效</span>
+          <ChevronRightIcon class="row-arrow" />
+        </router-link>
       </div>
     </div>
 
@@ -95,7 +107,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
-import { ChatIcon, ChevronRightIcon, DashboardIcon, KeyIcon, NotificationIcon, StarIcon, UserIcon, UsergroupIcon } from 'tdesign-icons-vue-next'
+import { ChatIcon, CheckCircleIcon, ChevronRightIcon, DashboardIcon, KeyIcon, NotificationIcon, ShareIcon, StarIcon, UserIcon, UsergroupIcon } from 'tdesign-icons-vue-next'
 import { useAuthStore } from '@/stores/auth'
 import { confirmDialog } from '@/utils/confirm'
 import { toast } from '@/utils/toast'
