@@ -20,7 +20,7 @@
       <img
         v-for="(img, i) in post.images.slice(0, 9)"
         :key="img"
-        :src="img"
+        :src="proxifyImage(img)"
         :alt="post.title"
         loading="lazy"
         class="fc-img"
@@ -74,6 +74,7 @@ import { useInteractionStore } from '@/stores/interaction'
 import { usePostDrawer } from '@/stores/postDrawer'
 import { useLightboxStore } from '@/stores/lightbox'
 import { timeAgo } from '@/utils/time'
+import { proxifyImage } from '@/utils/image'
 import { toast } from '@/utils/toast'
 
 const props = withDefaults(

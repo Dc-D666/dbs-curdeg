@@ -31,7 +31,7 @@ def pytest_collection_modifyitems(config, items):
     """无 DB 时，把除冒烟/纯逻辑外的测试全部 skip（CI 场景）。"""
     if DB_AVAILABLE:
         return
-    smoke_or_logic = {"test_smoke.py", "test_security.py"}
+    smoke_or_logic = {"test_smoke.py", "test_security.py", "test_img_proxy.py"}
     for item in items:
         fname = item.nodeid.split("::")[0].split("/")[-1]
         if fname not in smoke_or_logic:

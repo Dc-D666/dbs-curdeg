@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
-from app.api.v1 import admin, ai, attachments, auth, boards, comments, communities, favorites, interact, manage, members, notifications, posts, reports, roles, search, shares, topics, uploads, user_follows, users
+from app.api.v1 import admin, ai, attachments, auth, boards, comments, communities, favorites, img_proxy, interact, manage, members, notifications, posts, reports, roles, search, shares, topics, uploads, user_follows, users
 from app.core.config import settings
 from app.core.security import decode_token
 from app.db import get_db
@@ -92,6 +92,7 @@ app.include_router(communities.router, prefix=API_V1)
 app.include_router(boards.router, prefix=API_V1)
 app.include_router(members.router, prefix=API_V1)
 app.include_router(uploads.router, prefix=API_V1)
+app.include_router(img_proxy.router, prefix=API_V1)
 app.include_router(posts.router, prefix=API_V1)
 app.include_router(attachments.router, prefix=API_V1)
 app.include_router(comments.router, prefix=API_V1)

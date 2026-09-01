@@ -1,5 +1,5 @@
 <template>
-  <t-avatar :image="src || undefined" :size="`${size}px`" class="avatar">
+  <t-avatar :image="image || undefined" :size="`${size}px`" class="avatar">
     <template #icon>
       <span class="avatar-letter">{{ initial }}</span>
     </template>
@@ -8,6 +8,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { proxifyImage } from '@/utils/image'
 
 const props = withDefaults(
   defineProps<{ name: string; src?: string; size?: number }>(),
@@ -15,6 +16,8 @@ const props = withDefaults(
 )
 
 const initial = computed(() => (props.name || 'U').slice(0, 1).toUpperCase())
+// QQ CDN 等防盗链外链头像 → 走后端代理
+const image = computed(() => proxifyImage(props.src))
 </script>
 
 <style scoped>

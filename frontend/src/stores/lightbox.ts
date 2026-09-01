@@ -6,15 +6,17 @@
  */
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { proxifyImage } from '@/utils/image'
 
 export const useLightboxStore = defineStore('lightbox', () => {
   const images = ref<string[]>([])
   const index = ref(0)
   const visible = ref(false)
 
-  /** 打开灯箱：urls 为图库，startIndex 为初始图。重复调用即切换图库。 */
+  /** 打开灯箱：urls 为图库，startIndex 为初始图。重复调用即切换图库。
+   *  入口统一过 proxifyImage：QQ CDN 防盗链图走后端代理（与卡片/详情渲染一致）。 */
   function open(urls: string[], startIndex = 0) {
-    images.value = urls
+    images.value = urls.map(proxifyImage)
     index.value = startIndex
     visible.value = true
   }

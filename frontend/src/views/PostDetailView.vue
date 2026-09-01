@@ -69,7 +69,7 @@
             >#{{ seg.topic.topic_name }}</router-link>
           </template>
           <div v-if="post.images.length" class="post-images">
-            <img v-for="(img, i) in post.images" :key="img" :src="img" alt="" loading="lazy" @click="openGallery(i)" />
+            <img v-for="(img, i) in post.images" :key="img" :src="proxifyImage(img)" alt="" loading="lazy" @click="openGallery(i)" />
           </div>
         </div>
 
@@ -99,7 +99,7 @@
 
         <div v-if="attachments.length" class="attachments">
           <div v-for="att in attachments" :key="att.id" class="attachment">
-            <img v-if="att.media_type === 1" :src="att.url" class="att-img" alt="" @click="openAttPreview(att)" />
+            <img v-if="att.media_type === 1" :src="proxifyImage(att.url)" class="att-img" alt="" @click="openAttPreview(att)" />
             <video v-else-if="att.media_type === 2" :src="att.url" class="att-video" controls />
             <a v-else :href="att.url" target="_blank" rel="noopener" class="att-file"><AttachIcon class="att-file-icon" /> {{ attUrlName(att.url) }}</a>
             <t-button v-if="canManage" variant="text" size="small" theme="danger" class="att-del" @click="removeAttachment(att.id)">删除</t-button>
@@ -246,6 +246,7 @@ import { useLightboxStore } from '@/stores/lightbox'
 import { toast } from '@/utils/toast'
 import { confirmDialog } from '@/utils/confirm'
 import { formatTime } from '@/utils/time'
+import { proxifyImage } from '@/utils/image'
 import { errMessage, loadErrorMessage } from '@/utils/error'
 import ErrorState from '@/components/ErrorState.vue'
 
