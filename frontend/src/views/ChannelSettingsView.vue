@@ -11,125 +11,116 @@
     <ErrorState v-else-if="loadError" :text="loadError" @retry="init" />
 
     <template v-else>
-      <t-tabs v-model="tab" class="tabs">
-        <!-- 频道基本资料 -->
-        <t-tab-panel value="basic" label="基本资料">
-          <div class="panel">
-            <div class="row">
-              <span class="label">频道头像</span>
-              <img v-if="community?.avatar_url" :src="community.avatar_url" class="avatar" alt="" />
-              <label class="btn-ghost">
-                上传图片
-                <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden @change="onAvatarUpload" />
-              </label>
-            </div>
-            <div class="row">
-              <span class="label">频道名称</span>
-              <t-input v-model.trim="form.name" class="input" maxlength="64" placeholder="频道名称" />
-            </div>
-            <div class="row">
-              <span class="label">频道简介</span>
-              <t-textarea v-model.trim="form.profile" :autosize="{ minRows: 2, maxRows: 4 }" maxlength="255" class="input" />
-            </div>
-            <div class="row">
-              <t-button theme="primary" size="small" :loading="saving" @click="saveBasic">保存资料</t-button>
-              <span v-if="saveMsg" class="save-msg">{{ saveMsg }}</span>
-            </div>
+      <!-- 频道基本资料 -->
+      <section class="panel">
+        <h3 class="panel-title">频道基本资料</h3>
+        <div class="row">
+          <span class="label">频道头像</span>
+          <img v-if="community?.avatar_url" :src="community.avatar_url" class="avatar" alt="" />
+          <label class="btn-ghost">
+            上传图片
+            <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden @change="onAvatarUpload" />
+          </label>
+        </div>
+        <div class="row">
+          <span class="label">频道名称</span>
+          <t-input v-model.trim="form.name" class="input" maxlength="64" placeholder="频道名称" />
+        </div>
+        <div class="row">
+          <span class="label">频道简介</span>
+          <t-textarea v-model.trim="form.profile" :autosize="{ minRows: 2, maxRows: 4 }" maxlength="255" class="input" />
+        </div>
+        <div class="row">
+          <t-button theme="primary" size="small" :loading="saving" @click="saveBasic">保存资料</t-button>
+          <span v-if="saveMsg" class="save-msg">{{ saveMsg }}</span>
+        </div>
 
-            <div class="divider"></div>
-            <!-- 分享二维码 -->
-            <div class="row">
-              <span class="label">分享二维码</span>
-              <img v-if="qrUrl" :src="qrUrl" class="qr" alt="频道分享二维码" />
-              <span v-else class="muted">加载中…</span>
-              <span class="hint">扫码打开频道分享页（仅需登录，未加入也可打开）</span>
-            </div>
+        <div class="divider"></div>
+        <!-- 分享二维码 -->
+        <div class="row">
+          <span class="label">分享二维码</span>
+          <img v-if="qrUrl" :src="qrUrl" class="qr" alt="频道分享二维码" />
+          <span v-else class="muted">加载中…</span>
+          <span class="hint">扫码打开频道分享页（仅需登录，未加入也可打开）</span>
+        </div>
+      </section>
+
+      <!-- 我的资料 -->
+      <section class="panel">
+        <h3 class="panel-title">我的资料</h3>
+        <div class="row">
+          <span class="label">频道内昵称</span>
+          <t-input v-model.trim="myMember.nickname" class="input" maxlength="64" placeholder="在频道中显示的昵称" />
+          <t-button variant="outline" size="small" @click="saveMyNickname">保存</t-button>
+        </div>
+        <p class="row-note">频道内昵称仅在本频道显示；全局昵称/头像在个人中心修改。</p>
+      </section>
+
+      <!-- 我的等级 -->
+      <section class="panel">
+        <h3 class="panel-title">我的等级</h3>
+        <div class="level-card">
+          <span class="level-num">Lv.{{ myMember.level }}</span>
+          <div class="level-info">
+            <span class="level-role">{{ myMember.is_owner ? '频道主' : myMember.role_name || memberTypeName }}</span>
+            <span class="level-join">加入于 {{ myMember.join_time ? formatTime(myMember.join_time) : '—' }}</span>
           </div>
-        </t-tab-panel>
+        </div>
+        <p class="hint">活跃等级随互动增长；等级达标可自动获得对应身份组（如频道配置了等级身份）。</p>
+      </section>
 
-        <!-- 我的资料 -->
-        <t-tab-panel value="me" label="我的资料">
-          <div class="panel">
-            <div class="row">
-              <span class="label">频道内昵称</span>
-              <t-input v-model.trim="myMember.nickname" class="input" maxlength="64" placeholder="在频道中显示的昵称" />
-              <t-button variant="outline" size="small" @click="saveMyNickname">保存</t-button>
-            </div>
-            <p class="row-note">频道内昵称仅在本频道显示；全局昵称/头像在个人中心修改。</p>
-          </div>
-        </t-tab-panel>
-
-        <!-- 我的等级 -->
-        <t-tab-panel value="level" label="我的等级">
-          <div class="panel">
-            <div class="level-card">
-              <span class="level-num">Lv.{{ myMember.level }}</span>
-              <div class="level-info">
-                <span class="level-role">{{ myMember.is_owner ? '频道主' : myMember.role_name || memberTypeName }}</span>
-                <span class="level-join">加入于 {{ myMember.join_time ? formatTime(myMember.join_time) : '—' }}</span>
+      <!-- 频道消息 -->
+      <section class="panel">
+        <h3 class="panel-title">频道消息</h3>
+        <div class="toolbar">
+          <span v-if="msgTotal" class="count">共 {{ msgTotal }} 条（已加载 {{ msgs.length }}）</span>
+          <span v-else class="count">加载中…</span>
+        </div>
+        <div v-if="msgs.length" class="msg-list">
+          <div v-for="n in msgs" :key="n.id" class="msg-item" @click="gotoMsg(n)">
+            <span class="msg-dot" :class="{ unread: !n.is_read }" />
+            <div class="msg-body">
+              <div class="msg-row">
+                <span class="msg-type">{{ typeLabel(n.type) }}</span>
+                <span class="msg-time">{{ timeAgo(n.created_at) }}</span>
               </div>
+              <p class="msg-title">{{ n.title }}</p>
+              <p v-if="n.summary" class="msg-summary">{{ n.summary }}</p>
             </div>
-            <p class="hint">活跃等级随互动增长；等级达标可自动获得对应身份组（如频道配置了等级身份）。</p>
           </div>
-        </t-tab-panel>
+        </div>
+        <t-empty v-else-if="msgLoaded && msgs.length === 0" description="本频道暂无消息" />
+        <t-button v-if="msgs.length < msgTotal" variant="outline" block class="load-more" @click="loadMoreMsgs">
+          {{ msgLoading ? '加载中…' : `加载更多（${msgs.length}/${msgTotal}）` }}
+        </t-button>
+      </section>
 
-        <!-- 频道消息 -->
-        <t-tab-panel value="msgs" label="频道消息">
-          <div class="panel">
-            <div class="toolbar">
-              <span v-if="msgTotal" class="count">共 {{ msgTotal }} 条（已加载 {{ msgs.length }}）</span>
-              <span v-else class="count">加载中…</span>
-            </div>
-            <div v-if="msgs.length" class="msg-list">
-              <div v-for="n in msgs" :key="n.id" class="msg-item" @click="gotoMsg(n)">
-                <span class="msg-dot" :class="{ unread: !n.is_read }" />
-                <div class="msg-body">
-                  <div class="msg-row">
-                    <span class="msg-type">{{ typeLabel(n.type) }}</span>
-                    <span class="msg-time">{{ timeAgo(n.created_at) }}</span>
-                  </div>
-                  <p class="msg-title">{{ n.title }}</p>
-                  <p v-if="n.summary" class="msg-summary">{{ n.summary }}</p>
-                </div>
-              </div>
-            </div>
-            <t-empty v-else-if="msgLoaded && msgs.length === 0" description="本频道暂无消息" />
-            <t-button v-if="msgs.length < msgTotal" variant="outline" block class="load-more" @click="loadMoreMsgs">
-              {{ msgLoading ? '加载中…' : `加载更多（${msgs.length}/${msgTotal}）` }}
-            </t-button>
+      <!-- 消息接收类型 -->
+      <section class="panel">
+        <h3 class="panel-title">消息接收类型</h3>
+        <div v-for="s in settingRows" :key="s.key" class="switch-row">
+          <div class="switch-side">
+            <span class="switch-label">{{ s.label }}</span>
+            <span class="switch-desc">{{ s.desc }}</span>
           </div>
-        </t-tab-panel>
+          <t-switch :value="!!notifyForm[s.key]" size="small" @change="(v: boolean) => onToggleNotify(s.key, v)" />
+        </div>
+        <p class="hint">本频道的消息接收类型；未开启的类型将不在「频道消息」展示。系统通知始终接收。</p>
+      </section>
 
-        <!-- 消息接收类型 -->
-        <t-tab-panel value="notify" label="消息接收类型">
-          <div class="panel">
-            <div v-for="s in settingRows" :key="s.key" class="switch-row">
-              <div class="switch-side">
-                <span class="switch-label">{{ s.label }}</span>
-                <span class="switch-desc">{{ s.desc }}</span>
-              </div>
-              <t-switch :value="!!notifyForm[s.key]" size="small" @change="(v: boolean) => onToggleNotify(s.key, v)" />
-            </div>
-            <p class="hint">本频道的消息接收类型；未开启的类型将不在「频道消息」展示。系统通知始终接收。</p>
-          </div>
-        </t-tab-panel>
+      <!-- 频道管理（仅频道主/有权限） -->
+      <section v-if="canManage" class="panel">
+        <h3 class="panel-title">频道管理</h3>
+        <p class="hint">板块、成员、身份组、操作日志、帖子等管理能力，请前往频道管理后台。</p>
+        <t-button theme="primary" @click="router.push(`/c/${cid}/admin`)">进入管理后台</t-button>
+      </section>
 
-        <!-- 频道管理（仅频道主/有权限） -->
-        <t-tab-panel v-if="canManage" value="manage" label="频道管理">
-          <div class="panel">
-            <p class="hint">板块、成员、身份组、操作日志、帖子等管理能力，请前往频道管理后台。</p>
-            <t-button theme="primary" @click="router.push(`/c/${cid}/admin`)">进入管理后台</t-button>
-          </div>
-        </t-tab-panel>
-
-        <!-- 运营中心（仅频道主/有成员数据权限） -->
-        <t-tab-panel v-if="canOps" value="ops" label="运营中心">
-          <div class="panel">
-            <p class="hint">查看本频道的昨日数据、用户数据、内容分析与排名。</p>
-            <t-button theme="primary" @click="router.push(`/c/${cid}/ops`)">进入运营中心</t-button>
-          </div>
-        </t-tab-panel>
-      </t-tabs>
+      <!-- 运营中心（仅频道主/有成员数据权限） -->
+      <section v-if="canOps" class="panel">
+        <h3 class="panel-title">运营中心</h3>
+        <p class="hint">查看本频道的昨日数据、用户数据、内容分析与排名。</p>
+        <t-button theme="primary" @click="router.push(`/c/${cid}/ops`)">进入运营中心</t-button>
+      </section>
     </template>
   </main>
 </template>
@@ -152,10 +143,6 @@ const route = useRoute()
 const router = useRouter()
 const cid = computed(() => Number(route.params.id))
 
-const validTabs = ['basic', 'me', 'level', 'msgs', 'notify', 'manage', 'ops'] as const
-type Tab = typeof validTabs[number]
-const qtab = String(route.query.tab || 'basic')
-const tab = ref<Tab>((validTabs.includes(qtab as Tab) ? qtab : 'basic') as Tab)
 const loading = ref(true)
 const loadError = ref('')
 const community = ref<Community | null>(null)
@@ -345,12 +332,18 @@ onMounted(init)
   flex: 1;
 }
 .state { padding: 48px 0; text-align: center; color: var(--text-3); }
-.tabs { margin-top: var(--sp-3); }
 .panel {
+  margin-top: var(--sp-4);
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
   padding: var(--sp-4);
+  box-shadow: var(--shadow-sm);
+}
+.panel-title {
+  margin: 0 0 var(--sp-3);
+  font-size: var(--fs-title);
+  font-weight: 600;
 }
 .row {
   display: flex;

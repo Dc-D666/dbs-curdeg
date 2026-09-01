@@ -151,26 +151,23 @@
           </section>
 
           <aside class="ws-right">
-            <!-- 查看和设置：频道设置总入口 + 分项（各跳转频道设置页对应 tab） -->
+            <!-- 查看和设置：分项入口（各跳转频道设置页对应区块），不再叠加重复的总入口 -->
             <div class="ws-panel">
               <div class="ws-rail-title">查看和设置</div>
               <div class="ws-mgmt">
-                <router-link :to="`/c/${cid}/settings`" class="ws-mgmt-item ws-mgmt-root">
-                  <SettingIcon class="ws-mgmt-icon" />查看和设置
-                </router-link>
-                <router-link :to="`/c/${cid}/settings?tab=basic`" class="ws-mgmt-item">
+                <router-link :to="`/c/${cid}/settings`" class="ws-mgmt-item">
                   <FlagIcon class="ws-mgmt-icon" />频道基本资料
                 </router-link>
-                <router-link :to="`/c/${cid}/settings?tab=me`" class="ws-mgmt-item">
+                <router-link :to="`/c/${cid}/settings`" class="ws-mgmt-item">
                   <UserCircleIcon class="ws-mgmt-icon" />我的资料
                 </router-link>
-                <router-link :to="`/c/${cid}/settings?tab=level`" class="ws-mgmt-item">
+                <router-link :to="`/c/${cid}/settings`" class="ws-mgmt-item">
                   <StarIcon class="ws-mgmt-icon" />我的等级
                 </router-link>
-                <router-link :to="`/c/${cid}/settings?tab=msgs`" class="ws-mgmt-item">
+                <router-link :to="`/c/${cid}/settings`" class="ws-mgmt-item">
                   <NotificationIcon class="ws-mgmt-icon" />频道消息
                 </router-link>
-                <router-link :to="`/c/${cid}/settings?tab=notify`" class="ws-mgmt-item">
+                <router-link :to="`/c/${cid}/settings`" class="ws-mgmt-item">
                   <ControlPlatformIcon class="ws-mgmt-icon" />消息接收类型
                 </router-link>
                 <router-link v-if="showMgmtEntries" :to="`/c/${cid}/admin`" class="ws-mgmt-item">
@@ -256,27 +253,24 @@
           <QuickComposer v-if="community.is_member && activeBoardInfo" :cid="community.id" :bid="activeBoard ?? 0" @posted="onQuickPosted" />
         </div>
 
-        <!-- 移动端查看和设置：与桌面右侧一致（去掉话题/今日热议），集中入口 -->
+        <!-- 移动端查看和设置：与桌面右侧一致，集中入口 -->
         <div class="ws-bottom">
           <div class="ws-panel">
             <div class="ws-rail-title">查看和设置</div>
             <div class="ws-mgmt">
-              <router-link :to="`/c/${cid}/settings`" class="ws-mgmt-item ws-mgmt-root">
-                <SettingIcon class="ws-mgmt-icon" />查看和设置
-              </router-link>
-              <router-link :to="`/c/${cid}/settings?tab=basic`" class="ws-mgmt-item">
+              <router-link :to="`/c/${cid}/settings`" class="ws-mgmt-item">
                 <FlagIcon class="ws-mgmt-icon" />频道基本资料
               </router-link>
-              <router-link :to="`/c/${cid}/settings?tab=me`" class="ws-mgmt-item">
+              <router-link :to="`/c/${cid}/settings`" class="ws-mgmt-item">
                 <UserCircleIcon class="ws-mgmt-icon" />我的资料
               </router-link>
-              <router-link :to="`/c/${cid}/settings?tab=level`" class="ws-mgmt-item">
+              <router-link :to="`/c/${cid}/settings`" class="ws-mgmt-item">
                 <StarIcon class="ws-mgmt-icon" />我的等级
               </router-link>
-              <router-link :to="`/c/${cid}/settings?tab=msgs`" class="ws-mgmt-item">
+              <router-link :to="`/c/${cid}/settings`" class="ws-mgmt-item">
                 <NotificationIcon class="ws-mgmt-icon" />频道消息
               </router-link>
-              <router-link :to="`/c/${cid}/settings?tab=notify`" class="ws-mgmt-item">
+              <router-link :to="`/c/${cid}/settings`" class="ws-mgmt-item">
                 <ControlPlatformIcon class="ws-mgmt-icon" />消息接收类型
               </router-link>
               <router-link v-if="showMgmtEntries" :to="`/c/${cid}/admin`" class="ws-mgmt-item">
@@ -321,7 +315,7 @@
 <script setup lang="ts">
 import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { BrowseIcon, ChartIcon, ChevronRightIcon, ControlPlatformIcon, FlagIcon, NotificationIcon, SettingIcon, StarIcon, UserCircleIcon } from 'tdesign-icons-vue-next'
+import { BrowseIcon, ChartIcon, ChevronRightIcon, ControlPlatformIcon, FlagIcon, NotificationIcon, StarIcon, UserCircleIcon } from 'tdesign-icons-vue-next'
 import { communityApi, type Community, type TopicItem } from '@/api/community'
 import { postApi, type PostItem } from '@/api/post'
 import FeedCard from '@/components/FeedCard.vue'
