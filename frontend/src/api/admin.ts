@@ -122,6 +122,19 @@ export const adminApi = {
   handleReview(reviewId: number, approve: boolean) {
     return request<null>({ url: `/admin/reviews/${reviewId}/handle`, method: 'POST', data: { approve } })
   },
+  // 平台级频道/用户列表（平台控制台首页）
+  adminCommunities(keyword?: string, status?: number, page = 1, pageSize = 20) {
+    return request<Page<AdminCommunityItem>>({
+      url: '/admin/communities',
+      params: { keyword: keyword || undefined, status, page, page_size: pageSize },
+    })
+  },
+  adminUsers(keyword?: string, status?: number, page = 1, pageSize = 20) {
+    return request<Page<AdminUserItem>>({
+      url: '/admin/users',
+      params: { keyword: keyword || undefined, status, page, page_size: pageSize },
+    })
+  },
 }
 
 export interface AdminReviewItem {
@@ -137,4 +150,36 @@ export interface AdminReviewItem {
   reviewed_at: string | null
   created_at: string | null
   post_title: string
+}
+
+// ---------- 平台级频道/用户管理（平台控制台首页用） ----------
+
+export interface AdminCommunityItem {
+  id: number
+  number: string
+  name: string
+  profile: string
+  avatar_url: string
+  member_count: number
+  post_count: number
+  owner_id: number
+  owner_name: string
+  /** 频道状态：0正常 1关闭 2违规封禁 */
+  status: number
+  active_members: number
+  created_at: string
+}
+
+export interface AdminUserItem {
+  id: number
+  username: string
+  nickname: string
+  avatar_url: string
+  email: string
+  /** 用户状态：0正常 1封禁 2注销 */
+  status: number
+  /** 0普通 1系统管理员 2AI虚拟账号 */
+  user_type: number
+  joined_communities: number
+  created_at: string
 }

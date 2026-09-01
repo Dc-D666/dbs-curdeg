@@ -20,35 +20,28 @@
       最近更新 {{ buildTime }}
     </p>
 
-    <!-- 三栏工作台：桌面三栏 / 移动端上中下三栏 -->
+    <!-- 平台管理员（user_type=1）：首页即平台控制台（浏览全部频道/用户 + 封禁解封等系统级操作），
+         不进入会员频道/板块/帖子流工作台 -->
+    <PlatformConsole v-if="isPlatformAdmin" class="home-console" />
+
+    <!-- 普通用户：三栏工作台（桌面三栏 / 移动端上中下三栏）。
+         仅在登录态已探测完成后渲染，避免平台管理员在 fetchMe 返回前闪一下会员工作台 -->
     <ChannelWorkspace
-      v-if="currentCid"
+      v-else-if="auth.loaded && currentCid"
       :cid="currentCid"
       embedded-in-tab
       @change="onChangeChannel"
       @load-error="onWorkspaceLoadError"
     />
 
-    <!-- 无默认频道：加载中 / 加载失败（可重试）/ 平台管理员视角 / 普通用户引导 -->
+    <!-- 无默认频道：加载中 / 加载失败（可重试）/ 普通用户引导 -->
     <div v-else class="state">
-      <template v-if="picking">
+      <template v-if="!auth.loaded || picking">
         <p class="state-text">加载中…</p>
       </template>
       <template v-else-if="loadError">
         <p class="state-text">{{ loadError }}</p>
         <t-button variant="outline" @click="retryPick">重试</t-button>
-      </template>
-      <!-- 平台管理员（user_type=1）不隶属任何频道：平台巡视视角，而非「去加入频道」误导引导 -->
-      <template v-else-if="isPlatformAdmin">
-        <p class="state-text">平台管理员模式：不隶属任何频道，可巡视全部频道与平台数据</p>
-        <div class="admin-actions">
-          <t-button theme="primary" @click="router.push('/dashboard')">
-            <template #icon><DashboardIcon /></template> 运营看板
-          </t-button>
-          <t-button variant="outline" @click="router.push('/discover')">
-            <template #icon><BrowseIcon /></template> 浏览全部频道
-          </t-button>
-        </div>
       </template>
       <template v-else>
         <p class="state-text">加入一个频道，开始使用频道工作台</p>
@@ -61,8 +54,8 @@
 <script setup lang="ts">
 import { computed, onActivated, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { BrowseIcon, DashboardIcon } from 'tdesign-icons-vue-next'
 import ChannelWorkspace from '@/components/ChannelWorkspace.vue'
+import PlatformConsole from '@/views/PlatformConsole.vue'
 import { communityApi } from '@/api/community'
 import { useAuthStore } from '@/stores/auth'
 import { tokenStore } from '@/api/http'
@@ -148,14 +141,16 @@ function onChangeChannel(id: number) {
   remember(id)
 }
 
+// 平台管理员（user_type=1）：不隶属任何频道，首页展示平台控制台而非频道工作台
+const isPlatformAdmin = computed(() => auth.user?.user_type === 1)
+
 onMounted(() => {
   auth.fetchMe()
-  pickDefault()
+  // 平台管理员不读频道记忆/我的频道，首页固定为平台控制台；
+  // 否则会被 localStorage 的 sdu_last_channel_id 带入会员帖子流工作台
+  if (!isPlatformAdmin.value) pickDefault()
   window.addEventListener('resize', onResize)
 })
-
-// 平台管理员（user_type=1）：不隶属任何频道，首页展示平台视角而非「加入频道」引导
-const isPlatformAdmin = computed(() => auth.user?.user_type === 1)
 
 // keep-alive 缓存本页（#37）：切账号后 onMounted 不再执行，会把上个账号的
 // 工作台/空态原样恢复（Admin 被缓存成「没加入频道」的元凶）。
@@ -171,7 +166,7 @@ onActivated(() => {
     picking.value = false
     loadError.value = ''
     bindPickUid()
-    pickDefault()
+    if (!isPlatformAdmin.value) pickDefault()
   }
 })
 // 首次挂载记录基准（在 pickDefault 之后，避免 onActivated 首次触发即重置）

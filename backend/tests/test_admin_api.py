@@ -88,6 +88,57 @@ def test_stats_overview(actx):
     assert data["top_communities"][0]["posts"] >= 1
 
 
+# ---------- 平台级频道/用户列表（平台控制台首页） ----------
+
+
+def test_admin_communities_lists_all_including_banned(actx):
+    """平台管理员可见全部频道（含被封），普通用户无权访问。"""
+    c, owner, normal, cid = actx["client"], actx["owner"], actx["normal"], actx["cid"]
+    # 普通用户无平台权限
+    assert c.get("/api/v1/admin/communities", headers=_auth(normal)).status_code == 403
+    # 平台管理员：能看到自己创建的这个频道
+    res = c.get("/api/v1/admin/communities", headers=_auth(owner))
+    assert res.status_code == 200, res.text
+    data = res.json()["data"]
+    assert data["total"] >= 1
+    ch = next(x for x in data["items"] if x["id"] == cid)
+    assert ch["member_count"] >= 1
+    assert ch["post_count"] >= 1
+    assert ch["status"] == 0
+    assert "owner_name" in ch
+    assert "active_members" in ch
+    # 封禁该频道后，平台列表仍应能看到它且 status=2（公开列表看不到）
+    r = c.put(f"/api/v1/communities/{cid}/status", json={"status": 2}, headers=_auth(owner))
+    assert r.status_code == 200, r.text
+    res = c.get("/api/v1/admin/communities?status=2", headers=_auth(owner))
+    data = res.json()["data"]
+    assert any(x["id"] == cid and x["status"] == 2 for x in data["items"])
+
+
+def test_admin_users_lists_all_and_filter(actx):
+    """平台管理员可见全部用户（含封禁/注销），普通用户无权，封禁后仍可见。"""
+    c, owner, normal, normal_uid = actx["client"], actx["owner"], actx["normal"], actx["normal_uid"]
+    assert c.get("/api/v1/admin/users", headers=_auth(normal)).status_code == 403
+    res = c.get("/api/v1/admin/users", headers=_auth(owner))
+    assert res.status_code == 200, res.text
+    data = res.json()["data"]
+    assert data["total"] >= 2
+    u = next(x for x in data["items"] if x["id"] == normal_uid)
+    assert u["status"] == 0
+    assert u["user_type"] == 0
+    assert "joined_communities" in u
+    # 封禁该普通用户
+    r = c.put(f"/api/v1/admin/users/{normal_uid}/status", json={"status": 1}, headers=_auth(owner))
+    assert r.status_code == 200, r.text
+    res = c.get("/api/v1/admin/users?status=1", headers=_auth(owner))
+    data = res.json()["data"]
+    assert any(x["id"] == normal_uid and x["status"] == 1 for x in data["items"])
+    # 搜索命中
+    res = c.get("/api/v1/admin/users?keyword=admnormal", headers=_auth(owner))
+    data = res.json()["data"]
+    assert any(x["id"] == normal_uid for x in data["items"])
+
+
 # ---------- 审核管理 ----------
 
 

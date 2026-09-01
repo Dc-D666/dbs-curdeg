@@ -12,6 +12,7 @@ from app.core.response import NotFoundError, ParamError
 from app.models.comment import Comment
 from app.models.community import Community
 from app.models.like import CommentLike, PostLike
+from app.models.member import Member
 from app.models.post import Post, POST_STATUS_BANNED
 from app.models.review import CONTENT_POST, REVIEW_MANUAL, REVIEW_PASSED, REVIEW_REJECTED, Review
 from app.models.user import User
@@ -91,6 +92,125 @@ def overview_stats(db: Session) -> dict:
         "posts_today": count(Post, Post.status == 0, Post.created_at >= today_start),
         "posts_trend_7d": trend,
         "top_communities": top_communities,
+    }
+
+
+def list_communities(
+    db: Session, keyword: str | None, community_status: int | None, page: int, page_size: int
+) -> dict:
+    """平台级频道列表：含被封/关闭频道的全部频道 + 成员/帖数 + 归属者昵称。
+
+    面向平台管理员（user_type=1）的巡视与封禁解封，必须看到违规封禁(2)/关闭(1)的频道，
+    与公开列表（仅 status==0）不同。分页总数用独立 count（工程约定）。
+    """
+    stmt = select(Community)
+    count_stmt = select(func.count(Community.id))
+    if keyword:
+        kw = f"%{keyword.strip()}%"
+        stmt = stmt.where(Community.name.like(kw))
+        count_stmt = count_stmt.where(Community.name.like(kw))
+    if community_status is not None:
+        stmt = stmt.where(Community.status == community_status)
+        count_stmt = count_stmt.where(Community.status == community_status)
+    total = db.execute(count_stmt).scalar_one()
+    items = (
+        db.execute(stmt.order_by(Community.id.desc()).offset((page - 1) * page_size).limit(page_size))
+        .scalars()
+        .all()
+    )
+    # 批量预取归属者昵称，避免每个频道一次 db.get（N+1）
+    owner_ids = {c.owner_id for c in items}
+    owners = {
+        u.id: (u.nickname or u.username)
+        for u in db.execute(select(User).where(User.id.in_(owner_ids))).scalars().all()
+    } if owner_ids else {}
+    active_members = (
+        dict(
+            db.execute(
+                select(Member.user_id, func.count(Member.id))
+                .where(Member.community_id.in_([c.id for c in items]), Member.is_blocked == False)  # noqa: E712
+                .group_by(Member.user_id)
+            ).all()
+        )
+        if items else {}
+    )
+    return {
+        "items": [
+            {
+                "id": c.id,
+                "number": c.number,
+                "name": c.name,
+                "profile": c.profile,
+                "avatar_url": c.avatar_url,
+                "member_count": c.member_count,
+                "post_count": c.post_count,
+                "join_setting": c.join_setting,
+                "owner_id": c.owner_id,
+                "owner_name": owners.get(c.owner_id, ""),
+                "status": c.status,
+                "active_members": active_members.get(c.id, 0),
+                "created_at": str(c.created_at),
+            }
+            for c in items
+        ],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }
+
+
+def list_users(
+    db: Session, keyword: str | None, user_status: int | None, page: int, page_size: int
+) -> dict:
+    """平台级用户列表：全部用户（含封禁/注销）+ 账号状态 + 加入频道数。
+
+    从平台管理员视角巡视用户与封禁/解封，必须能看到被禁用户（users.get 公开接口只返回正常用户）。
+    每用户加入频道数做聚合查询，避免 N+1。
+    """
+    stmt = select(User)
+    count_stmt = select(func.count(User.id))
+    if keyword:
+        kw = f"%{keyword.strip()}%"
+        cond = (User.username.like(kw)) | (User.nickname.like(kw)) | (User.email.like(kw))
+        stmt = stmt.where(cond)
+        count_stmt = count_stmt.where(cond)
+    if user_status is not None:
+        stmt = stmt.where(User.status == user_status)
+        count_stmt = count_stmt.where(User.status == user_status)
+    total = db.execute(count_stmt).scalar_one()
+    items = (
+        db.execute(stmt.order_by(User.id.desc()).offset((page - 1) * page_size).limit(page_size))
+        .scalars()
+        .all()
+    )
+    joined = (
+        dict(
+            db.execute(
+                select(Member.user_id, func.count(Member.id))
+                .where(Member.user_id.in_([u.id for u in items]))
+                .group_by(Member.user_id)
+            ).all()
+        )
+        if items else {}
+    )
+    return {
+        "items": [
+            {
+                "id": u.id,
+                "username": u.username,
+                "nickname": u.nickname,
+                "avatar_url": u.avatar_url,
+                "email": u.email,
+                "status": u.status,
+                "user_type": u.user_type,
+                "joined_communities": joined.get(u.id, 0),
+                "created_at": str(u.created_at),
+            }
+            for u in items
+        ],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
     }
 
 

@@ -55,6 +55,32 @@ def admin_user_status(
     return ok(data={"id": user.id, "status": user.status}, message="账号状态已更新")
 
 
+@router.get("/communities")
+def admin_communities(
+    keyword: str | None = Query(None, max_length=64),
+    status: int | None = Query(None, ge=0, le=2),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=50),
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """平台级频道列表：全部频道（含封禁/关闭）+ 成员/帖数 + 归属者，供巡视与封禁解封。"""
+    return ok(data=admin_service.list_communities(db, keyword, status, page, page_size))
+
+
+@router.get("/users")
+def admin_users(
+    keyword: str | None = Query(None, max_length=64),
+    status: int | None = Query(None, ge=0, le=2),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=50),
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """平台级用户列表：全部用户（含封禁/注销）+ 账号状态 + 加入频道数，供封禁/解封。"""
+    return ok(data=admin_service.list_users(db, keyword, status, page, page_size))
+
+
 @router.get("/reviews")
 def admin_reviews(
     status: int | None = Query(None, ge=0, le=3),
