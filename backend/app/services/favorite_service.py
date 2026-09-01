@@ -11,6 +11,7 @@ from app.core.response import NotFoundError, ParamError
 from app.models.favorite import Favorite
 from app.models.post import Post, POST_STATUS_NORMAL
 from app.models.user import User
+from app.services import heat_service
 
 
 def favorite(db: Session, user: User, post_id: int, group_name: str = "默认") -> dict:
@@ -36,6 +37,9 @@ def favorite(db: Session, user: User, post_id: int, group_name: str = "默认") 
     except IntegrityError:
         db.rollback()  # 并发重复收藏：唯一约束兜底，不重复计数
     db.refresh(post)
+    # 收藏现在计入热分，得同步 bump；否则要等 cache_ttl 过期才反映到 feed，
+    # 而点赞/评论是立即生效的——同一类动作不该两种时效。
+    heat_service.bump(db, post, post.community_id)
     return {"favorited": True, "count": post.favorite_count}
 
 
@@ -57,6 +61,7 @@ def unfavorite(db: Session, user: User, post_id: int) -> dict:
     )
     db.commit()
     db.refresh(post)
+    heat_service.bump(db, post, post.community_id)  # 取消收藏同样要同步热分
     return {"favorited": False, "count": post.favorite_count}
 
 

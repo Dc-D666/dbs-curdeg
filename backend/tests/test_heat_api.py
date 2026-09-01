@@ -184,3 +184,43 @@ def test_global_hot_feed_works(ctx):
     res = client.get("/api/v1/feed?sort=hot&page_size=20")
     assert res.status_code == 200, res.text
     assert res.json()["data"]["items"]  # 全站热度流有数据
+
+
+def test_favorite_counts_in_heat_score(ctx):
+    """收藏必须计入热分（weight_favorite=3）。
+
+    A 帖 1 赞 → 1*1=1；B 帖 1 收藏 → 1*3=3，B 应在前。
+    回归防护：旧版 hot_score 把 favorite_count 写死 0，B 得分恒为 0，
+    这条会退化成 A 在前。先清缓存再读，避开旧 zset 里残留的零分条目。
+    """
+    client, owner, normal, cid, bid = ctx["client"], ctx["owner"], ctx["normal"], ctx["cid"], ctx["bid"]
+    pa = _create_post(client, owner, cid, "A 帖", bid)
+    pb = _create_post(client, owner, cid, "B 帖", bid)
+    client.post("/api/v1/likes", json={"post_id": pa}, headers=_auth(normal))
+    fav = client.post(f"/api/v1/posts/{pb}/favorite", json={}, headers=_auth(normal))
+    assert fav.status_code == 200, fav.text
+    assert fav.json()["data"]["count"] == 1  # 计数确实落到了 posts.favorite_count
+
+    _clean_redis(cid)
+    ids = _hot_ids(client, cid)
+    assert ids.index(pb) < ids.index(pa)
+
+
+def test_unfavorite_syncs_heat(ctx):
+    """取消收藏后热分要回落（bump 同步，不等 TTL）。"""
+    client, owner, normal, cid, bid = ctx["client"], ctx["owner"], ctx["normal"], ctx["cid"], ctx["bid"]
+    pa = _create_post(client, owner, cid, "A 帖", bid)
+    pb = _create_post(client, owner, cid, "B 帖", bid)
+    client.post("/api/v1/likes", json={"post_id": pa}, headers=_auth(normal))
+    client.post(f"/api/v1/posts/{pb}/favorite", json={}, headers=_auth(normal))
+    _clean_redis(cid)
+    ids = _hot_ids(client, cid)
+    assert ids.index(pb) < ids.index(pa)
+
+    # 取消收藏：不重建缓存，靠 bump 立即生效
+    un = client.delete(f"/api/v1/posts/{pb}/favorite", headers=_auth(normal))
+    assert un.status_code == 200, un.text
+    assert un.json()["data"]["count"] == 0
+    ids = _hot_ids(client, cid)
+    assert ids.index(pa) < ids.index(pb)  # B 回到 0 分，退到 A 后面
+

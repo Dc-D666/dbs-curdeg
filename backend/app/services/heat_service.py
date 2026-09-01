@@ -10,8 +10,11 @@
   读取时惰性重建（TTL=cache_ttl），点赞/评论/发帖时增量更新单帖热分（zset 不存在则跳过）
 - 分页：读取 zset 全量有序 id → SQL IN 取回 → 按 zset 顺序排列 → 页码式游标
   （与 latest 的 id 游标格式不同但互不可见，前端仅透传字符串）
-- 注意：favorites 表尚未实现（阶段 3 遗漏），weight_favorite 配置位保留，
-  实际计算时 favorite 数恒为 0（注释标记接入点）。
+- 收藏计数：posts.favorite_count 由 favorite_service 用 SQL 原子自增维护；
+  favorites 上的 trg_favorites_ai/ad 只往 counter_audit 写台账，不动计数列，
+  所以不会双加。逐帖与 favorites 实数零差异，直接取列值即可。
+  （旧版这里写死 favorite_count = 0，注释称「favorites 表尚未实现」，
+  但表与计数列都在、且有 3,011 行真实收藏，weight_favorite=3 因而已生效。）
 """
 import math
 import time
@@ -126,11 +129,10 @@ def hot_score(post: Post, s: FeedStrategy, now: datetime | None = None) -> float
     now = now or datetime.now()
     age_hours = max(0.0, (now - post.created_at).total_seconds() / 3600)
     decay = math.exp(-age_hours / max(1, s.decay_hours))
-    favorite_count = 0  # favorites 表未实现（阶段 3 遗漏），接入点见模块 docstring
     score = (
         post.like_count * max(0, s.weight_like)
         + post.comment_count * max(0, s.weight_comment)
-        + favorite_count * max(0, s.weight_favorite)
+        + post.favorite_count * max(0, s.weight_favorite)
     ) * decay
     if post.is_top:
         score += max(0, s.top_weight)
