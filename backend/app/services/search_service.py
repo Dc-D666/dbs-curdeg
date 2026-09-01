@@ -117,18 +117,25 @@ def hot_keywords(db: Session, limit: int = HOT_LIMIT) -> list[dict]:
 
 def _fulltext_ids(db: Session, q: str, community_id: int | None) -> list[int]:
     """FULLTEXT MATCH...AGAINST（ngram 解析器）；无索引（测试库）时静默降级。"""
-    # 08-29 垂直拆分后正文在 post_contents：标题/正文两路 FULLTEXT UNION
+    # 08-29 垂直拆分后正文在 post_contents：标题/正文两路 FULLTEXT UNION。
+    # 频道过滤：posts 有 community_id 直接加条件；post_contents 无该列，
+    # 用子查询限定所属频道（否则整条 FULLTEXT 报错被 except 吞掉，频道内搜索退化）。
     sql = (
         "SELECT id FROM posts "
-        "WHERE MATCH(title) AGAINST (:q IN NATURAL LANGUAGE MODE) AND status = 0 "
-        "UNION "
-        "SELECT post_id FROM post_contents "
-        "WHERE MATCH(source_markdown) AGAINST (:q IN NATURAL LANGUAGE MODE)"
+        "WHERE MATCH(title) AGAINST (:q IN NATURAL LANGUAGE MODE) AND status = 0"
     )
     params: dict = {"q": q}
     if community_id is not None:
         sql += " AND community_id = :cid"
         params["cid"] = community_id
+    sql += (
+        " UNION "
+        "SELECT post_id FROM post_contents "
+        "WHERE MATCH(source_markdown) AGAINST (:q IN NATURAL LANGUAGE MODE)"
+    )
+    if community_id is not None:
+        sql += " AND post_id IN (SELECT id FROM posts WHERE community_id = :cid2)"
+        params["cid2"] = community_id
     sql += " ORDER BY id DESC LIMIT :limit"
     params["limit"] = _MATCH_MAX
     try:

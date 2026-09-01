@@ -118,8 +118,10 @@ function retryLoad() {
 .feed-list {
   display: grid;
   grid-template-columns: 1fr;
-  /* 卡片按内容自适应高度：双列时不同卡片不再被拉伸成等高 */
+  /* 卡片按内容自适应高度 + 自动补位：双列时短卡片的空隙由后续卡片回填，
+     形成真正的瀑布流，而非强制每行等高 */
   align-items: start;
+  grid-auto-flow: dense;
   gap: var(--sp-3);
 }
 /* 桌面：双列帖子流 */

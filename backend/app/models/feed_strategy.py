@@ -6,7 +6,7 @@
 """
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, Integer, func
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -20,7 +20,10 @@ class FeedStrategy(Base):
     __tablename__ = "feed_strategies"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    community_id: Mapped[int] = mapped_column(BigInteger, nullable=False, unique=True, index=True)
+    community_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("communities.id", ondelete="CASCADE"),
+        nullable=False, unique=True, index=True,
+    )
     sort_rule: Mapped[int] = mapped_column(Integer, default=SORT_HOT)  # 0最新 1热度 2精华优先
     weight_like: Mapped[int] = mapped_column(Integer, default=1)
     weight_comment: Mapped[int] = mapped_column(Integer, default=2)

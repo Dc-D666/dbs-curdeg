@@ -2,7 +2,6 @@
   <main class="console">
     <header class="console-header">
       <h1 class="console-title">平台控制台</h1>
-      <span class="console-sub">平台级视角：巡视全部频道与用户，执行封禁/解封等系统级操作</span>
     </header>
 
     <!-- 全局统计概览（reuse /admin/stats） -->
@@ -132,6 +131,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { adminApi, type AdminCommunityItem, type AdminUserItem } from '@/api/admin'
 import UserAvatar from '@/components/UserAvatar.vue'
 import ErrorState from '@/components/ErrorState.vue'
@@ -143,6 +143,7 @@ import { errMessage } from '@/utils/error'
 
 defineOptions({ name: 'PlatformConsole' })
 
+const router = useRouter()
 const tab = ref<'channels' | 'users'>('channels')
 
 // ---------- 全局统计 ----------
@@ -189,6 +190,11 @@ async function loadChannels(page: number, append = false) {
 }
 function onChSearch() {
   loadChannels(1)
+}
+
+/** 查看频道数据与内容：以平台管理员巡视视角进入频道详情（可看帖/成员/版块）。 */
+function viewChannel(c: ChRow) {
+  router.push(`/c/${c.id}`)
 }
 
 // 频道列表滚动到底自动加载下一页
@@ -408,6 +414,8 @@ onMounted(async () => {
 .col-op {
   display: flex;
   justify-content: flex-end;
+  gap: 4px;
+  flex-wrap: wrap;
 }
 .op-disabled {
   color: var(--text-3);

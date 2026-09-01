@@ -5,7 +5,7 @@
 """
 from datetime import datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from app.core.response import NotFoundError, ParamError, PermissionError_
@@ -76,7 +76,18 @@ def list_reports(db: Session, status: int | None, page: int, page_size: int) -> 
     return {
         "items": _reports_out(db, rows),
         "total": total, "page": page, "page_size": page_size,
+        # 待处理举报数：统一读模型 v_pending_reports（status IN (0,1)），
+        # 供管理端概览"还有多少没处理"；视图缺失时回退 0。
+        "pending_count": _pending_count(db),
     }
+
+
+def _pending_count(db: Session) -> int:
+    """v_pending_reports 视图统计待处理举报数（视图缺失时回退 0）。"""
+    try:
+        return db.execute(text("SELECT COUNT(*) FROM v_pending_reports")).scalar_one()
+    except Exception:
+        return 0
 
 
 def list_my_reports(db: Session, reporter_id: int, page: int, page_size: int) -> dict:

@@ -10,7 +10,7 @@ import csv
 import io
 from datetime import date, datetime, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from app.models.ai_call_log import AiCallLog
@@ -131,7 +131,23 @@ def dashboard_trend(db: Session, days: int = 7) -> dict:
         "violations": sum(s["violations"] for s in stats),
         "ai_calls": sum(s["ai_calls"] for s in stats),
     }
-    return {"days": days, "items": stats, "summary": summary}
+    # 数据一致性探针：v_community_overview 对比缓存计数与源表实数，
+    # 不一致即存在漂移（对账口径，支撑 sp_reconcile_counters 的必要性）
+    return {"days": days, "items": stats, "summary": summary, "reconcile": _overview_drift(db)}
+
+
+def _overview_drift(db: Session) -> dict:
+    """v_community_overview 一致性探针：返回漂移频道数（视图缺失时 -1）。"""
+    try:
+        drift = db.execute(text(
+            "SELECT COUNT(*) FROM v_community_overview "
+            "WHERE member_count <> actual_members OR post_count <> actual_posts"
+        )).scalar_one()
+        total = db.execute(text("SELECT COUNT(*) FROM v_community_overview")).scalar_one()
+        return {"community_total": total, "community_drift": drift}
+    except Exception:
+        # 视图未创建（如测试库 create_all）→ 无法校验，标记为未知
+        return {"community_total": -1, "community_drift": -1}
 
 
 def export_stats(db: Session, days: int = 7) -> str:

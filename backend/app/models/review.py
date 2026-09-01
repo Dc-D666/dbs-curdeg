@@ -33,7 +33,9 @@ class Review(Base):
     violation_detail: Mapped[str] = mapped_column(String(255), default="")  # 违规详情
     review_method: Mapped[int] = mapped_column(Integer, default=0)  # 0AI快审 1AI复审 2人工审核
     appeal_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # 申诉时间
-    reviewer_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)   # 人工审核人
+    reviewer_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )   # 人工审核人
     result: Mapped[str] = mapped_column(String(255), default="")   # 处理结果
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

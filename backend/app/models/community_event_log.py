@@ -31,6 +31,8 @@ class CommunityEventLog(Base):
     community_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("communities.id", ondelete="CASCADE"), nullable=False
     )
-    user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, index=True)
+    user_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     event: Mapped[str] = mapped_column(String(16), nullable=False)  # join/leave/visit
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
