@@ -67,6 +67,7 @@ export interface CommentItem {
   reply_to_user_id: number | null
   content: string
   like_count: number
+  reply_count: number
   status: number
   created_at: string
   author_nickname: string

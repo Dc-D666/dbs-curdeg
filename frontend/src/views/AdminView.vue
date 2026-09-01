@@ -866,17 +866,24 @@ async function onSaveBoard() {
   }
 }
 
-/** 板块排序：上移/下移（通过调整相邻板块的 sort 实现）。 */
+/** 板块排序：上移/下移（按当前展示顺序重新编号 sort，避免同值/间隔导致交换无效）。 */
 async function onMoveBoard(b: Community['boards'][number], dir: 'up' | 'down') {
   const idx = boards.value.findIndex((x) => x.id === b.id)
-  const target = dir === 'up' ? boards.value[idx - 1] : boards.value[idx + 1]
-  if (!target) return
-  // 交换两个板块的 sort 值
-  const bSort = b.sort
+  const targetIdx = dir === 'up' ? idx - 1 : idx + 1
+  if (targetIdx < 0 || targetIdx >= boards.value.length) return
+  // 本地重排数组，得到新顺序
+  const next = [...boards.value]
+  const tmp = next[idx]
+  next[idx] = next[targetIdx]
+  next[targetIdx] = tmp
+  // 按新顺序重新编号 sort（0,1,2,...），保证严格递增、无重复
   boardSaving.value = true
   try {
-    await communityApi.updateBoard(cid, b.id, { sort: target.sort })
-    await communityApi.updateBoard(cid, target.id, { sort: bSort })
+    for (let i = 0; i < next.length; i++) {
+      if (next[i].sort !== i) {
+        await communityApi.updateBoard(cid, next[i].id, { sort: i })
+      }
+    }
     await loadBoards()
     toast('排序已更新', 'success')
   } catch (e) {

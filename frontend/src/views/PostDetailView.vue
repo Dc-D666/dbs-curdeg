@@ -35,25 +35,28 @@
               <span class="crumb-cur">{{ post.board_name }}</span>
             </span>
             <span>{{ formatTime(post.created_at) }}</span>
+            <span class="post-meta-sep">·</span>
+            <span>{{ post.view_count }} 浏览</span>
           </div>
         </div>
 
         <div class="post-body">
+          <!-- 流式渲染：所有段为 inline 元素，样式片段不拆行；仅文本自带 \n 才换行 -->
           <template v-for="(seg, i) in richSegments" :key="i">
-            <!-- 文本分片（含样式） -->
-            <p v-if="seg.type === 1 && seg.text" class="post-text" :style="segStyle(seg.style)">
+            <!-- 文本分片（含样式）：pre-line 保留 \n，样式段与相邻段同行 -->
+            <span v-if="seg.type === 1 && seg.text" class="post-text" :style="segStyle(seg.style)">
               <template v-for="(piece, j) in splitMarkdown(seg.text)" :key="j">
                 <code v-if="piece.code" class="post-code">{{ piece.text }}</code>
                 <span v-else :style="piece.style">{{ piece.text }}</span>
               </template>
-            </p>
+            </span>
             <!-- @提及 -->
             <span v-else-if="seg.type === 2 && seg.at_user" class="post-at">
               <router-link :to="`/users/${seg.at_user.id}`">@{{ seg.at_user.nick }}</router-link>
             </span>
-            <!-- 链接卡片 -->
+            <!-- 链接：若是图片 URL 则跳过（图片已在下方栅格展示，避免重复显示长链接） -->
             <a
-              v-else-if="seg.type === 3 && seg.url"
+              v-else-if="seg.type === 3 && seg.url && !isImageUrl(seg.url)"
               :href="seg.url"
               target="_blank"
               rel="noopener noreferrer"
@@ -80,12 +83,12 @@
           <t-button variant="outline" :class="{ 't-active': post.is_favorited }" @click="toggleFavorite">
             {{ post.is_favorited ? '已收藏' : '收藏' }} {{ post.favorite_count }}
           </t-button>
-          <t-button variant="outline" :class="{ 't-active': post.is_followed }" @click="toggleFollow">
-            {{ post.is_followed ? '已关注' : '关注频道' }}
+          <!-- 加入频道 = 关注频道：未加入时显示蓝色加入按钮，已加入不显示 -->
+          <t-button v-if="!post.is_member" theme="primary" :loading="joining" @click="onJoinCommunity">
+            加入频道
           </t-button>
           <t-button variant="outline" @click="sharePost">分享{{ post.share_count ? ' ' + post.share_count : '' }}</t-button>
           <t-button variant="outline" theme="danger" @click="openReport">举报</t-button>
-          <span class="action-note">{{ post.comment_count }} 评论 · {{ post.view_count }} 浏览</span>
         </div>
 
         <div class="post-extra">
@@ -120,7 +123,7 @@
       </section>
 
       <section class="panel comment-panel">
-        <h3 class="panel-title">评论</h3>
+        <h3 class="panel-title">评论（{{ commentTotal }}）</h3>
 
         <div class="comment-input-block">
           <div class="comment-input-row">
@@ -152,9 +155,6 @@
                 {{ c.is_liked ? '已赞' : '赞' }} {{ c.like_count }}
               </t-button>
               <t-button variant="text" size="small" @click="openReply(c)">回复</t-button>
-              <t-button variant="text" size="small" @click="toggleReplies(c)">
-                {{ replyMap.get(c.id)?.expanded ? '收起' : `楼中楼${replyMap.get(c.id)?.total ? ' ' + replyMap.get(c.id)?.total : ''}` }}
-              </t-button>
             </div>
 
             <!-- 行内回复框：在对应评论下方就地展开，不打断阅读脉络 -->
@@ -172,7 +172,8 @@
               </div>
             </div>
 
-            <div v-if="replyMap.get(c.id)?.expanded" class="replies">
+            <!-- 楼中楼：自动展开前 5 条；更多时提供「展开全部回复」 -->
+            <div v-if="(replyMap.get(c.id)?.items.length ?? 0)" class="replies">
               <div v-for="r in replyMap.get(c.id)?.items ?? []" :key="r.id" class="reply-item" :class="{ 'flash-highlight': flashId === r.id }">
                 <span class="reply-author">{{ r.author_nickname }}</span>
                 <span v-if="r.reply_to_nickname" class="reply-to">回复 {{ r.reply_to_nickname }}</span>
@@ -187,8 +188,9 @@
                 v-if="(replyMap.get(c.id)?.items.length ?? 0) < (replyMap.get(c.id)?.total ?? 0)"
                 variant="text"
                 size="small"
-                @click="loadMoreReplies(c)"
-              >加载更多回复</t-button>
+                :loading="replyMap.get(c.id)?.loading"
+                @click="loadAllReplies(c)"
+              >展开全部回复</t-button>
             </div>
           </li>
         </ul>
@@ -362,7 +364,6 @@ interface ReplyState {
   page: number
   total: number
   loading: boolean
-  expanded: boolean
 }
 const replyMap = ref(new Map<number, ReplyState>())
 
@@ -406,6 +407,13 @@ function splitMarkdown(text: string): Array<{ text: string; code?: boolean; styl
   }
   if (last < text.length) parts.push({ text: text.slice(last), style: {} })
   return parts
+}
+
+/** 判断链接是否为图片（QQ 图床 / 常见图片扩展名）：是则不当作文本链接展示。 */
+function isImageUrl(url: string): boolean {
+  const lower = url.toLowerCase().split('?')[0]
+  if (/\.(png|jpe?g|gif|webp|bmp|svg|avif)(\?|$)/i.test(lower)) return true
+  return /(channel\.qpic\.cn|qpic\.cn|mmbiz\.qpic\.cn|thirdqq\.qlogo\.cn|p\.qpic\.cn)/i.test(url)
 }
 const canManage = computed(() => {
   const p = post.value
@@ -469,6 +477,10 @@ async function loadComments(page: number) {
     comments.value = page === 1 ? data.items : [...comments.value, ...data.items]
     commentPage.value = page
     commentTotal.value = data.total
+    // 楼中楼：自动展开前 5 条回复（无需点「楼中楼」按钮）
+    for (const c of data.items) {
+      if (c.reply_count > 0) loadRepliesFirst5(c)
+    }
   } catch (e) {
     toast(e instanceof Error ? e.message : '加载评论失败', 'error')
   } finally {
@@ -509,38 +521,21 @@ async function toggleLike() {
   }
 }
 
-async function toggleFollow() {
-  if (!post.value || !requireLogin()) return
-  const p = post.value
-  const key = `follow:${p.community_id}`
-  if (interaction.isPending(key)) return
-  const wasFollowed = p.is_followed
+/** 加入频道（加入 = 关注）：未加入时在帖子操作栏提供蓝色入口。 */
+const joining = ref(false)
+async function onJoinCommunity() {
+  if (!post.value) return
+  if (!requireLogin()) return
+  if (joining.value) return
+  joining.value = true
   try {
-    await interaction.run(key, {
-      apply: () => {
-        p.is_followed = !wasFollowed
-      },
-      rollback: () => {
-        p.is_followed = wasFollowed
-      },
-      request: () => (wasFollowed ? postApi.unfollow(p.community_id) : postApi.follow(p.community_id)),
-      onSuccess: (r) => {
-        p.is_followed = r.followed
-        // 取消关注：提供 5s 撤销（立即执行型）
-        if (wasFollowed) {
-          undo.notify('已取消关注频道', async () => {
-            try {
-              const rr = await postApi.follow(p.community_id)
-              p.is_followed = rr.followed
-            } catch (e) {
-              toast(e instanceof Error ? e.message : '恢复关注失败', 'error')
-            }
-          })
-        }
-      },
-    })
+    await communityApi.join(post.value.community_id)
+    post.value.is_member = true
+    toast('已加入频道，会收到该频道的新动态', 'success')
   } catch (e) {
-    toast(e instanceof Error ? e.message : '操作失败', 'error')
+    toast(e instanceof Error ? e.message : '加入失败', 'error')
+  } finally {
+    joining.value = false
   }
 }
 
@@ -720,7 +715,6 @@ async function submitReply() {
       const st = ensureReplyState(c)
       st.items = [...st.items, item]
       st.total += 1
-      st.expanded = true // 展开楼中楼让新回复可见
       flashItem(item.id)
     }
     replyInput.value = ''
@@ -762,42 +756,44 @@ function closeReply() {
 function ensureReplyState(c: CommentItem): ReplyState {
   let st = replyMap.value.get(c.id)
   if (!st) {
-    st = { items: [], page: 0, total: 0, loading: false, expanded: false }
+    st = { items: [], page: 0, total: 0, loading: false }
     replyMap.value.set(c.id, st)
   }
   return st
 }
 
-async function refreshReplies(c: CommentItem) {
+/** 楼中楼自动展开：拉取前 5 条回复（已加载过则跳过）。 */
+async function loadRepliesFirst5(c: CommentItem) {
   const st = ensureReplyState(c)
-  const data = await postApi.replies(c.id, 1)
-  st.items = data.items
-  st.page = 1
-  st.total = data.total
-}
-
-async function toggleReplies(c: CommentItem) {
-  const st = ensureReplyState(c)
-  st.expanded = !st.expanded
-  if (st.expanded && st.items.length === 0) {
-    st.loading = true
-    try {
-      await refreshReplies(c)
-    } finally {
-      st.loading = false
-    }
+  if (st.items.length > 0 || st.loading) return
+  st.loading = true
+  try {
+    const data = await postApi.replies(c.id, 1, 5)
+    st.items = data.items
+    st.page = 1
+    st.total = data.total
+  } catch {
+    /* 首屏 5 条加载失败静默，不影响评论主体 */
+  } finally {
+    st.loading = false
   }
 }
 
-async function loadMoreReplies(c: CommentItem) {
+/** 展开全部回复：从第 2 页起续拉，直到拉完剩余所有回复。 */
+async function loadAllReplies(c: CommentItem) {
   const st = ensureReplyState(c)
   if (st.loading) return
   st.loading = true
   try {
-    const data = await postApi.replies(c.id, st.page + 1)
-    st.items = [...st.items, ...data.items]
-    st.page += 1
-    st.total = data.total
+    let page = st.page + 1
+    for (;; page++) {
+      const data = await postApi.replies(c.id, page, 20)
+      const seen = new Set(st.items.map((r) => r.id))
+      st.items = [...st.items, ...data.items.filter((r) => !seen.has(r.id))]
+      st.page = page
+      st.total = data.total
+      if (st.items.length >= st.total || data.items.length === 0) break
+    }
   } catch (e) {
     toast(e instanceof Error ? e.message : '加载失败', 'error')
   } finally {
@@ -1026,12 +1022,12 @@ async function onDeletePost() {
 .post-body {
   margin-top: var(--sp-4);
 }
+/* 文本段为 inline：样式片段同行显示，仅文本自带 \n 才换行（pre-line） */
 .post-text {
-  margin: 0 0 var(--sp-2);
   font-size: 15px;
   line-height: 1.7;
   letter-spacing: 0.01em;
-  white-space: pre-wrap;
+  white-space: pre-line;
   word-break: break-word;
 }
 .post-link {

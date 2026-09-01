@@ -116,9 +116,15 @@ function retryLoad() {
 
 <style scoped>
 .feed-list {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 1fr;
   gap: var(--sp-3);
+}
+/* 桌面：双列帖子流 */
+@media (min-width: 1024px) {
+  .feed-list {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 .load-more {
   margin-top: var(--sp-3);

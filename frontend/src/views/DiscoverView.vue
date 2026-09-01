@@ -85,19 +85,9 @@
       >{{ searchLoading ? '搜索中…' : '加载更多结果' }}</t-button>
     </div>
 
-    <!-- 双 Tab 帖子流：已加入的最新 / 全站热门 -->
-    <div v-else>
-      <t-tabs v-model="activeTab" class="feed-tabs" lazy>
-        <t-tab-panel value="mine" label="已加入的最新">
-          <template v-if="tokenStore.access">
-            <FeedStreamList view="joined" empty-text="你还没有加入频道，从热门榜挑一个吧" />
-          </template>
-          <EmptyState v-else text="登录后查看你加入频道的动态" action-text="去登录" to="/login" />
-        </t-tab-panel>
-        <t-tab-panel value="hot" label="全站热门">
-          <FeedStreamList view="hot" />
-        </t-tab-panel>
-      </t-tabs>
+    <!-- 全站热门帖子流（发现 = 全站热门） -->
+    <div v-else class="feed-stream">
+      <FeedStreamList view="hot" />
     </div>
 
     <!-- 创建频道弹层 -->
@@ -356,12 +346,9 @@ async function onCreate() {
   color: var(--brand);
 }
 
-/* 双 Tab 帖子流 */
-.feed-tabs {
+/* 全站热门帖子流 */
+.feed-stream {
   margin-top: var(--sp-2);
-}
-.feed-tabs :deep(.t-tabs__panel) {
-  padding: 0;
 }
 
 /* 搜索结果 */

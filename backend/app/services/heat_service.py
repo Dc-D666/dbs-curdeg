@@ -161,7 +161,13 @@ def rebuild_cache(db: Session, community_id: int | None = None) -> int:
 
 
 def get_hot_ids(db: Session, community_id: int | None = None, limit: int = ZSET_LIMIT) -> list[int]:
-    """按热分倒序的帖子 id 列表（缓存不存在时惰性重建）。"""
+    """按热分倒序的帖子 id 列表（缓存不存在时惰性重建）。
+
+    为打破「固定排行榜」的观感（长时间无新帖时每次刷新都一样），
+    在返回前对热分相近的帖子做随机打乱：热度仍是主导排序，
+    但同一热分段内（如大量 0 分帖、同赞数帖）的顺序每次刷新不同，
+    更像推荐流而非固定榜单。
+    """
     r = _redis()
     key = _zkey(community_id if community_id is not None else ALL_SCOPE)
     try:
@@ -170,10 +176,29 @@ def get_hot_ids(db: Session, community_id: int | None = None, limit: int = ZSET_
     except redis.RedisError:
         rebuild_cache(db, community_id)
     try:
-        members = r.zrevrange(key, 0, limit - 1)
+        members = r.zrevrange(key, 0, limit - 1, withscores=True)
     except redis.RedisError:
         return []
-    return [int(m) for m in members]
+    return _shuffle_score_bands(members)
+
+
+def _shuffle_score_bands(members: list[tuple[str, float]], ndigits: int = 0) -> list[int]:
+    """按热分四舍五入到 ndigits 位分组，段内随机打乱，保持整体热度降序。
+
+    例子：0 分帖全部落在同一段（最常见的「无互动帖」），每次刷新顺序不同；
+    热分明细差异明显（如 5 分 vs 1 分）的帖子保持相对顺序，热度可信。
+    """
+    import random
+
+    bands: dict[float, list[int]] = {}
+    for member, score in members:
+        bands.setdefault(round(float(score), ndigits), []).append(int(member))
+    result: list[int] = []
+    for band in sorted(bands.keys(), reverse=True):
+        chunk = bands[band]
+        random.shuffle(chunk)
+        result.extend(chunk)
+    return result
 
 
 def bump(db: Session, post: Post, community_id: int) -> None:

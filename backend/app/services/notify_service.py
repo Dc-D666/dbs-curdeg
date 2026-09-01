@@ -127,7 +127,20 @@ def notify(
         return None
     settings = user.notify_settings or {}
     setting_key = _TYPE_TO_SETTING.get(ntype, "system")
-    if not bool(settings.get(setting_key, True)):
+    # 频道级设置优先：用户在频道设置页「消息接收类型」的覆盖 > 全局开关
+    if community_id is not None:
+        row = db.execute(
+            select(CommunityNotifySetting).where(
+                CommunityNotifySetting.community_id == community_id,
+                CommunityNotifySetting.user_id == user_id,
+            )
+        ).scalar_one_or_none()
+        if row is not None:
+            if not bool(row.settings.get(setting_key, True)):
+                return None
+        elif not bool(settings.get(setting_key, True)):
+            return None
+    elif not bool(settings.get(setting_key, True)):
         return None
 
     n = Notification(

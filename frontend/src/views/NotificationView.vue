@@ -9,7 +9,6 @@
         <t-button variant="text" theme="primary" size="small" :disabled="!store.items.length" @click="onReadAll">
           全部已读
         </t-button>
-        <router-link to="/me/notification-settings" class="ntf-settings-link">设置</router-link>
       </div>
     </header>
 

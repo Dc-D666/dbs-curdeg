@@ -7,15 +7,22 @@
       <template v-if="isWide">
         <div class="ws-grid">
           <aside class="ws-left">
-            <!-- 发现：选中后在中间栏展示发现帖子流 -->
+            <!-- 发现 / 关注：在中间栏展示对应帖子流 -->
             <div class="ws-rail-title">导航</div>
             <nav class="ws-nav">
               <button
                 class="ws-nav-item"
-                :class="{ active: leftMode === 'discover' }"
-                @click="selectDiscover"
+                :class="{ active: leftMode === 'hot' }"
+                @click="selectDiscover('hot')"
               >
                 <BrowseIcon class="ws-nav-icon" />发现
+              </button>
+              <button
+                class="ws-nav-item"
+                :class="{ active: leftMode === 'joined' }"
+                @click="selectDiscover('joined')"
+              >
+                <StarIcon class="ws-nav-icon" />关注
               </button>
             </nav>
 
@@ -51,18 +58,12 @@
           </aside>
 
           <section class="ws-main">
-            <!-- 发现模式：中间栏显示发现帖子流（热门/已加入 + 搜索） -->
-            <template v-if="leftMode === 'discover'">
+            <!-- 发现/关注模式：中间栏显示对应帖子流（全站热门 / 已加入频道最新）+ 搜索 -->
+            <template v-if="leftMode === 'hot' || leftMode === 'joined'">
               <div class="ws-discover">
-                <div class="ws-discover-tabs">
-                  <t-radio-group v-model="discoverTab" variant="default-filled" size="small">
-                    <t-radio-button value="hot">全站热门</t-radio-button>
-                    <t-radio-button value="joined">已加入的最新</t-radio-button>
-                  </t-radio-group>
-                  <div class="ws-discover-search">
-                    <t-input v-model.trim="discoverQ" size="small" placeholder="搜索帖子…" clearable @enter="doDiscoverSearch" />
-                    <t-button size="small" variant="outline" :disabled="!discoverQ" @click="doDiscoverSearch">搜索</t-button>
-                  </div>
+                <div class="ws-discover-search">
+                  <t-input v-model.trim="discoverQ" size="small" placeholder="搜索帖子…" clearable @enter="doDiscoverSearch" />
+                  <t-button size="small" variant="outline" :disabled="!discoverQ" @click="doDiscoverSearch">搜索</t-button>
                 </div>
                 <!-- 搜索结果 -->
                 <div v-if="discoverSearching" class="ws-discover-results">
@@ -92,7 +93,7 @@
                 </div>
                 <!-- 帖子流 -->
                 <div v-else class="ws-discover-feed">
-                  <template v-if="discoverTab === 'joined'">
+                  <template v-if="leftMode === 'joined'">
                     <FeedStreamList v-if="tokenStore.access" view="joined" empty-text="你还没有加入频道，去发现频道吧" />
                     <EmptyState v-else text="登录后查看你加入频道的动态" action-text="去登录" to="/login" />
                   </template>
@@ -385,13 +386,14 @@ function switchChannel(id: number) {
   emit('change', id)
 }
 
-// ========== 左栏导航：发现 / 频道树 ==========
-// 'discover'：左栏选中「发现」，中间栏显示发现帖子流；'channel'：频道模式
-const leftMode = ref<'discover' | 'channel'>('channel')
+// ========== 左栏导航：发现(热门) / 关注(已加入) / 频道树 ==========
+// 'hot'：全站热门帖子流；'joined'：已加入频道的最新帖子流；'channel'：频道模式
+const leftMode = ref<'hot' | 'joined' | 'channel'>('hot')
 
-/** 选中「发现」：中间栏切换为发现帖子流。 */
-function selectDiscover() {
-  leftMode.value = 'discover'
+/** 选中「发现/关注」：中间栏切换为对应帖子流，并清掉搜索态。 */
+function selectDiscover(mode: 'hot' | 'joined') {
+  leftMode.value = mode
+  clearDiscoverSearch()
 }
 
 /** 选中某频道：切到频道模式（左栏展开其版块），并就地切换频道。 */
@@ -400,8 +402,7 @@ function selectChannel(id: number) {
   if (id !== props.cid) emit('change', id)
 }
 
-// ========== 发现帖子流（中间栏） ==========
-const discoverTab = ref<'hot' | 'joined'>('hot')
+// ========== 发现/关注帖子流（中间栏） ==========
 const discoverQ = ref('')
 const discoverSearching = ref(false)
 const discoverLoading = ref(false)
