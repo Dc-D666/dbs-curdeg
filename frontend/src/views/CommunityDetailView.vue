@@ -42,7 +42,10 @@
         </div>
         <p class="profile">{{ community.profile || '暂无简介' }}</p>
         <div class="meta">
-          <span>{{ community.member_count }} 成员</span>
+          <!-- 成员数即花名册入口：点击查看按身份组排列的成员列表 -->
+          <button type="button" class="meta-link" @click="rosterOpen = true">
+            {{ community.member_count }} 成员<ChevronRightIcon class="meta-link-icon" />
+          </button>
           <span>{{ community.boards.length }} 个版块</span>
           <span>#{{ community.number }}</span>
         </div>
@@ -287,8 +290,27 @@
             </section>
           </section>
 
-          <!-- 右栏：话题 + 今日热议 -->
+          <!-- 右栏：成员 + 话题 + 今日热议 -->
           <aside class="wb-right">
+            <div class="wb-panel">
+              <div class="wb-rail-title-row">
+                <div class="wb-rail-title">成员</div>
+                <t-button variant="text" size="small" @click="rosterOpen = true">
+                  查看全部 {{ community.member_count }} 人
+                </t-button>
+              </div>
+              <div v-if="rosterPreview.length" class="roster-preview">
+                <UserAvatar
+                  v-for="m in rosterPreview"
+                  :key="m.id"
+                  :name="m.user_nickname || m.nickname"
+                  :src="m.avatar_url"
+                  :size="32"
+                />
+              </div>
+              <p v-else class="wb-empty">暂无成员</p>
+            </div>
+
             <div class="wb-panel">
               <div class="wb-rail-title">话题</div>
               <div class="topic-toolbar">
@@ -345,19 +367,23 @@
     >
       <div class="topic-form">
         <t-input v-model="topicForm.name" placeholder="话题名称（不带 #）" maxlength="32" class="topic-input" />
-        <t-input v-model="topicForm.description" placeholder="话题描述（选填）" maxlength="255" class="topic-input" />
+        <t-input v-model="topicForm.description" placeholder="话题描述（选填）" maxlength="32" class="topic-input" />
         <t-textarea v-model="topicForm.rules" :autosize="{ minRows: 2, maxRows: 4 }" placeholder="话题规则（选填）" maxlength="500" />
       </div>
     </t-dialog>
+
+    <!-- 成员花名册：按身份组排列（头部成员数 / 宽屏右栏两个入口共用） -->
+    <MemberRoster v-model:visible="rosterOpen" :cid="cid" />
   </main>
 </template>
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeftIcon } from 'tdesign-icons-vue-next'
+import { ArrowLeftIcon, ChevronRightIcon } from 'tdesign-icons-vue-next'
 import { communityApi, type Community, type JoinRequestItem, type Member, type TopicItem } from '@/api/community'
 import { postApi, type PostItem } from '@/api/post'
+import MemberRoster from '@/components/MemberRoster.vue'
 import FeedCard from '@/components/FeedCard.vue'
 import QuickComposer from '@/components/QuickComposer.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
@@ -434,6 +460,20 @@ const boardForm = reactive({ name: '', description: '' })
 const boardCreating = ref(false)
 const membersOpen = ref(false)
 const members = ref<Member[]>([])
+
+// ---------- 成员花名册（公开，按身份组排列） ----------
+// 弹层开关：入口在头部「N 成员」与宽屏右栏「成员」面板
+const rosterOpen = ref(false)
+// 宽屏右栏头像预览（前 12 人，随频道加载）
+const rosterPreview = ref<Member[]>([])
+async function loadRosterPreview(id: number) {
+  try {
+    const data = await communityApi.members(id, 1, 12)
+    if (cid.value === id) rosterPreview.value = data.items
+  } catch {
+    /* 预览失败静默：花名册弹层内有错误态与重试 */
+  }
+}
 // 成员/待审分页：接口每页最多 50，大频道需续拉且总数用接口 total（#52）
 const membersPage = ref(0)
 const membersTotal = ref(0)
@@ -596,6 +636,7 @@ async function loadAll() {
   requestsTotal.value = 0
   membersOpen.value = false
   requestsOpen.value = false
+  rosterPreview.value = []
   ownerMsg.value = ''
   ownerMsgIsError.value = false
   loadError.value = ''
@@ -610,6 +651,8 @@ async function loadAll() {
     }
     loadTopics()
     loadHotPosts()
+    // 宽屏右栏成员预览：只拉首页 12 人（花名册弹层自己会重拉全量）
+    loadRosterPreview(id)
   } catch (e) {
     if (cid.value === id) {
       community.value = null
@@ -904,9 +947,29 @@ async function onEnsureAi() {
 .meta {
   margin-top: var(--sp-3);
   display: flex;
+  align-items: center;
   gap: var(--sp-4);
   font-size: var(--fs-caption);
   color: var(--text-3);
+}
+/* 成员数即花名册入口：与 meta 文案同色，仅 hover 提示可点 */
+.meta-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  border: none;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.meta-link:hover {
+  color: var(--brand);
+}
+.meta-link-icon {
+  width: 12px;
+  height: 12px;
 }
 .actions {
   margin-top: var(--sp-4);
@@ -1201,6 +1264,21 @@ async function onEnsureAi() {
   font-weight: 600;
   letter-spacing: 0.05em;
   margin: var(--sp-3) 0 var(--sp-2);
+}
+/* 右栏面板标题行：标题 + 右侧操作（成员「查看全部」） */
+.wb-rail-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.wb-rail-title-row .wb-rail-title {
+  margin-bottom: var(--sp-2);
+}
+/* 成员头像预览：横排堆叠 */
+.roster-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
 }
 .wb-rail-title:first-child {
   margin-top: 0;
