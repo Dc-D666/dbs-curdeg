@@ -7,7 +7,7 @@
       <h1 class="page-title">我的收藏</h1>
     </header>
 
-    <p v-if="loading && items.length === 0" class="state">加载中…</p>
+    <div v-if="loading && items.length === 0" class="state"><t-skeleton :row="3" animation="gradient" /></div>
     <ErrorState
       v-else-if="loadError && items.length === 0"
       :text="loadError"
@@ -19,13 +19,15 @@
       <li v-for="f in items" :key="f.favorite_id" class="item">
         <router-link v-if="f.post_status === 0" :to="`/p/${f.post_id}`" class="item-main">
           <span class="item-title">{{ f.post_title || `帖子 #${f.post_id}` }}</span>
-          <span class="item-time">{{ f.group_name }} · {{ (f.created_at || '').slice(0, 10) }}</span>
+          <span class="item-time"><StarIcon class="item-time-icon" /> {{ f.group_name }} · {{ (f.created_at || '').slice(0, 10) }}</span>
         </router-link>
         <div v-else class="item-main">
           <span class="item-title">{{ f.post_title || `帖子 #${f.post_id}` }}</span>
           <span class="item-time">内容不可见</span>
         </div>
-        <t-button variant="text" size="small" theme="danger" @click="remove(f)">取消收藏</t-button>
+        <t-button variant="text" size="small" theme="danger" @click="remove(f)">
+          <template #icon><DeleteIcon /></template> 取消收藏
+        </t-button>
       </li>
     </ul>
 
@@ -37,7 +39,7 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { ArrowLeftIcon } from 'tdesign-icons-vue-next'
+import { ArrowLeftIcon, DeleteIcon, StarIcon } from 'tdesign-icons-vue-next'
 import { postApi, type FavoriteItem } from '@/api/post'
 import EmptyState from '@/components/EmptyState.vue'
 import ErrorState from '@/components/ErrorState.vue'
@@ -139,6 +141,11 @@ onMounted(() => load(1))
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
+  transition: border-color 0.15s, box-shadow 0.2s;
+}
+.item:hover {
+  border-color: var(--brand);
+  box-shadow: var(--shadow-sm);
 }
 .item-main {
   flex: 1;
@@ -158,6 +165,13 @@ onMounted(() => load(1))
 .item-time {
   font-size: var(--fs-caption);
   color: var(--text-3);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.item-time-icon {
+  width: 12px;
+  height: 12px;
 }
 .load-more {
   margin-top: var(--sp-3);

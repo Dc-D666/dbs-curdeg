@@ -31,8 +31,8 @@
         </span>
         <div class="ntf-body">
           <div class="ntf-row1">
+            <t-tag v-if="isSystem(n)" theme="primary" variant="light" size="small" class="ntf-type">系统</t-tag>
             <span class="ntf-actor">{{ n.actor_nickname }}</span>
-            <span class="ntf-type">{{ typeLabel(n.type) }}</span>
             <span class="ntf-time">{{ timeAgo(n.created_at) }}</span>
           </div>
           <p class="ntf-title-text">{{ n.title }}</p>
@@ -91,6 +91,11 @@ const typeLabels: Record<string, string> = {
 
 function typeLabel(t: string) {
   return typeLabels[t] || t
+}
+
+/** 系统通知判定：/notifications 仅展示 system 类型，用标签强化识别。 */
+function isSystem(n: NotificationItem) {
+  return n.type === 'system'
 }
 
 function goto(n: NotificationItem) {
@@ -235,12 +240,7 @@ onMounted(() => {
   font-weight: 600;
 }
 .ntf-type {
-  font-size: var(--fs-caption);
-  color: var(--brand);
-  background: var(--brand-weak);
-  border-radius: 4px;
-  padding: 0 6px;
-  line-height: 1.6;
+  flex-shrink: 0;
 }
 .ntf-time {
   margin-left: auto;

@@ -31,7 +31,7 @@
       </div>
     </header>
 
-    <div v-if="loading" class="state">加载中…</div>
+    <div v-if="loading" class="state"><t-skeleton :row="5" animation="gradient" /></div>
     <div v-else-if="community">
       <template v-if="!isWide">
       <section class="panel head-panel">
@@ -979,6 +979,7 @@ async function onPlatformBan(ban: boolean) {
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
   padding: var(--sp-4);
+  box-shadow: var(--shadow-sm);
 }
 .head-panel .profile {
   margin: 0;

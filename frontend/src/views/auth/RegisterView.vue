@@ -2,13 +2,14 @@
   <main class="auth-page">
     <div class="auth-card">
       <!-- 登录/注册页是全屏无 tab 页，必须有返回站点的出口（#41） -->
-      <router-link to="/" class="auth-brand">SDUdiscord</router-link>
+      <router-link to="/" class="auth-brand">
+        <LogoGithubFilledIcon class="auth-brand-icon" /> SDUdiscord
+      </router-link>
       <h1 class="auth-title">注册</h1>
       <p class="auth-sub">创建 SDUdiscord 账号</p>
 
-      <form class="auth-form" @submit.prevent="onSubmit" novalidate>
-        <div class="field">
-          <label class="field-label">用户名</label>
+      <t-form class="auth-form" label-align="top" @submit.prevent="onSubmit" novalidate>
+        <t-form-item label="用户名">
           <t-input
             ref="usernameRef"
             v-model="form.username"
@@ -17,12 +18,10 @@
             autocomplete="username"
             clearable
           />
-          <!-- 字段级内联错误：与具体输入关联，不再共用底部一行（#43） -->
           <p v-if="errors.username" class="field-error">{{ errors.username }}</p>
-        </div>
+        </t-form-item>
 
-        <div class="field">
-          <label class="field-label">邮箱</label>
+        <t-form-item label="邮箱">
           <t-input
             ref="emailRef"
             v-model="form.email"
@@ -33,10 +32,9 @@
             clearable
           />
           <p v-if="errors.email" class="field-error">{{ errors.email }}</p>
-        </div>
+        </t-form-item>
 
-        <div class="field">
-          <span class="field-label">验证码</span>
+        <t-form-item label="验证码">
           <div class="code-row">
             <t-input
               ref="codeRef"
@@ -57,11 +55,9 @@
             </t-button>
           </div>
           <p v-if="errors.code" class="field-error">{{ errors.code }}</p>
-        </div>
+        </t-form-item>
 
-        <div class="field">
-          <label class="field-label">密码</label>
-          <!-- 显示密码开关（#42）：盲输长密码极易出错 -->
+        <t-form-item label="密码">
           <t-input
             ref="passwordRef"
             v-model="form.password"
@@ -77,7 +73,6 @@
               </button>
             </template>
           </t-input>
-          <!-- 强度提示（#42）：随输入实时变化 -->
           <div v-if="form.password" class="pwd-strength" aria-live="polite">
             <span class="pwd-strength-bars">
               <i v-for="i in 3" :key="i" class="pwd-strength-bar" :class="{ on: i <= strengthLevel }" />
@@ -85,10 +80,9 @@
             <span class="pwd-strength-text">{{ strengthText }}</span>
           </div>
           <p v-if="errors.password" class="field-error">{{ errors.password }}</p>
-        </div>
+        </t-form-item>
 
-        <div class="field">
-          <label class="field-label">确认密码</label>
+        <t-form-item label="确认密码">
           <t-input
             ref="confirmRef"
             v-model="form.confirm"
@@ -99,15 +93,14 @@
             clearable
           />
           <p v-if="errors.confirm" class="field-error">{{ errors.confirm }}</p>
-        </div>
+        </t-form-item>
 
-        <!-- 服务端/发送验证码等非字段错误仍集中展示 -->
         <p v-if="error" class="error">{{ error }}</p>
 
         <t-button theme="primary" size="large" type="submit" block :loading="loading">
           {{ loading ? '注册中…' : '注册' }}
         </t-button>
-      </form>
+      </t-form>
 
       <p class="auth-switch">
         已有账号？
@@ -120,6 +113,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { LogoGithubFilledIcon } from 'tdesign-icons-vue-next'
 import { request } from '@/api/http'
 import { useAuthStore, type TokenPair } from '@/stores/auth'
 
@@ -332,7 +326,9 @@ onUnmounted(() => {
   box-shadow: var(--td-shadow-2);
 }
 .auth-brand {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   margin-bottom: var(--sp-2);
   font-size: var(--fs-body);
   font-weight: 700;
@@ -341,6 +337,10 @@ onUnmounted(() => {
 }
 .auth-brand:hover {
   text-decoration: underline;
+}
+.auth-brand-icon {
+  width: 18px;
+  height: 18px;
 }
 .auth-title {
   margin: 0;
@@ -357,14 +357,8 @@ onUnmounted(() => {
   flex-direction: column;
   gap: var(--sp-4);
 }
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-}
-.field-label {
-  font-size: var(--fs-caption);
-  color: var(--td-text-color-secondary);
+.auth-form :deep(.t-form__item) {
+  margin-bottom: 0;
 }
 /* 字段级内联错误（#43） */
 .field-error {
@@ -375,6 +369,7 @@ onUnmounted(() => {
 .code-row {
   display: flex;
   gap: var(--sp-2);
+  width: 100%;
 }
 .code-input {
   flex: 1;

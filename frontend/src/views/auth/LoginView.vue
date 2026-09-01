@@ -2,13 +2,14 @@
   <main class="auth-page">
     <div class="auth-card">
       <!-- 登录/注册页是全屏无 tab 页，必须有返回站点的出口（#41） -->
-      <router-link to="/" class="auth-brand">SDUdiscord</router-link>
+      <router-link to="/" class="auth-brand">
+        <LogoGithubFilledIcon class="auth-brand-icon" /> SDUdiscord
+      </router-link>
       <h1 class="auth-title">登录</h1>
       <p class="auth-sub">使用用户名或邮箱登录 SDUdiscord</p>
 
-      <form class="auth-form" @submit.prevent="onSubmit">
-        <div class="field">
-          <label class="field-label">用户名 / 邮箱</label>
+      <t-form class="auth-form" label-align="top" @submit.prevent="onSubmit">
+        <t-form-item label="用户名 / 邮箱">
           <t-input
             v-model="form.account"
             size="large"
@@ -17,11 +18,9 @@
             clearable
             required
           />
-        </div>
+        </t-form-item>
 
-        <div class="field">
-          <label class="field-label">密码</label>
-          <!-- 显示密码开关：避免盲输错密码只能删掉重来（#42） -->
+        <t-form-item label="密码">
           <t-input
             v-model="form.password"
             size="large"
@@ -37,14 +36,14 @@
               </button>
             </template>
           </t-input>
-        </div>
+        </t-form-item>
 
         <p v-if="error" class="error">{{ error }}</p>
 
         <t-button theme="primary" size="large" type="submit" block :loading="loading">
           {{ loading ? '登录中…' : '登录' }}
         </t-button>
-      </form>
+      </t-form>
 
       <p class="auth-switch">
         还没有账号？
@@ -57,6 +56,7 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { LogoGithubFilledIcon } from 'tdesign-icons-vue-next'
 import { request } from '@/api/http'
 import { useAuthStore, type TokenPair } from '@/stores/auth'
 
@@ -110,7 +110,9 @@ async function onSubmit() {
   box-shadow: var(--td-shadow-2);
 }
 .auth-brand {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   margin-bottom: var(--sp-2);
   font-size: var(--fs-body);
   font-weight: 700;
@@ -119,6 +121,10 @@ async function onSubmit() {
 }
 .auth-brand:hover {
   text-decoration: underline;
+}
+.auth-brand-icon {
+  width: 18px;
+  height: 18px;
 }
 .auth-title {
   margin: 0;
@@ -135,14 +141,8 @@ async function onSubmit() {
   flex-direction: column;
   gap: var(--sp-4);
 }
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-}
-.field-label {
-  font-size: var(--fs-caption);
-  color: var(--td-text-color-secondary);
+.auth-form :deep(.t-form__item) {
+  margin-bottom: 0;
 }
 .pwd-toggle {
   border: none;

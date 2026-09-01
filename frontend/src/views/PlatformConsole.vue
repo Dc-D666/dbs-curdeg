@@ -6,7 +6,7 @@
     </header>
 
     <!-- 全局统计概览（reuse /admin/stats） -->
-    <section v-if="statsLoading" class="state">加载统计中…</section>
+    <section v-if="statsLoading" class="state"><t-skeleton :row="2" animation="gradient" /></section>
     <section v-else-if="stats" class="stats-cards">
       <div class="stat-card"><span class="stat-num">{{ stats.users_total }}</span><span class="stat-label">用户</span></div>
       <div class="stat-card"><span class="stat-num">{{ stats.communities_total }}</span><span class="stat-label">频道</span></div>
@@ -29,7 +29,7 @@
           <t-button theme="primary" variant="outline" @click="onChSearch">查询</t-button>
         </div>
 
-        <div v-if="chLoading && channels.length === 0" class="state">加载中…</div>
+        <div v-if="chLoading && channels.length === 0" class="state"><t-skeleton :row="4" animation="gradient" /></div>
         <ErrorState v-else-if="chError" :text="chError" @retry="loadChannels(1)" />
 
         <template v-else>
@@ -82,7 +82,7 @@
           <t-button theme="primary" variant="outline" @click="onUSearch">查询</t-button>
         </div>
 
-        <div v-if="uLoading && users.length === 0" class="state">加载中…</div>
+        <div v-if="uLoading && users.length === 0" class="state"><t-skeleton :row="4" animation="gradient" /></div>
         <ErrorState v-else-if="uError" :text="uError" @retry="loadUsers(1)" />
 
         <template v-else>

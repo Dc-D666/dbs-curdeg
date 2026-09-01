@@ -9,7 +9,7 @@
 
     <ErrorState v-if="loadError" :text="loadError" @retry="load" />
     <template v-else>
-      <p v-if="loading && items.length === 0" class="state">加载中…</p>
+      <div v-if="loading && items.length === 0" class="state"><t-skeleton :row="3" animation="gradient" /></div>
       <EmptyState v-else-if="items.length === 0" text="还没有生成过分享短链，在帖子详情页点「分享」即可创建" />
 
       <div v-else class="panel">
@@ -17,7 +17,7 @@
           <div class="share-main">
             <div class="share-head">
               <t-tag size="small" variant="light" theme="primary">{{ typeLabel(s.target_type) }}</t-tag>
-              <router-link :to="targetPath(s)" class="share-target">#{{ s.target_id }}</router-link>
+              <router-link :to="targetPath(s)" class="share-target"><LinkIcon class="share-target-icon" /> #{{ s.target_id }}</router-link>
               <span class="share-time">{{ timeAgo(s.created_at) }}</span>
             </div>
             <p class="share-url">/s/{{ s.code }}</p>
@@ -56,7 +56,7 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { ArrowLeftIcon } from 'tdesign-icons-vue-next'
+import { ArrowLeftIcon, LinkIcon } from 'tdesign-icons-vue-next'
 import { postApi, type ShareItem } from '@/api/post'
 import EmptyState from '@/components/EmptyState.vue'
 import ErrorState from '@/components/ErrorState.vue'
@@ -185,6 +185,11 @@ onMounted(load)
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
+  transition: border-color 0.15s, box-shadow 0.2s;
+}
+.share-row:hover {
+  border-color: var(--brand);
+  box-shadow: var(--shadow-sm);
 }
 .share-main {
   min-width: 0;
@@ -201,6 +206,13 @@ onMounted(load)
   font-weight: 600;
   color: var(--brand);
   text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.share-target-icon {
+  width: 13px;
+  height: 13px;
 }
 .share-time {
   font-size: var(--fs-caption);

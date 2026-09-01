@@ -15,9 +15,9 @@
         <div class="card-main">
           <div class="card-head">
             <h4 class="card-name">{{ c.name }}</h4>
-            <span v-if="c.is_member" class="tag tag-member">已加入</span>
-            <span v-else-if="c.join_setting === 1" class="tag">审核制</span>
-            <span v-else-if="c.join_setting === 2" class="tag">邀请制</span>
+            <t-tag v-if="c.is_member" theme="primary" variant="light" size="small">已加入</t-tag>
+            <t-tag v-else-if="c.join_setting === 1" variant="outline" size="small">审核制</t-tag>
+            <t-tag v-else-if="c.join_setting === 2" variant="outline" size="small">邀请制</t-tag>
           </div>
           <p class="card-profile">{{ c.profile || '暂无简介' }}</p>
           <div class="card-meta">
@@ -69,10 +69,11 @@ withDefaults(
   cursor: pointer;
   text-decoration: none;
   color: inherit;
-  transition: border-color 0.15s;
+  transition: border-color 0.15s, box-shadow 0.2s;
 }
 .card:hover {
   border-color: var(--brand);
+  box-shadow: var(--shadow-sm);
 }
 .card:focus-visible {
   outline: 2px solid var(--brand);
@@ -111,20 +112,6 @@ withDefaults(
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.tag {
-  flex-shrink: 0;
-  font-size: var(--fs-caption);
-  color: var(--text-3);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 0 6px;
-  line-height: 1.6;
-}
-.tag-member {
-  color: var(--brand);
-  border-color: var(--brand-weak);
-  background: var(--brand-weak);
 }
 .card-profile {
   margin: 4px 0 0;

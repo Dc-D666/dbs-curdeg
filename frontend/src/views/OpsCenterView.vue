@@ -7,7 +7,7 @@
       <h1 class="page-title">运营中心</h1>
     </header>
 
-    <div v-if="loading" class="state">加载中…</div>
+    <div v-if="loading" class="state"><t-skeleton :row="5" animation="gradient" /></div>
 
     <ErrorState v-else-if="loadError" :text="loadError" :retryable="!noPermission" @retry="init">
       <router-link :to="`/c/${cid}`" class="state-link">返回频道</router-link>

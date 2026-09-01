@@ -38,9 +38,15 @@
     <!-- 热门搜索词 -->
     <div v-if="!searching && hotKeywords.length" class="hot-words">
       <span class="hot-label">热门搜索：</span>
-      <button v-for="h in hotKeywords" :key="h.keyword" class="hot-word" @click="searchQ = h.keyword; doSearch()">
-        {{ h.keyword }}
-      </button>
+      <t-tag
+        v-for="h in hotKeywords"
+        :key="h.keyword"
+        variant="outline"
+        size="small"
+        class="hot-word"
+        :clickable="true"
+        @click="searchQ = h.keyword; doSearch()"
+      >{{ h.keyword }}</t-tag>
     </div>
 
     <!-- 搜索结果 -->
@@ -56,8 +62,8 @@
         <router-link v-for="p in searchResults" :key="p.id" :to="`/p/${p.id}`" class="card">
           <div class="card-head">
             <h3 class="card-name search-title" v-html="p.highlight_title || p.title"></h3>
-            <span v-if="p.is_top" class="tag tag-top">置顶</span>
-            <span v-if="p.is_essence" class="tag tag-essence">精华</span>
+            <t-tag v-if="p.is_top" theme="danger" variant="light" size="small">置顶</t-tag>
+            <t-tag v-if="p.is_essence" theme="warning" variant="light" size="small">精华</t-tag>
           </div>
           <p class="card-profile search-snippet" v-html="p.snippet"></p>
           <div class="card-meta">
@@ -338,15 +344,7 @@ async function onCreate() {
   color: var(--text-3);
 }
 .hot-word {
-  height: 28px;
-  padding: 0 var(--sp-3);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  background: var(--bg-card);
-  color: var(--text-2);
-  font-size: var(--fs-caption);
   cursor: pointer;
-  transition: all 0.15s;
 }
 .hot-word:hover {
   border-color: var(--brand);
@@ -389,10 +387,11 @@ async function onCreate() {
   cursor: pointer;
   text-decoration: none;
   color: inherit;
-  transition: border-color 0.15s;
+  transition: border-color 0.15s, box-shadow 0.2s;
 }
 .card:hover {
   border-color: var(--brand);
+  box-shadow: var(--shadow-sm);
 }
 .card:focus-visible {
   outline: 2px solid var(--brand);
@@ -407,21 +406,6 @@ async function onCreate() {
   margin: 0;
   font-size: var(--fs-title);
   font-weight: 600;
-}
-.tag {
-  font-size: var(--fs-caption);
-  color: var(--text-3);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 1px 6px;
-}
-.tag-top {
-  color: var(--danger);
-  border-color: var(--danger);
-}
-.tag-essence {
-  color: #b8860b;
-  border-color: #b8860b;
 }
 .card-profile {
   margin: var(--sp-2) 0 0;

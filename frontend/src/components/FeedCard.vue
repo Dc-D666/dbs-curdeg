@@ -49,15 +49,22 @@
         <UserAvatar :name="post.author_nickname" :src="post.author_avatar" :size="18" />
         {{ post.author_nickname }}
       </router-link>
-      <span class="fc-stat">{{ post.comment_count }} 评论</span>
+      <span class="fc-stat"><ChatIcon class="fc-meta-icon" /> {{ post.comment_count }}</span>
       <span class="fc-time">{{ timeAgo(post.created_at) }}</span>
     </div>
     <div class="fc-actions">
-      <button class="fc-action" :class="{ liked: post.is_liked }" :disabled="interaction.isPending(`like:${post.id}`)" @click.stop="toggleLike">
-        <ThumbUpIcon :key="popTick" class="fc-action-icon" :class="{ 'liked-pop': post.is_liked }" />
-        <span>{{ post.is_liked ? '已赞' : '赞' }}</span>
+      <t-button
+        variant="text"
+        size="small"
+        class="fc-action"
+        :class="{ liked: post.is_liked }"
+        :disabled="interaction.isPending(`like:${post.id}`)"
+        @click.stop="toggleLike"
+      >
+        <template #icon><ThumbUpIcon :key="popTick" class="fc-action-icon" :class="{ 'liked-pop': post.is_liked }" /></template>
+        {{ post.is_liked ? '已赞' : '赞' }}
         <span v-if="post.like_count" class="fc-action-count">{{ post.like_count }}</span>
-      </button>
+      </t-button>
     </div>
   </article>
 </template>
@@ -65,7 +72,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ThumbUpIcon } from 'tdesign-icons-vue-next'
+import { ChatIcon, ThumbUpIcon } from 'tdesign-icons-vue-next'
 import type { PostItem } from '@/api/post'
 import { postApi } from '@/api/post'
 import { tokenStore } from '@/api/http'
@@ -314,6 +321,13 @@ async function toggleLike() {
 }
 .fc-stat {
   color: var(--text-3);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.fc-meta-icon {
+  width: 13px;
+  height: 13px;
 }
 .fc-time {
   margin-left: auto;
@@ -324,26 +338,14 @@ async function toggleLike() {
   border-top: 1px solid var(--border);
 }
 .fc-action {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 32px; /* 触摸热区（>=32px），避免移动端难点/误触 */
-  padding: 4px 10px;
-  border: none;
-  background: transparent;
   color: var(--text-3);
-  font-size: 12px;
-  cursor: pointer;
-  border-radius: var(--radius-btn);
-  transition: color var(--anim-duration) var(--anim-ease),
-    background var(--anim-duration) var(--anim-ease);
 }
 .fc-action:hover {
   color: var(--brand);
   background: var(--brand-weak);
 }
 .fc-action.liked {
-  color: var(--td-brand-color);
+  color: var(--brand);
 }
 .fc-action.liked .fc-action-icon {
   fill: currentColor;
@@ -361,10 +363,6 @@ async function toggleLike() {
   100% {
     transform: scale(1);
   }
-}
-.fc-action:disabled {
-  cursor: default;
-  opacity: 0.6;
 }
 .fc-action-icon {
   width: 15px;

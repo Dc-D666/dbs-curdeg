@@ -9,7 +9,7 @@
 
     <ErrorState v-if="loadError" :text="loadError" @retry="load" />
     <template v-else>
-      <p v-if="loading && items.length === 0" class="state">加载中…</p>
+      <div v-if="loading && items.length === 0" class="state"><t-skeleton :row="3" animation="gradient" /></div>
       <EmptyState v-else-if="items.length === 0" text="你的内容都顺利通过了审核" />
 
       <div v-else class="panel">
@@ -171,6 +171,11 @@ onMounted(load)
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
+  transition: border-color 0.15s, box-shadow 0.2s;
+}
+.review-row:hover {
+  border-color: var(--brand);
+  box-shadow: var(--shadow-sm);
 }
 .review-main {
   min-width: 0;

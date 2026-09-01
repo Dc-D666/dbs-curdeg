@@ -8,7 +8,7 @@
       <h1 class="page-title">帖子</h1>
     </header>
 
-    <div v-if="loading" class="state">加载中…</div>
+    <div v-if="loading" class="state"><t-skeleton :row="5" animation="gradient" /></div>
     <ErrorState
       v-else-if="!post"
       :text="loadError"
@@ -136,7 +136,7 @@
           <span v-if="commentInput.length" class="char-count">{{ commentInput.length }}/2000</span>
         </div>
 
-        <p v-if="commentsLoading && comments.length === 0" class="state">加载中…</p>
+        <p v-if="commentsLoading && comments.length === 0" class="state"><t-skeleton :row="3" animation="gradient" /></p>
         <EmptyState v-else-if="comments.length === 0" text="暂无评论" />
 
         <ul v-else class="comment-list">
@@ -982,6 +982,7 @@ async function onDeletePost() {
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
   padding: var(--sp-4);
+  box-shadow: var(--shadow-sm);
 }
 .post-title {
   margin: 0;

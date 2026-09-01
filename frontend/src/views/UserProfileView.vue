@@ -37,7 +37,7 @@
 
       <t-tabs v-model="profileTab" class="profile-tabs" lazy>
         <t-tab-panel value="posts" label="TA 的帖子">
-          <div v-if="postsLoading" class="state">加载中…</div>
+          <div v-if="postsLoading" class="state"><t-skeleton :row="3" animation="gradient" /></div>
           <EmptyState v-else-if="posts.length === 0" text="TA 还没有发布帖子" />
           <div v-else class="post-list">
             <FeedCard v-for="p in posts" :key="p.id" :post="p" show-community @updated="reloadPosts" />

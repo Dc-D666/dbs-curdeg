@@ -9,40 +9,26 @@
 
     <section class="panel">
       <h3 class="panel-title">账号信息</h3>
-      <div class="account-row">
-        <span class="account-label">账号</span>
-        <span class="account-value">{{ auth.user?.username }}</span>
-      </div>
-      <div class="account-row">
-        <span class="account-label">邮箱</span>
-        <span class="account-value">{{ auth.user?.email || '未绑定' }}</span>
-      </div>
-      <div class="account-row">
-        <span class="account-label">注册时间</span>
-        <span class="account-value">{{ createdDate }}</span>
-      </div>
+      <t-descriptions bordered size="small" :items="accountItems" :column="1" />
     </section>
 
     <section class="panel">
       <h3 class="panel-title">修改密码</h3>
-      <form class="form" @submit.prevent="onChangePassword">
-        <div class="field">
-          <label class="field-label">原密码</label>
+      <t-form class="form" label-align="top" @submit.prevent="onChangePassword">
+        <t-form-item label="原密码">
           <t-input v-model="pwForm.old_password" size="large" type="password" autocomplete="current-password" />
-        </div>
-        <div class="field">
-          <label class="field-label">新密码（至少 6 位，含字母和数字）</label>
+        </t-form-item>
+        <t-form-item label="新密码（至少 6 位，含字母和数字）">
           <t-input v-model="pwForm.new_password" size="large" type="password" autocomplete="new-password" />
-        </div>
-        <div class="field">
-          <label class="field-label">确认新密码</label>
+        </t-form-item>
+        <t-form-item label="确认新密码">
           <t-input v-model="pwForm.confirm" size="large" type="password" autocomplete="new-password" />
-        </div>
+        </t-form-item>
         <p v-if="pwMsg" class="msg" :class="{ error: pwError }">{{ pwMsg }}</p>
         <t-button theme="primary" size="large" type="submit" block :loading="pwSaving">
           {{ pwSaving ? '提交中…' : '修改密码' }}
         </t-button>
-      </form>
+      </t-form>
     </section>
 
     <section class="panel panel-danger">
@@ -71,6 +57,12 @@ const pwError = ref(false)
 const deactivating = ref(false)
 
 const createdDate = computed(() => (auth.user?.created_at || '').slice(0, 10))
+
+const accountItems = computed(() => [
+  { label: '账号', content: auth.user?.username || '—' },
+  { label: '邮箱', content: auth.user?.email || '未绑定' },
+  { label: '注册时间', content: createdDate.value },
+])
 
 async function onChangePassword() {
   if (pwSaving.value) return
@@ -163,38 +155,13 @@ async function onDeactivate() {
   font-size: var(--fs-title);
   font-weight: 600;
 }
-.account-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-3);
-  padding: var(--sp-2) 0;
-  border-bottom: 1px dashed var(--td-component-border);
-}
-.account-row:last-child {
-  border-bottom: none;
-}
-.account-label {
-  font-size: var(--fs-body);
-  color: var(--td-text-color-secondary);
-}
-.account-value {
-  font-size: var(--fs-body);
-  color: var(--td-text-color-primary);
-}
 .form {
   display: flex;
   flex-direction: column;
   gap: var(--sp-4);
 }
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-}
-.field-label {
-  font-size: var(--fs-caption);
-  color: var(--td-text-color-secondary);
+.form :deep(.t-form__item) {
+  margin-bottom: 0;
 }
 .msg {
   margin: 0;

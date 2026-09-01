@@ -28,38 +28,31 @@
 
     <section class="panel">
       <h3 class="panel-title">基本信息</h3>
-      <form class="form" @submit.prevent="onSave">
-        <div class="field">
-          <label class="field-label">昵称</label>
+      <t-form class="form" label-align="top" @submit.prevent="onSave">
+        <t-form-item label="昵称">
           <t-input v-model="form.nickname" size="large" maxlength="64" clearable placeholder="设置一个昵称" />
-        </div>
-        <div class="field">
-          <label class="field-label">简介</label>
+        </t-form-item>
+        <t-form-item label="简介">
           <t-textarea v-model="form.bio" :autosize="{ minRows: 3, maxRows: 6 }" maxlength="255" placeholder="介绍一下自己" />
-        </div>
-        <div class="field">
-          <label class="field-label">性别</label>
-          <t-select v-model="form.gender" size="large">
+        </t-form-item>
+        <t-form-item label="性别">
+          <t-select v-model="form.gender" size="large" class="full-width">
             <t-option :value="0" label="保密" />
             <t-option :value="1" label="男" />
             <t-option :value="2" label="女" />
           </t-select>
-        </div>
-        <div class="field-row">
-          <div class="field">
-            <label class="field-label">省份</label>
-            <t-input v-model="form.province" size="large" maxlength="32" clearable />
-          </div>
-          <div class="field">
-            <label class="field-label">城市</label>
-            <t-input v-model="form.city" size="large" maxlength="32" clearable />
-          </div>
-        </div>
+        </t-form-item>
+        <t-form-item label="所在地">
+          <t-space :size="12" class="full-width">
+            <t-input v-model="form.province" size="large" maxlength="32" clearable placeholder="省份" />
+            <t-input v-model="form.city" size="large" maxlength="32" clearable placeholder="城市" />
+          </t-space>
+        </t-form-item>
         <p v-if="msg" class="msg" :class="{ error: error }">{{ msg }}</p>
         <t-button theme="primary" size="large" type="submit" block :loading="saving">
           {{ saving ? '保存中…' : '保存' }}
         </t-button>
-      </form>
+      </t-form>
     </section>
   </main>
 </template>
@@ -217,22 +210,11 @@ async function onSave() {
   flex-direction: column;
   gap: var(--sp-4);
 }
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
+.form :deep(.t-form__item) {
+  margin-bottom: 0;
 }
-.field-row {
-  display: flex;
-  gap: var(--sp-3);
-}
-.field-row .field {
-  flex: 1;
-  min-width: 0;
-}
-.field-label {
-  font-size: var(--fs-caption);
-  color: var(--td-text-color-secondary);
+.full-width {
+  width: 100%;
 }
 .msg {
   margin: 0;

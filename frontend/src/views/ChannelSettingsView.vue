@@ -7,7 +7,7 @@
       <h1 class="page-title">{{ community?.name || '频道设置' }}</h1>
     </header>
 
-    <div v-if="loading" class="state">加载中…</div>
+    <div v-if="loading" class="state"><t-skeleton :row="5" animation="gradient" /></div>
     <ErrorState v-else-if="loadError" :text="loadError" @retry="init" />
 
     <template v-else>

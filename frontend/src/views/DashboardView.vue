@@ -24,7 +24,7 @@
 
       <!-- 总览 -->
       <t-tab-panel value="overview" label="总览">
-        <div v-if="loading" class="state">加载中…</div>
+        <div v-if="loading" class="state"><t-skeleton :row="5" animation="gradient" /></div>
         <template v-else-if="stats">
           <section class="cards">
             <div class="card"><span class="card-num">{{ stats.users_total }}</span><span class="card-label">用户</span></div>
@@ -84,7 +84,7 @@
               <t-button variant="outline" size="small" theme="danger" @click="handleReport(r, 'rejected')">驳回</t-button>
             </div>
           </div>
-          <div v-if="reportsLoading && reports.length === 0" class="state">加载中…</div>
+          <div v-if="reportsLoading && reports.length === 0" class="state"><t-skeleton :row="3" animation="gradient" /></div>
           <t-empty v-else-if="reports.length === 0" description="暂无举报" />
           <!-- 举报不再只拉前 50 条静默截断：分页 + 总数可见 -->
           <t-button
@@ -128,7 +128,7 @@
               <t-button variant="outline" size="small" theme="danger" @click="handleReview(r, false)">维持驳回</t-button>
             </div>
           </div>
-          <div v-if="reviewsLoading && adminReviews.length === 0" class="state">加载中…</div>
+          <div v-if="reviewsLoading && adminReviews.length === 0" class="state"><t-skeleton :row="3" animation="gradient" /></div>
           <t-empty v-else-if="adminReviews.length === 0" description="暂无审核记录" />
           <t-button
             v-if="adminReviews.length < reviewsTotal"
