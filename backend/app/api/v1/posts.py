@@ -135,6 +135,22 @@ def delete_post(
     return ok(message="帖子已删除")
 
 
+class MovePostRequest(BaseModel):
+    board_id: int = Field(gt=0)
+
+
+@router.put("/posts/{post_id}/move")
+def move_post(
+    post_id: int,
+    payload: MovePostRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """移动帖子到其他板块（moderate 权限）。"""
+    post, community = _get_post_community(db, post_id)
+    return ok(data=post_service.move_post(db, community, post, user, payload.board_id), message="帖子已移动")
+
+
 @router.post("/posts/{post_id}/top")
 def set_top(
     post_id: int,

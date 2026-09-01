@@ -16,11 +16,13 @@ router = APIRouter(prefix="/notifications", tags=["notifications"])
 def list_notifications(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=50),
+    scope: str | None = Query(None, pattern="^(system|interact)$", description="system=仅系统通知 interact=仅互动通知"),
+    community_id: int | None = Query(None, gt=0, description="仅返回该频道相关通知"),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """通知分页（未读在前，时间倒序）。"""
-    return ok(data=notify_service.list_notifications(db, user.id, page, page_size))
+    """通知分页（未读在前，时间倒序）；可按 scope/community_id 过滤。"""
+    return ok(data=notify_service.list_notifications(db, user.id, page, page_size, scope, community_id))
 
 
 @router.get("/unread-count")
@@ -81,3 +83,26 @@ def update_notify_settings(
     """更新通知开关（部分更新）。"""
     patch = {k: v for k, v in payload.model_dump().items() if v is not None}
     return ok(data=notify_service.update_settings(db, user, patch), message="设置已保存")
+
+
+@router.get("/community/{community_id}/settings")
+def get_community_notify_settings(
+    community_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """某频道的通知开关（未覆盖则继承全局）。"""
+    return ok(data=notify_service.get_community_settings(db, community_id, user.id))
+
+
+@router.put("/community/{community_id}/settings")
+def update_community_notify_settings(
+    community_id: int,
+    payload: NotifySettingsUpdate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """更新某频道的通知开关（部分更新）。"""
+    patch = {k: v for k, v in payload.model_dump().items() if v is not None}
+    return ok(data=notify_service.update_community_settings(db, community_id, user.id, patch),
+              message="设置已保存")

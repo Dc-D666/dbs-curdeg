@@ -1,5 +1,6 @@
-"""频道接口：创建/列表/详情/编辑/解散/加入/退出。"""
+"""频道接口：创建/列表/详情/编辑/解散/加入/退出/转让/全员禁言。"""
 from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, get_current_user_optional
@@ -148,6 +149,44 @@ def join_community(
     if community is None:
         raise NotFoundError("频道不存在")
     return ok(data=community_service.join_community(db, community, user))
+
+
+class TransferRequest(BaseModel):
+    target_user_id: int = Field(gt=0)
+
+
+@router.post("/{community_id}/transfer")
+def transfer_community(
+    community_id: int,
+    payload: TransferRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """转让频道主（仅当前 owner）。"""
+    community = db.get(Community, community_id)
+    if community is None:
+        raise NotFoundError("频道不存在")
+    return ok(data=community_service.transfer_community(db, community, user, payload.target_user_id),
+              message="频道已转让")
+
+
+class AllMuteRequest(BaseModel):
+    hours: int = Field(ge=0, le=720, description="禁言小时数；0 表示解除")
+
+
+@router.put("/{community_id}/all-mute")
+def set_all_mute(
+    community_id: int,
+    payload: AllMuteRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """全员禁言（发帖与评论被禁，点赞不禁）；0 解除。"""
+    community = db.get(Community, community_id)
+    if community is None:
+        raise NotFoundError("频道不存在")
+    return ok(data=community_service.set_all_mute(db, community, user, payload.hours),
+              message="已全员禁言" if payload.hours else "已解除全员禁言")
 
 
 @router.post("/{community_id}/leave")

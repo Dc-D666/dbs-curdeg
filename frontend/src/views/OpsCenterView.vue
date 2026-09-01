@@ -1,8 +1,8 @@
 <template>
   <main class="ops">
     <header class="page-header">
-      <router-link :to="`/c/${cid}`" class="back">
-        <ArrowLeftIcon class="back-icon" /> {{ communityName || '频道' }}
+      <router-link to="/" class="back">
+        <ArrowLeftIcon class="back-icon" /> 返回主页
       </router-link>
       <h1 class="page-title">运营中心</h1>
     </header>

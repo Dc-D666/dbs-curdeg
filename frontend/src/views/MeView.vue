@@ -2,6 +2,9 @@
   <main class="me">
     <header class="me-header">
       <!-- 本页是底部 tab 之一（「我的」），无需页面内返回入口，避免两套返回语义 -->
+      <router-link to="/" class="me-home" title="返回主页" aria-label="返回主页">
+        <HomeIcon class="me-home-icon" />
+      </router-link>
       <h1 class="me-title">个人中心</h1>
     </header>
 
@@ -107,7 +110,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
-import { ChatIcon, CheckCircleIcon, ChevronRightIcon, DashboardIcon, KeyIcon, NotificationIcon, ShareIcon, StarIcon, UserIcon, UsergroupIcon } from 'tdesign-icons-vue-next'
+import { ChatIcon, CheckCircleIcon, ChevronRightIcon, DashboardIcon, HomeIcon, KeyIcon, NotificationIcon, ShareIcon, StarIcon, UserIcon, UsergroupIcon } from 'tdesign-icons-vue-next'
 import { useAuthStore } from '@/stores/auth'
 import { confirmDialog } from '@/utils/confirm'
 import { toast } from '@/utils/toast'
@@ -147,14 +150,34 @@ async function onLogout() {
 .me-header {
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: var(--sp-2);
   height: var(--nav-height);
   border-bottom: 1px solid var(--border);
+}
+.me-home {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-control);
+  color: var(--text-2);
+  flex-shrink: 0;
+}
+.me-home:hover {
+  background: var(--surface);
+  color: var(--brand);
+}
+.me-home-icon {
+  width: 18px;
+  height: 18px;
 }
 .me-title {
   margin: 0;
   font-size: var(--fs-title);
   font-weight: 600;
+  flex: 1;
+  text-align: left;
 }
 .profile-card {
   margin-top: var(--sp-4);

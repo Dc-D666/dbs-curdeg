@@ -14,4 +14,5 @@ email-validator>=2.1
 openai>=1.40
 httpx>=0.27
 requests>=2.31          # AI 绘画（ai.py）与 QQ 图片代理（img_proxy.py）的外呼 HTTP 客户端
+qrcode[pil]>=7.4        # 频道分享二维码（channel settings 页）
 pytest>=8.0

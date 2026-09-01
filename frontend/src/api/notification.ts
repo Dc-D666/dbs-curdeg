@@ -28,8 +28,11 @@ export interface NotifySettings {
 }
 
 export const notificationApi = {
-  list: (page = 1, page_size = 20) =>
-    request<Page<NotificationItem>>({ url: '/notifications', params: { page, page_size } }),
+  list: (page = 1, page_size = 20, opts: { scope?: 'system' | 'interact'; community_id?: number } = {}) =>
+    request<Page<NotificationItem>>({
+      url: '/notifications',
+      params: { page, page_size, scope: opts.scope, community_id: opts.community_id },
+    }),
   unreadCount: () => request<{ count: number }>({ url: '/notifications/unread-count' }),
   read: (id: number) => request({ url: `/notifications/${id}/read`, method: 'POST' }),
   readAll: () => request<{ marked: number }>({ url: '/notifications/read-all', method: 'POST' }),
@@ -37,4 +40,12 @@ export const notificationApi = {
   getSettings: () => request<NotifySettings>({ url: '/notifications/settings' }),
   updateSettings: (patch: Partial<NotifySettings>) =>
     request<NotifySettings>({ url: '/notifications/settings', method: 'PUT', data: patch }),
+  // 频道级消息接收类型
+  getCommunitySettings: (cid: number) =>
+    request<NotifySettings>({ url: `/notifications/community/${cid}/settings` }),
+  updateCommunitySettings: (cid: number, patch: Partial<NotifySettings>) =>
+    request<NotifySettings>({ url: `/notifications/community/${cid}/settings`, method: 'PUT', data: patch }),
+  // 频道内通知（该频道全部通知，互动+系统）
+  communityList: (cid: number, page = 1, page_size = 20) =>
+    request<Page<NotificationItem>>({ url: '/notifications', params: { page, page_size, community_id: cid } }),
 }

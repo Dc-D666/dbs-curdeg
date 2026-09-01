@@ -26,8 +26,8 @@ def like(db: Session, user: User, post_id: int | None = None, comment_id: int | 
     08-29 拆表：帖子赞写 post_likes、评论赞写 comment_likes（各自 UNIQUE 幂等 + FK 级联）。
     """
     target, community_id = _resolve_target(db, post_id, comment_id)
-    # 频道状态 + 成员身份（含禁言/拉黑）校验
-    _require_member(db, community_id, user.id)
+    # 频道状态 + 成员身份（含禁言/拉黑）校验；全员禁言不禁赞
+    _require_member(db, community_id, user.id, check_all_mute=False)
 
     if post_id is not None:
         exists = db.execute(
@@ -73,7 +73,7 @@ def like(db: Session, user: User, post_id: int | None = None, comment_id: int | 
 def unlike(db: Session, user: User, post_id: int | None = None, comment_id: int | None = None) -> dict:
     """取消点赞（幂等：未点赞过也返回成功）。"""
     target, community_id = _resolve_target(db, post_id, comment_id)
-    _require_member(db, community_id, user.id)
+    _require_member(db, community_id, user.id, check_all_mute=False)
 
     if post_id is not None:
         row = db.execute(

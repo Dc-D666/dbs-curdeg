@@ -22,8 +22,10 @@ export const useNotificationStore = defineStore('notification', () => {
     }
   }
 
-  /** 拉取列表。失败时置 error 态（不再让页面停在骨架屏上），成功清空 error。 */
-  async function fetchList(reset = false) {
+  /** 拉取列表。失败时置 error 态（不再让页面停在骨架屏上），成功清空 error。
+   *  scope：system=仅系统通知；interact=仅互动通知；undefined=全部。
+   *  用于 /notifications（系统通知）与频道内消息中心（按频道过滤）。 */
+  async function fetchList(reset = false, opts: { scope?: 'system' | 'interact'; community_id?: number } = {}) {
     if (reset) {
       page.value = 1
       items.value = []
@@ -31,7 +33,7 @@ export const useNotificationStore = defineStore('notification', () => {
     loading.value = true
     error.value = ''
     try {
-      const data = await notificationApi.list(page.value, 20)
+      const data = await notificationApi.list(page.value, 20, opts)
       items.value = reset ? data.items : [...items.value, ...data.items]
       total.value = data.total
       loaded.value = true

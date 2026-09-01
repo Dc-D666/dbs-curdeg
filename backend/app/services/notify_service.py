@@ -12,6 +12,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.core.response import NotFoundError, ParamError
+from app.models.community_notify_setting import CommunityNotifySetting
 from app.models.notification import Notification
 from app.models.user import User
 from app.schemas.notification import NotificationOut, NotifySettingsUpdate
@@ -53,6 +54,48 @@ def update_settings(db: Session, user: User, patch: dict) -> dict:
     current = get_settings(db, user)
     current.update({k: bool(v) for k, v in patch.items()})
     user.notify_settings = current
+    db.commit()
+    return current
+
+
+# ---------- 频道级通知设置（频道设置页「消息接收类型」） ----------
+
+
+def get_community_settings(db: Session, community_id: int, user_id: int) -> dict:
+    """某频道的通知开关：有频道级覆盖用覆盖值，否则继承全局。"""
+    row = db.execute(
+        select(CommunityNotifySetting).where(
+            CommunityNotifySetting.community_id == community_id,
+            CommunityNotifySetting.user_id == user_id,
+        )
+    ).scalar_one_or_none()
+    if row is not None:
+        return {k: bool(row.settings.get(k, True)) for k in SETTINGS_KEYS}
+    user = db.get(User, user_id)
+    settings = (user.notify_settings or {}) if user else {}
+    return {k: bool(settings.get(k, True)) for k in SETTINGS_KEYS}
+
+
+def update_community_settings(
+    db: Session, community_id: int, user_id: int, patch: dict
+) -> dict:
+    """更新某频道的通知开关（部分更新；未覆盖的键回退全局）。"""
+    unknown = set(patch) - set(SETTINGS_KEYS)
+    if unknown:
+        raise ParamError(f"未知通知开关: {sorted(unknown)}")
+    current = get_community_settings(db, community_id, user_id)
+    current.update({k: bool(v) for k, v in patch.items()})
+    row = db.execute(
+        select(CommunityNotifySetting).where(
+            CommunityNotifySetting.community_id == community_id,
+            CommunityNotifySetting.user_id == user_id,
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        row = CommunityNotifySetting(community_id=community_id, user_id=user_id, settings=current)
+        db.add(row)
+    else:
+        row.settings = current
     db.commit()
     return current
 
@@ -111,16 +154,33 @@ def notify(
 
 
 def list_notifications(
-    db: Session, user_id: int, page: int, page_size: int
+    db: Session, user_id: int, page: int, page_size: int,
+    scope: str | None = None, community_id: int | None = None,
 ) -> dict:
-    """通知分页：未读在前，按时间倒序。"""
+    """通知分页：未读在前，按时间倒序。
+
+    scope：
+      - None  全部通知
+      - "system" 仅系统通知（账号封禁/解封、频道封禁/解封、平台公告）
+      - "interact" 互动通知（@提及/点赞/评论/关注/审核/举报）
+    community_id：仅返回该频道相关的通知（频道内消息中心）。
+    """
+    conds = [Notification.user_id == user_id]
+    if scope == "system":
+        conds.append(Notification.type == "system")
+    elif scope == "interact":
+        conds.append(Notification.type.in_(
+            ("mention", "like", "comment", "follow", "review_result", "report_feedback")
+        ))
+    if community_id:
+        conds.append(Notification.community_id == community_id)
     stmt = (
         select(Notification)
-        .where(Notification.user_id == user_id)
+        .where(*conds)
         .order_by(Notification.is_read.asc(), Notification.id.desc())
     )
     total = db.execute(
-        select(func.count(Notification.id)).where(Notification.user_id == user_id)
+        select(func.count(Notification.id)).where(*conds)
     ).scalar_one()
     items = db.execute(stmt.offset((page - 1) * page_size).limit(page_size)).scalars().all()
     return {

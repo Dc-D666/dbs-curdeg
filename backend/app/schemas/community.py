@@ -152,6 +152,8 @@ class CommunityOut(BaseModel):
     visitor_interact_switch: bool
     owner_id: int
     status: int
+    # 全员禁言截止时间（频道主/管理员设置；发帖与评论被禁，点赞不禁）
+    all_muted_until: datetime | None = None
     created_at: datetime
     # 视图增强字段
     is_member: bool = False
@@ -196,5 +198,6 @@ class JoinRequestOut(BaseModel):
     created_at: datetime
     username: str = ""
     user_nickname: str = ""
+    user_avatar: str = ""
 
     model_config = {"from_attributes": True}

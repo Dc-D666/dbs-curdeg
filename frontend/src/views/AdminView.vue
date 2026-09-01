@@ -1,10 +1,10 @@
 <template>
   <main class="admin">
     <header class="page-header">
-      <router-link :to="`/c/${cid}`" class="back">
-        <ArrowLeftIcon class="back-icon" /> {{ community?.name || '频道' }}
+      <router-link to="/" class="back">
+        <ArrowLeftIcon class="back-icon" /> 返回主页
       </router-link>
-      <h1 class="page-title">管理后台</h1>
+      <h1 class="page-title">频道管理</h1>
     </header>
 
     <!-- 加载失败：无权限/频道不存在给明确错误页（不再只底部一行小字），网络故障可重试 -->
@@ -74,6 +74,162 @@
             class="load-more-members"
             @click="loadMoreMembers()"
           >加载更多成员（{{ members.length }}/{{ membersTotal }}）</t-button>
+        </div>
+      </t-tab-panel>
+
+      <!-- 板块管理 -->
+      <t-tab-panel value="boards" label="板块管理">
+        <div class="panel">
+          <div class="board-form">
+            <t-input v-model.trim="boardForm.name" class="board-name-input" placeholder="板块名称" maxlength="64" clearable />
+            <t-input v-model.trim="boardForm.description" class="board-name-input" placeholder="简介（可选）" maxlength="255" clearable />
+            <t-select v-model="boardForm.allow_post_role_ids" class="board-role-select" multiple placeholder="发帖身份组（空=所有人）" clearable>
+              <t-option v-for="r in roles" :key="r.id" :value="r.id" :label="r.name" />
+            </t-select>
+            <t-button theme="primary" size="small" :loading="boardSaving" :disabled="!boardForm.name.trim()" @click="onCreateBoard">
+              {{ boardSaving ? '创建中…' : '新建板块' }}
+            </t-button>
+          </div>
+          <p class="board-form-hint">「发帖身份组」不选 = 所有人可发帖；选了仅指定身份组可在此板块发帖。</p>
+          <div class="board-card" v-for="b in boards" :key="b.id">
+            <div class="board-head">
+              <span class="board-name">#{{ b.name }}</span>
+              <t-tag v-if="b.status === 2" size="small" variant="light" theme="danger">已关闭</t-tag>
+              <t-tag v-if="b.allow_post_role_ids.length" size="small" variant="outline">限身份组发帖</t-tag>
+              <span class="board-desc">{{ b.description || '暂无简介' }}</span>
+            </div>
+            <div class="board-ops">
+              <t-button variant="outline" size="small" @click="openBoardEdit(b)">编辑</t-button>
+              <t-button v-if="b.status !== 2" variant="outline" size="small" theme="danger" @click="onCloseBoard(b)">关闭</t-button>
+              <t-button v-else variant="outline" size="small" @click="onReopenBoard(b)">重新启用</t-button>
+            </div>
+          </div>
+          <t-empty v-if="boards.length === 0" description="暂无板块" />
+        </div>
+      </t-tab-panel>
+
+      <!-- 加入设置 -->
+      <t-tab-panel value="join" label="加入设置">
+        <div class="panel">
+          <div class="join-row">
+            <span class="join-label">谁可以加入</span>
+            <t-radio-group v-model="joinSetting" variant="default-filled" @change="onJoinSettingChange">
+              <t-radio :value="0">所有人（自由加入）</t-radio>
+              <t-radio :value="1">需要审核</t-radio>
+              <t-radio :value="2">不允许任何人加入</t-radio>
+            </t-radio-group>
+          </div>
+          <p class="join-hint">设置为「需要审核」后，成员申请需管理员在此通过；「不允许任何人加入」将关闭加入入口。</p>
+
+          <template v-if="joinSetting === 1">
+            <div class="divider"></div>
+            <div class="join-requests">
+              <div class="join-req-head">
+                <span class="join-req-count">待审核申请（{{ requestsTotal }}）</span>
+                <t-button variant="outline" size="small" :loading="requestsLoading" @click="loadRequests(1)">刷新</t-button>
+              </div>
+              <div class="join-req-row" v-for="r in joinRequests" :key="r.id">
+                <t-avatar :image="r.user_avatar || undefined" size="32px">
+                  <template #icon>{{ (r.user_nickname || r.username).slice(0, 1) }}</template>
+                </t-avatar>
+                <span class="join-req-name">{{ r.user_nickname || r.username }}</span>
+                <span class="join-req-time">{{ formatTime(r.created_at) }}</span>
+                <t-button variant="outline" size="small" @click="onHandleRequest(r, true)">通过</t-button>
+                <t-button variant="outline" size="small" theme="danger" @click="onHandleRequest(r, false)">驳回</t-button>
+              </div>
+              <t-empty v-if="joinRequests.length === 0" description="暂无待审核申请" />
+            </div>
+          </template>
+        </div>
+      </t-tab-panel>
+
+      <!-- 全员禁言 -->
+      <t-tab-panel value="mute" label="全员禁言">
+        <div class="panel">
+          <div class="mute-status">
+            <span class="mute-label">当前状态</span>
+            <t-tag :theme="isAllMuted ? 'danger' : 'success'" variant="light">
+              {{ isAllMuted ? `已全员禁言至 ${formatTime(community?.all_muted_until || '')}` : '未禁言' }}
+            </t-tag>
+          </div>
+          <div class="mute-form">
+            <t-input-number v-model="muteHours" class="mute-input" :min="1" :max="720" theme="column" />
+            <t-button theme="primary" size="small" :loading="muteSaving" @click="onAllMute(true)">全员禁言</t-button>
+            <t-button variant="outline" size="small" theme="danger" :disabled="!isAllMuted" :loading="muteSaving" @click="onAllMute(false)">解除禁言</t-button>
+          </div>
+          <p class="mute-hint">禁言 N 小时（1-720）。禁言期间所有成员不能发帖与评论，但点赞不受影响；到期自动解除。</p>
+        </div>
+      </t-tab-panel>
+
+      <!-- 帖子管理 -->
+      <t-tab-panel value="posts" label="帖子管理">
+        <div class="panel">
+          <div class="posts-toolbar">
+            <t-select v-model="postBoardFilter" class="post-board-filter" placeholder="全部板块" clearable>
+              <t-option v-for="b in boards" :key="b.id" :value="b.id" :label="b.name" />
+            </t-select>
+            <t-button variant="outline" size="small" :loading="postsLoading" @click="loadPosts(1)">刷新</t-button>
+          </div>
+          <div class="post-row" v-for="p in posts" :key="p.id">
+            <div class="post-info">
+              <router-link :to="`/p/${p.id}`" class="post-title">{{ p.title }}</router-link>
+              <div class="post-meta">
+                <span>{{ p.board_name }}</span>
+                <span>{{ p.like_count }} 赞 · {{ p.comment_count }} 评</span>
+                <span>{{ timeAgo(p.created_at) }}</span>
+              </div>
+            </div>
+            <div class="post-ops">
+              <t-select
+                :value="p.board_id"
+                class="post-move-select"
+                size="small"
+                placeholder="移动到板块"
+                @change="(v: number) => onMovePost(p, v)"
+              >
+                <t-option v-for="b in boards" :key="b.id" :value="b.id" :label="b.name" />
+              </t-select>
+              <t-button variant="outline" size="small" theme="danger" @click="onDeletePost(p)">删除</t-button>
+            </div>
+          </div>
+          <t-empty v-if="posts.length === 0" description="暂无帖子" />
+          <t-button
+            v-if="postsHasMore"
+            variant="outline"
+            block
+            class="load-more-posts"
+            :loading="postsLoading"
+            @click="loadPosts(postsPage + 1, true)"
+          >加载更多（已加载 {{ posts.length }}）</t-button>
+        </div>
+      </t-tab-panel>
+
+      <!-- 黑名单 -->
+      <t-tab-panel value="blacklist" label="黑名单">
+        <div class="panel">
+          <div class="blacklist-toolbar">
+            <t-input v-model.trim="blacklistKeyword" class="blacklist-search" placeholder="按用户名/昵称搜索" clearable @enter="onBlacklistSearch" @clear="onBlacklistSearch" />
+            <t-button variant="outline" size="small" :loading="blacklistLoading" @click="onBlacklistSearch">搜索</t-button>
+          </div>
+          <div class="member-row" v-for="m in blacklistMembers" :key="m.user_id">
+            <t-avatar :image="m.avatar_url || undefined" size="36px">
+              <template #icon>{{ (m.user_nickname || m.nickname).slice(0, 1) }}</template>
+            </t-avatar>
+            <div class="m-info">
+              <div class="m-name">{{ m.user_nickname || m.nickname }}</div>
+              <div class="m-sub">@{{ m.username }} · 已移出</div>
+            </div>
+            <t-button variant="outline" size="small" @click="onUnblockBlacklist(m)">解除拉黑</t-button>
+          </div>
+          <t-empty v-if="blacklistMembers.length === 0" description="黑名单为空" />
+          <t-button
+            v-if="blacklistMembers.length < blacklistTotal"
+            variant="outline"
+            block
+            class="load-more-blacklist"
+            :loading="blacklistLoading"
+            @click="loadBlacklist(blacklistPage + 1)"
+          >加载更多（{{ blacklistMembers.length }}/{{ blacklistTotal }}）</t-button>
         </div>
       </t-tab-panel>
 
@@ -245,6 +401,47 @@
           <p v-else class="strategy-hint">加载中…</p>
         </div>
       </t-tab-panel>
+
+      <!-- AI bot 管理 -->
+      <t-tab-panel value="ai" label="AI bot 管理">
+        <div class="panel">
+          <p class="ai-hint">创建虚拟助手成员，可在发帖评论中 @ 提问（后续完善对话配置）。</p>
+          <div class="ai-row">
+            <t-input v-model.trim="aiNickname" class="ai-nickname" placeholder="助手昵称" maxlength="64" />
+            <t-button theme="primary" size="small" :loading="aiSaving" @click="onEnsureAi">启用 AI 助手</t-button>
+          </div>
+        </div>
+      </t-tab-panel>
+
+      <!-- 转让频道 -->
+      <t-tab-panel value="transfer" label="转让频道">
+        <div class="panel">
+          <p class="transfer-hint">把频道主身份交给另一位成员。转让后你将降为普通成员。</p>
+          <t-select v-model="transferTarget" class="transfer-select" filterable placeholder="选择新频道主（成员）">
+            <t-option v-for="m in members" :key="m.user_id" :value="m.user_id" :label="m.user_nickname || m.nickname" />
+          </t-select>
+          <div class="transfer-ops">
+            <t-button theme="primary" size="small" :loading="transferSaving" :disabled="!transferTarget" @click="onTransfer">
+              {{ transferSaving ? '转让中…' : '确认转让' }}
+            </t-button>
+          </div>
+        </div>
+      </t-tab-panel>
+
+      <!-- 解散频道 -->
+      <t-tab-panel value="dissolve" label="解散频道">
+        <div class="panel">
+          <div class="dissolve-box">
+            <p class="dissolve-warn">解散频道将<b>永久删除</b>频道全部数据（帖子、评论、成员关系、通知等），该操作不可恢复。</p>
+            <t-input v-model.trim="dissolveConfirm" class="dissolve-input" placeholder="输入频道名称确认解散" maxlength="64" />
+            <div class="dissolve-ops">
+              <t-button theme="danger" size="small" :loading="dissolving" :disabled="dissolveConfirm !== (community?.name || '')" @click="onDissolve">
+                {{ dissolving ? '解散中…' : '永久解散频道' }}
+              </t-button>
+            </div>
+          </div>
+        </div>
+      </t-tab-panel>
     </t-tabs>
 
     <!-- 禁言时长弹窗 -->
@@ -264,12 +461,13 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeftIcon, ErrorCircleIcon, SoundMute1Icon } from 'tdesign-icons-vue-next'
 import { useAuthStore } from '@/stores/auth'
-import { communityApi, feedStrategyApi, manageApi, roleApi, type Community, type Member, type MyRole, type OpLogItem, type RoleItem } from '@/api/community'
+import { communityApi, feedStrategyApi, manageApi, roleApi, type Community, type JoinRequestItem, type Member, type MyRole, type OpLogItem, type RoleItem } from '@/api/community'
+import { postApi, type PostItem } from '@/api/post'
 import { toast } from '@/utils/toast'
-import { formatTime } from '@/utils/time'
+import { formatTime, timeAgo } from '@/utils/time'
 import { confirmDialog } from '@/utils/confirm'
 import { ApiError } from '@/api/http'
 import { loadErrorMessage } from '@/utils/error'
@@ -279,7 +477,7 @@ const route = useRoute()
 const auth = useAuthStore()
 const cid = Number(route.params.id)
 
-const tab = ref<'members' | 'roles' | 'ops' | 'strategy'>('members')
+const tab = ref<'members' | 'boards' | 'join' | 'mute' | 'posts' | 'blacklist' | 'roles' | 'ops' | 'ai' | 'transfer' | 'dissolve' | 'strategy'>('members')
 const community = ref<Community | null>(null)
 const members = ref<Member[]>([])
 const membersPage = ref(1)
@@ -302,6 +500,46 @@ const roleSaving = ref(false)
 const roleForm = reactive({ name: '', color: '#1a73e8', level: 1, is_level_role: false })
 const myRole = ref<MyRole | null>(null)
 const levelRoleMap = reactive<Record<number, boolean>>({})
+
+// ---------- 板块管理 ----------
+const boards = ref<Community['boards']>([])
+const boardSaving = ref(false)
+const boardForm = reactive({ id: 0, name: '', description: '', allow_post_role_ids: [] as number[] })
+
+// ---------- 加入设置 ----------
+const joinSetting = ref<number>(0)
+const joinRequests = ref<JoinRequestItem[]>([])
+const requestsTotal = ref(0)
+const requestsLoading = ref(false)
+
+// ---------- 全员禁言 ----------
+const muteHours = ref(24)
+const muteSaving = ref(false)
+const isAllMuted = computed(() => !!community.value?.all_muted_until)
+
+// ---------- 帖子管理 ----------
+const posts = ref<PostItem[]>([])
+const postsPage = ref(1)
+const postsLoading = ref(false)
+const postBoardFilter = ref<number | undefined>(undefined)
+
+// ---------- 黑名单 ----------
+const blacklistMembers = ref<Member[]>([])
+const blacklistPage = ref(1)
+const blacklistTotal = ref(0)
+const blacklistLoading = ref(false)
+const blacklistKeyword = ref('')
+
+// ---------- AI bot 管理 ----------
+const aiNickname = ref('频道助手')
+const aiSaving = ref(false)
+
+// ---------- 转让 / 解散 ----------
+const transferTarget = ref<number | undefined>(undefined)
+const transferSaving = ref(false)
+const dissolveConfirm = ref('')
+const dissolving = ref(false)
+const router = useRouter()
 
 // ---------- Feed 热度策略（文档⑮） ----------
 
@@ -478,6 +716,8 @@ async function init() {
     await reloadRoles()
     await reloadMembers()
     await loadOps(1)
+    boards.value = community.value.boards
+    joinSetting.value = community.value.join_setting
   } catch (e) {
     if (e instanceof ApiError && e.status === 403) {
       noPermission.value = true
@@ -490,6 +730,241 @@ async function init() {
     loadFailed.value = true
   }
 }
+
+// ---------- 板块管理 ----------
+async function loadBoards() {
+  try {
+    boards.value = await communityApi.boards(cid)
+  } catch { /* ignore */ }
+}
+
+async function onCreateBoard() {
+  if (!boardForm.name.trim()) {
+    toast('请填写板块名称', 'error')
+    return
+  }
+  boardSaving.value = true
+  try {
+    await communityApi.createBoard(cid, {
+      name: boardForm.name.trim(),
+      description: boardForm.description.trim(),
+      allow_post_role_ids: boardForm.allow_post_role_ids,
+    })
+    toast('板块已创建', 'success')
+    boardForm.name = ''
+    boardForm.description = ''
+    boardForm.allow_post_role_ids = []
+    await loadBoards()
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '创建失败', 'error')
+  } finally {
+    boardSaving.value = false
+  }
+}
+
+function openBoardEdit(b: Community['boards'][number]) {
+  boardForm.id = b.id
+  boardForm.name = b.name
+  boardForm.description = b.description
+  boardForm.allow_post_role_ids = [...b.allow_post_role_ids]
+}
+
+async function onCloseBoard(b: Community['boards'][number]) {
+  if (!(await confirmDialog('关闭板块', `确定关闭板块「${b.name}」？其帖子将不再对外展示。`))) return
+  try {
+    await communityApi.updateBoard(cid, b.id, { status: 2 })
+    await loadBoards()
+    toast('板块已关闭', 'success')
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '操作失败', 'error')
+  }
+}
+
+async function onReopenBoard(b: Community['boards'][number]) {
+  try {
+    await communityApi.updateBoard(cid, b.id, { status: 0 })
+    await loadBoards()
+    toast('板块已重新启用', 'success')
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '操作失败', 'error')
+  }
+}
+
+// ---------- 加入设置 ----------
+async function onJoinSettingChange(v: number) {
+  try {
+    await communityApi.update(cid, { join_setting: v })
+    toast('加入设置已更新', 'success')
+    if (v === 1) await loadRequests(1)
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '保存失败', 'error')
+    joinSetting.value = community.value?.join_setting ?? 0
+  }
+}
+
+async function loadRequests(page: number) {
+  requestsLoading.value = true
+  try {
+    const data = await communityApi.joinRequests(cid, page, 20)
+    joinRequests.value = page === 1 ? data.items : [...joinRequests.value, ...data.items]
+    requestsTotal.value = data.total
+  } catch { /* ignore */ } finally {
+    requestsLoading.value = false
+  }
+}
+
+async function onHandleRequest(r: JoinRequestItem, approve: boolean) {
+  try {
+    await communityApi.handleJoinRequest(cid, r.id, approve)
+    toast(approve ? '已通过' : '已驳回', 'success')
+    await loadRequests(1)
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '操作失败', 'error')
+  }
+}
+
+// ---------- 全员禁言 ----------
+async function onAllMute(enable: boolean) {
+  if (enable && (!Number.isFinite(muteHours.value) || muteHours.value < 1 || muteHours.value > 720)) {
+    toast('请输入 1-720 的小时数', 'error')
+    return
+  }
+  if (!(await confirmDialog('全员禁言', enable ? `确定全员禁言 ${Math.floor(muteHours.value)} 小时？期间所有成员不能发帖/评论（点赞不受影响）。` : '确定解除全员禁言？'))) return
+  muteSaving.value = true
+  try {
+    community.value = await communityApi.allMute(cid, enable ? Math.floor(muteHours.value) : 0)
+    toast(enable ? '已全员禁言' : '已解除全员禁言', 'success')
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '操作失败', 'error')
+  } finally {
+    muteSaving.value = false
+  }
+}
+
+// ---------- 帖子管理 ----------
+const postsCursor = ref<string | null>(null)
+const postsHasMore = ref(false)
+async function loadPosts(page: number, append = false) {
+  if (postsLoading.value) return
+  postsLoading.value = true
+  try {
+    const data = await postApi.feed(cid, 'latest', append ? postsCursor.value : null, 20, postBoardFilter.value)
+    posts.value = append ? [...posts.value, ...data.items] : data.items
+    postsPage.value = page
+    postsCursor.value = data.next_cursor
+    postsHasMore.value = data.has_more
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '加载帖子失败', 'error')
+  } finally {
+    postsLoading.value = false
+  }
+}
+
+async function onMovePost(p: PostItem, boardId: number) {
+  if (boardId === p.board_id) return
+  try {
+    await postApi.move(p.id, boardId)
+    toast('帖子已移动', 'success')
+    await loadPosts(1)
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '移动失败', 'error')
+  }
+}
+
+async function onDeletePost(p: PostItem) {
+  if (!(await confirmDialog('删除帖子', `确定删除帖子「${p.title}」？该操作不可恢复。`))) return
+  try {
+    await postApi.remove(p.id)
+    toast('帖子已删除', 'success')
+    await loadPosts(1)
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '删除失败', 'error')
+  }
+}
+
+// ---------- 黑名单 ----------
+async function loadBlacklist(page: number, append = false) {
+  if (blacklistLoading.value) return
+  blacklistLoading.value = true
+  try {
+    const data = await communityApi.blacklist(cid, page, 50, blacklistKeyword.value.trim() || undefined)
+    blacklistMembers.value = append ? [...blacklistMembers.value, ...data.items] : data.items
+    blacklistPage.value = page
+    blacklistTotal.value = data.total
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '加载黑名单失败', 'error')
+  } finally {
+    blacklistLoading.value = false
+  }
+}
+
+function onBlacklistSearch() {
+  loadBlacklist(1)
+}
+
+async function onUnblockBlacklist(m: Member) {
+  if (!(await confirmDialog('解除拉黑', `确定解除 ${m.user_nickname || m.nickname} 的拉黑？其可重新加入频道。`))) return
+  try {
+    await manageApi.unblock(cid, m.user_id)
+    toast('已解除拉黑', 'success')
+    await loadBlacklist(1)
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '操作失败', 'error')
+  }
+}
+
+// ---------- AI bot 管理 ----------
+async function onEnsureAi() {
+  if (!aiNickname.value.trim()) {
+    toast('请填写助手昵称', 'error')
+    return
+  }
+  aiSaving.value = true
+  try {
+    await communityApi.ensureAiAssistant(cid, aiNickname.value.trim())
+    toast('AI 助手已启用', 'success')
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '操作失败', 'error')
+  } finally {
+    aiSaving.value = false
+  }
+}
+
+// ---------- 转让 / 解散 ----------
+async function onTransfer() {
+  if (!transferTarget.value) {
+    toast('请选择新频道主', 'error')
+    return
+  }
+  const t = members.value.find((m) => m.user_id === transferTarget.value)
+  if (!(await confirmDialog('转让频道', `确定把频道主转让给 ${t?.user_nickname || t?.nickname}？转让后你将降为普通成员。`))) return
+  transferSaving.value = true
+  try {
+    await communityApi.transfer(cid, transferTarget.value)
+    toast('频道已转让', 'success')
+    transferTarget.value = undefined
+    await Promise.all([reloadRoles(), reloadMembers(), loadOps(1)])
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '转让失败', 'error')
+  } finally {
+    transferSaving.value = false
+  }
+}
+
+async function onDissolve() {
+  if (!(await confirmDialog('解散频道', `确定永久解散频道「${community.value?.name}」？所有数据将无法恢复。`))) return
+  dissolving.value = true
+  try {
+    await communityApi.dissolve(cid)
+    toast('频道已解散', 'success')
+    router.push('/')
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '解散失败', 'error')
+  } finally {
+    dissolving.value = false
+  }
+}
+
 
 async function loadOps(page: number, append = false) {
   const data = await manageApi.ops(cid, page, 50)
@@ -504,9 +979,21 @@ function loadMoreOps() {
 
 onMounted(init)
 
-// Feed 策略 tab 懒加载：首次切到才拉（GET 未配置时返回默认值，接口轻）
+// 各 tab 懒加载：首次切到才拉对应数据（板块/加入审核/帖子/黑名单/策略）
+const loadedTabs = new Set<string>(['members', 'roles', 'ops'])
 watch(tab, (t) => {
-  if (t === 'strategy' && !strategyLoaded.value && !strategyError.value) loadStrategy()
+  if (loadedTabs.has(t)) return
+  loadedTabs.add(t)
+  if (t === 'strategy') loadStrategy()
+  else if (t === 'join') loadRequests(1)
+  else if (t === 'posts') loadPosts(1)
+  else if (t === 'blacklist') loadBlacklist(1)
+  else if (t === 'boards') loadBoards()
+})
+
+// 帖子管理：切换板块过滤时重拉首屏
+watch(postBoardFilter, () => {
+  if (tab.value === 'posts') loadPosts(1)
 })
 
 function openShutup(m: Member) {
@@ -934,5 +1421,236 @@ async function exportOps() {
   display: flex;
   gap: var(--sp-2);
   margin-top: var(--sp-4);
+}
+/* ===== 板块管理 ===== */
+.board-form {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: center;
+  flex-wrap: wrap;
+  padding-bottom: var(--sp-3);
+  border-bottom: 1px solid var(--td-component-border);
+  margin-bottom: var(--sp-2);
+}
+.board-name-input {
+  flex: 1;
+  min-width: 140px;
+}
+.board-role-select {
+  width: 220px;
+}
+.board-form-hint {
+  margin: 0 0 var(--sp-3);
+  font-size: var(--fs-caption);
+  color: var(--td-text-color-placeholder);
+}
+.board-card {
+  padding: var(--sp-3) 0;
+  border-bottom: 1px dashed var(--td-component-border);
+}
+.board-card:last-child {
+  border-bottom: none;
+}
+.board-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+.board-name {
+  font-weight: 600;
+}
+.board-desc {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-caption);
+  color: var(--td-text-color-placeholder);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.board-ops {
+  margin-top: var(--sp-2);
+  display: flex;
+  gap: var(--sp-2);
+}
+/* ===== 加入设置 ===== */
+.join-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-4);
+  flex-wrap: wrap;
+}
+.join-label {
+  width: 96px;
+  font-size: var(--fs-body);
+  font-weight: 600;
+  padding-top: 4px;
+}
+.join-hint {
+  margin: var(--sp-3) 0 0;
+  font-size: var(--fs-caption);
+  color: var(--td-text-color-placeholder);
+}
+.divider {
+  height: 1px;
+  background: var(--td-component-border);
+  margin: var(--sp-4) 0;
+}
+.join-requests {
+  display: flex;
+  flex-direction: column;
+}
+.join-req-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--sp-2);
+}
+.join-req-count {
+  font-size: var(--fs-caption);
+  color: var(--td-text-color-placeholder);
+}
+.join-req-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) 0;
+  border-bottom: 1px dashed var(--td-component-border);
+}
+.join-req-row:last-child {
+  border-bottom: none;
+}
+.join-req-name {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+}
+.join-req-time {
+  font-size: var(--fs-caption);
+  color: var(--td-text-color-placeholder);
+}
+/* ===== 全员禁言 ===== */
+.mute-status {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+.mute-label {
+  font-weight: 600;
+}
+.mute-form {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.mute-input {
+  width: 140px;
+}
+.mute-hint {
+  margin: var(--sp-3) 0 0;
+  font-size: var(--fs-caption);
+  color: var(--td-text-color-placeholder);
+}
+/* ===== 帖子管理 ===== */
+.posts-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
+.post-board-filter {
+  width: 200px;
+}
+.post-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) 0;
+  border-bottom: 1px dashed var(--td-component-border);
+}
+.post-row:last-child {
+  border-bottom: none;
+}
+.post-info {
+  flex: 1;
+  min-width: 0;
+}
+.post-title {
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.post-meta {
+  margin-top: 2px;
+  display: flex;
+  gap: var(--sp-3);
+  font-size: var(--fs-caption);
+  color: var(--td-text-color-placeholder);
+}
+.post-ops {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-shrink: 0;
+}
+.post-move-select {
+  width: 130px;
+}
+.load-more-posts {
+  margin-top: var(--sp-3);
+}
+/* ===== 黑名单 ===== */
+.blacklist-toolbar {
+  display: flex;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
+.blacklist-search {
+  flex: 1;
+  min-width: 0;
+}
+.load-more-blacklist {
+  margin-top: var(--sp-3);
+}
+/* ===== AI bot 管理 ===== */
+.ai-hint {
+  margin: 0 0 var(--sp-3);
+  font-size: var(--fs-caption);
+  color: var(--td-text-color-placeholder);
+}
+.ai-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.ai-nickname {
+  width: 220px;
+}
+/* ===== 转让 / 解散 ===== */
+.transfer-hint,
+.dissolve-warn {
+  margin: 0 0 var(--sp-3);
+  font-size: var(--fs-caption);
+  color: var(--td-text-color-secondary);
+  line-height: 1.6;
+}
+.dissolve-warn {
+  color: var(--td-error-color);
+}
+.transfer-select {
+  width: 100%;
+  max-width: 360px;
+}
+.transfer-ops,
+.dissolve-ops {
+  margin-top: var(--sp-4);
+}
+.dissolve-input {
+  max-width: 320px;
 }
 </style>

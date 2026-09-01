@@ -34,11 +34,12 @@ from app.models.ai_call_log import AiCallLog
 from app.models.system_config import SystemConfig
 from app.models.daily_stat import DailyStat
 from app.models.community_event_log import CommunityEventLog
+from app.models.community_notify_setting import CommunityNotifySetting
 
 __all__ = [
     "User", "Community", "Board", "Role", "Member", "JoinRequest", "Post",
     "Comment", "PostLike", "CommentLike", "Follow", "PostEmbedding", "UserFollow", "Favorite", "Attachment", "Topic",
     "OpLog", "SearchRecord", "SensitiveWord", "Notification", "FeedStrategy",
     "ShortLink", "Review", "Report", "AiConfig", "AiCallLog", "SystemConfig",
-    "DailyStat", "CommunityEventLog",
+    "DailyStat", "CommunityEventLog", "CommunityNotifySetting",
 ]

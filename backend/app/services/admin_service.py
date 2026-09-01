@@ -38,6 +38,19 @@ def set_user_status(db: Session, user_id: int, status: int) -> User:
     return user
 
 
+def broadcast_announcement(db: Session, operator: User, title: str, content: str) -> int:
+    """系统管理员发布更新公告：向全部正常用户发送 system 通知，返回接收人数。"""
+    if not title.strip():
+        raise ParamError("公告标题不能为空")
+    rows = db.execute(
+        select(User.id).where(User.status == 0, User.id != operator.id)
+    ).scalars().all()
+    for uid in rows:
+        notify(db, uid, "system", f"更新公告：{title.strip()[:80]}",
+               summary=content.strip()[:200])
+    return len(rows)
+
+
 def overview_stats(db: Session) -> dict:
     """全局运营看板数据。"""
     today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)

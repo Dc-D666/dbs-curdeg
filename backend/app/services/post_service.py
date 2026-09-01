@@ -136,6 +136,22 @@ def update_post(
     return post_out(db, post, current_user_id=user.id)
 
 
+def move_post(db: Session, community: Community, post: Post, user: User, target_board_id: int) -> PostOut:
+    """移动帖子到其他板块（moderate 权限；频道主/管理员可移）。"""
+    from app.core.permissions import PERM_MODERATE, require_perms
+
+    require_perms(db, community.id, user, PERM_MODERATE)
+    board = db.get(Board, target_board_id)
+    if board is None or board.community_id != community.id or board.status != 0:
+        raise NotFoundError("目标板块不存在")
+    if post.board_id == board.id:
+        return post_out(db, post, current_user_id=user.id)
+    post.board_id = board.id
+    db.commit()
+    db.refresh(post)
+    return post_out(db, post, current_user_id=user.id)
+
+
 def delete_post(db: Session, community: Community, post: Post, user: User) -> None:
     """删除帖子（软删）：作者本人，或拥有 delete_post 权限的管理者；管理删除留痕。"""
     is_author = post.author_id == user.id
@@ -587,8 +603,11 @@ def _validate_at_users(db: Session, community_id: int, rich: list) -> None:
 # ---------- 权限 ----------
 
 
-def _require_member(db: Session, community_id: int, user_id: int) -> Member:
-    """频道成员校验：频道须正常（未关闭/封禁），且成员未被拉黑/禁言。"""
+def _require_member(db: Session, community_id: int, user_id: int, check_all_mute: bool = True) -> Member:
+    """频道成员校验：频道须正常（未关闭/封禁），且成员未被拉黑/禁言。
+
+    check_all_mute=False 时不校验全员禁言（点赞路径：全员禁言不禁赞，但仍需是成员）。
+    """
     community = db.get(Community, community_id)
     if community is None or community.status != 0:
         raise NotFoundError("频道不存在")
@@ -599,6 +618,9 @@ def _require_member(db: Session, community_id: int, user_id: int) -> Member:
         raise PermissionError_("只有频道成员可以执行此操作")
     from datetime import datetime
 
+    # 全员禁言（发帖/评论被禁；点赞传 check_all_mute=False，天然不禁）
+    if check_all_mute and community.all_muted_until and community.all_muted_until > datetime.now():
+        raise PermissionError_("频道已全员禁言，暂不能发帖或评论")
     if member.shutup_expire_at and member.shutup_expire_at > datetime.now():
         raise PermissionError_("你已被禁言，无法操作")
     return member

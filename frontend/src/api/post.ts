@@ -112,6 +112,10 @@ export const postApi = {
   remove(id: number) {
     return request<null>({ url: `/posts/${id}`, method: 'DELETE' })
   },
+  /** 帖子管理：移动到其他板块（moderate 权限） */
+  move(id: number, boardId: number) {
+    return request<PostItem>({ url: `/posts/${id}/move`, method: 'PUT', data: { board_id: boardId } })
+  },
   setTop(id: number, isTop = true) {
     return request<PostItem>({ url: `/posts/${id}/top`, method: 'POST', params: { is_top: isTop } })
   },

@@ -24,6 +24,8 @@ class Community(Base):
         BigInteger, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True
     )
     status: Mapped[int] = mapped_column(Integer, default=0)  # 0正常 1关闭 2违规封禁
+    # 全员禁言截止时间（管理员/频道主设置；发帖与评论被禁，点赞不禁）
+    all_muted_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()

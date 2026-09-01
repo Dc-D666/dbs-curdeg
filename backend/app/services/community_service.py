@@ -1,5 +1,6 @@
 """频道/版块/成员业务逻辑。"""
 import secrets
+from datetime import datetime, timedelta
 
 from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.orm import Session
@@ -210,20 +211,92 @@ def dissolve_community(db: Session, community: Community, user: User) -> None:
 def update_community_status(
     db: Session, community: Community, user: User, status: int
 ) -> CommunityOut:
-    """频道状态调整：owner 可 正常/关闭；违规封禁(2)与解封(2→0)为系统管理员专属。"""
+    """频道状态调整：owner 可 正常/关闭；违规封禁(2)与解封(2→0)为系统管理员专属。
+
+    系统管理员封禁/解封频道时，向频道全体成员发送系统通知（供 /notifications 系统通知查看）。
+    """
     if status == 2:
         if user.user_type != 1:  # 系统管理员
             raise PermissionError_("违规封禁需要系统管理员权限")
         community.status = 2
+        _notify_all_members(db, community.id, "你的频道已被封禁",
+                            f"频道《{community.name}》已被平台封禁，内容保留但全体用户无法访问。")
     elif community.status == 2 and status == 0:
         # 解封：被系统管理员封禁(2)的频道，只有系统管理员能恢复；
         # owner 此时无权（避免被封频道主自行解除封禁）
         if user.user_type != 1:
             raise PermissionError_("解除违规封禁需要系统管理员权限")
         community.status = 0
+        _notify_all_members(db, community.id, "你加入的频道已解封",
+                            f"频道《{community.name}》已恢复对外可见。")
     else:
         _ensure_owner(db, community, user)
         community.status = status
+    db.commit()
+    db.refresh(community)
+    return community_out(db, community, current_user_id=user.id, is_platform_admin=user.user_type == 1)
+
+
+def _notify_all_members(db: Session, community_id: int, title: str, summary: str) -> None:
+    """向频道全体成员（非拉黑）发送系统通知。仅当频道被封禁/解封等系统级动作时调用。"""
+    rows = db.execute(
+        select(Member.user_id).where(
+            Member.community_id == community_id, Member.is_blocked.is_(False)
+        )
+    ).scalars().all()
+    for uid in rows:
+        notify(db, uid, "system", title, summary, ref_id=community_id,
+               ref_type="community", community_id=community_id)
+
+
+def transfer_community(db: Session, community: Community, user: User, target_user_id: int) -> CommunityOut:
+    """转让频道主：仅当前 owner 可操作，目标须为未被拉黑的成员且非自己。
+
+    转让后：目标成员 member_type=0（频道主）、role_id 置空；原 owner 降为普通成员(2)。
+    """
+    _ensure_owner(db, community, user)
+    if target_user_id == user.id:
+        raise ParamError("不能转让给频道主自己")
+    target = db.execute(
+        select(Member).where(
+            Member.community_id == community.id, Member.user_id == target_user_id
+        )
+    ).scalar_one_or_none()
+    if target is None:
+        raise NotFoundError("目标用户不是该频道成员")
+    if target.is_blocked:
+        raise ParamError("不能转让给已被移出的成员")
+
+    owner = db.execute(
+        select(Member).where(
+            Member.community_id == community.id, Member.user_id == user.id
+        )
+    ).scalar_one_or_none()
+    if owner is not None:
+        owner.member_type = MEMBER_NORMAL
+        owner.role_id = None
+    target.member_type = MEMBER_OWNER
+    target.role_id = None
+    community.owner_id = target_user_id
+    db.commit()
+    db.refresh(community)
+    return community_out(db, community, current_user_id=user.id)
+
+
+def set_all_mute(db: Session, community: Community, user: User, hours: int) -> CommunityOut:
+    """全员禁言（频道主/有 member_manage 权限）：禁言 N 小时（1-720，0 表示解除）。
+
+    发帖与评论被禁，点赞不禁（发帖/评论路径校验 all_muted_until）。
+    """
+    from app.core.permissions import PERM_MEMBER_MANAGE, require_perms
+
+    require_perms(db, community.id, user, PERM_MEMBER_MANAGE)
+    if hours < 0 or hours > 720:
+        raise ParamError("禁言时长需在 0-720 小时之间")
+    if hours == 0:
+        community.all_muted_until = None
+    else:
+        community.all_muted_until = datetime.now() + timedelta(hours=hours)
     db.commit()
     db.refresh(community)
     return community_out(db, community, current_user_id=user.id, is_platform_admin=user.user_type == 1)
@@ -445,6 +518,24 @@ def list_members(db: Session, community: Community, page: int, page_size: int, k
     return {"items": _decorate_members(db, members), "total": total, "page": page, "page_size": page_size}
 
 
+def list_blacklist(db: Session, community: Community, page: int, page_size: int, keyword: str | None = None) -> dict:
+    """黑名单列表（is_blocked=True 的成员）。"""
+    base = select(Member).where(Member.community_id == community.id, Member.is_blocked.is_(True))
+    if keyword:
+        kws = f"%{keyword.strip()}%"
+        uid_sub = select(User.id).where(or_(User.username.like(kws), User.nickname.like(kws)))
+        base = base.where(Member.user_id.in_(uid_sub))
+    total = len(db.execute(base.with_only_columns(Member.id)).scalars().all())
+    stmt = (
+        base
+        .order_by(Member.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
+    members = db.execute(stmt).scalars().all()
+    return {"items": _decorate_members(db, members), "total": total, "page": page, "page_size": page_size}
+
+
 def _decorate_members(db: Session, members: list[Member]) -> list[MemberOut]:
     if not members:
         return []
@@ -481,6 +572,7 @@ def _decorate_join_reqs(db: Session, reqs: list[JoinRequest]) -> list[JoinReques
         if u:
             jo.username = u.username
             jo.user_nickname = u.nickname or u.username
+            jo.user_avatar = u.avatar_url or ""
         out.append(jo)
     return out
 

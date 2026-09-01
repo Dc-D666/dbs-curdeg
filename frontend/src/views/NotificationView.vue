@@ -1,7 +1,10 @@
 <template>
   <main class="ntf">
     <header class="ntf-header">
-      <h1 class="ntf-title">通知中心</h1>
+      <router-link to="/" class="ntf-home" title="返回主页" aria-label="返回主页">
+        <HomeIcon class="ntf-home-icon" />
+      </router-link>
+      <h1 class="ntf-title">系统通知</h1>
       <div class="ntf-actions">
         <t-button variant="text" theme="primary" size="small" :disabled="!store.items.length" @click="onReadAll">
           全部已读
@@ -10,7 +13,7 @@
       </div>
     </header>
 
-    <!-- 列表 -->
+    <!-- 列表：仅系统通知（账号封禁/解封、频道封禁/解封、平台更新公告）；互动通知在频道内查看 -->
     <section v-if="store.items.length" class="ntf-list">
       <div
         v-for="n in store.items"
@@ -66,6 +69,7 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { HomeIcon } from 'tdesign-icons-vue-next'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useNotificationStore } from '@/stores/notification'
 import ErrorState from '@/components/ErrorState.vue'
@@ -136,7 +140,7 @@ async function onRemove(n: NotificationItem) {
 }
 
 onMounted(() => {
-  store.fetchList(true).catch(() => {})
+  store.fetchList(true, { scope: 'system' }).catch(() => {})
 })
 </script>
 
@@ -157,16 +161,43 @@ onMounted(() => {
   background: var(--bg-card);
   border-bottom: 1px solid var(--border);
 }
+.ntf-home {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-control);
+  color: var(--text-2);
+  flex-shrink: 0;
+}
+.ntf-home:hover {
+  background: var(--surface);
+  color: var(--brand);
+}
+.ntf-home-icon {
+  width: 18px;
+  height: 18px;
+}
 .ntf-title {
   flex: 1;
   margin: 0;
   font-size: var(--fs-title);
-  text-align: center;
+  text-align: left;
 }
 .ntf-actions {
   display: flex;
+  align-items: center;
   gap: 4px;
   white-space: nowrap;
+}
+/* 「设置」链接与左侧「全部已读」t-button(small) 同高同行，避免文字错行不在一条线 */
+.ntf-actions :deep(.t-button) {
+  height: 24px;
+}
+.ntf-actions .ntf-settings-link {
+  height: 24px;
+  font-size: 12px;
 }
 .ntf-list {
   background: var(--bg-card);

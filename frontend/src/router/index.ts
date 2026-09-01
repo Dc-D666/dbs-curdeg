@@ -15,6 +15,7 @@ const router = createRouter({
     { path: '/c/:id', name: 'community', component: () => import('@/views/CommunityDetailView.vue') },
     { path: '/c/:id/admin', name: 'community-admin', component: () => import('@/views/AdminView.vue') },
     { path: '/c/:id/ops', name: 'community-ops', component: () => import('@/views/OpsCenterView.vue') },
+    { path: '/c/:id/settings', name: 'community-settings', component: () => import('@/views/ChannelSettingsView.vue') },
     { path: '/c/:id/boards/:bid/post/new', name: 'post-create', component: () => import('@/views/PostCreateView.vue') },
     { path: '/p/:id', name: 'post', component: () => import('@/views/PostDetailView.vue') },
     { path: '/login', name: 'login', component: () => import('@/views/auth/LoginView.vue') },
@@ -36,7 +37,7 @@ const router = createRouter({
 })
 
 // 需要登录的页面守卫：发帖页也要拦截，否则游客写完一整篇才发现要登录（只能靠草稿兜底）
-const guardedNames = ['community-admin', 'community-ops', 'notifications', 'dashboard', 'post-create']
+const guardedNames = ['community-admin', 'community-ops', 'community-settings', 'notifications', 'dashboard', 'post-create']
 router.beforeEach((to) => {
   const authed = !!tokenStore.access
   const needAuth = to.path === '/me' || to.path.startsWith('/me/') || guardedNames.includes(String(to.name))

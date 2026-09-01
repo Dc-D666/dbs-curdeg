@@ -8,6 +8,20 @@
     </header>
 
     <t-tabs v-model="tab" class="tabs">
+      <!-- 发布更新公告（系统管理员） -->
+      <t-tab-panel value="announce" label="发布公告">
+        <div class="panel">
+          <div class="word-form">
+            <t-input v-model.trim="annForm.title" class="word-input" placeholder="公告标题" maxlength="80" clearable />
+          </div>
+          <t-textarea v-model.trim="annForm.content" :autosize="{ minRows: 4, maxRows: 8 }" maxlength="500" placeholder="公告内容（将发送给全部正常用户的系统通知）" class="ann-body" />
+          <t-button theme="primary" size="small" class="ann-btn" :disabled="!annForm.title" :loading="annSending" @click="sendAnnouncement">
+            {{ annSending ? '发布中…' : '发布公告' }}
+          </t-button>
+          <p v-if="annMsg" class="muted">{{ annMsg }}</p>
+        </div>
+      </t-tab-panel>
+
       <!-- 总览 -->
       <t-tab-panel value="overview" label="总览">
         <div v-if="loading" class="state">加载中…</div>
@@ -189,11 +203,31 @@ import { formatTime } from '@/utils/time'
 import { confirmDialog } from '@/utils/confirm'
 import ErrorState from '@/components/ErrorState.vue'
 
-const tab = ref<'overview' | 'reports' | 'reviews' | 'words' | 'configs' | 'ai'>('overview')
+const tab = ref<'announce' | 'overview' | 'reports' | 'reviews' | 'words' | 'configs' | 'ai'>('overview')
 const loading = ref(true)
 const error = ref('')
 const stats = ref<Record<string, any> | null>(null)
 const trend = ref<Array<{ date: string; count: number }>>([])
+
+// 发布公告
+const annForm = reactive({ title: '', content: '' })
+const annSending = ref(false)
+const annMsg = ref('')
+async function sendAnnouncement() {
+  if (!annForm.title.trim() || annSending.value) return
+  annSending.value = true
+  annMsg.value = ''
+  try {
+    const data = await request<{ recipients: number }>({ url: '/admin/announcement', method: 'POST', data: { ...annForm } })
+    annMsg.value = `公告已发布，已通知 ${data.recipients} 位用户`
+    annForm.title = ''
+    annForm.content = ''
+  } catch (e) {
+    annMsg.value = e instanceof Error ? e.message : '发布失败'
+  } finally {
+    annSending.value = false
+  }
+}
 
 // 举报：分页拉取（不再只拉前 50 条静默截断）
 const reports = ref<ReportItem[]>([])
@@ -660,6 +694,12 @@ onMounted(async () => {
   gap: var(--sp-2);
   margin-bottom: var(--sp-3);
   flex-wrap: wrap;
+}
+.ann-body {
+  margin-bottom: var(--sp-3);
+}
+.ann-btn {
+  min-width: 120px;
 }
 .word-input {
   flex: 1;

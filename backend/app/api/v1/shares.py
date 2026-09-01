@@ -6,7 +6,7 @@
 - GET /s/{code}：跳转（根路径例外，nginx 反代到本路由；未登录/外部用户可打开）
 """
 from fastapi import APIRouter, Depends, Query, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -37,6 +37,58 @@ def create_share(
     """生成分享短链，返回 { code, url }。"""
     data = share_service.create_share(db, user, payload.target_type, payload.target_id)
     return ok(data=data, message="短链已生成")
+
+
+@router.get("/communities/{community_id}/qr")
+def community_qr(
+    community_id: int,
+    request: Request,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """频道分享二维码 PNG：为频道生成分享短链并渲染为二维码图片。
+
+    需要登录（频道成员/管理员），防止匿名滥用；短链本身公开可访问。
+    """
+    from app.models.community import Community
+    from datetime import datetime
+
+    community = db.get(Community, community_id)
+    if community is None:
+        raise NotFoundError("频道不存在")
+    # 复用同频道已有未过期短链（避免每次请求都新建，短链表无累积）
+    row = db.execute(
+        select(ShortLink)
+        .where(
+            ShortLink.target_type == TARGET_COMMUNITY,
+            ShortLink.target_id == community_id,
+            (ShortLink.expires_at.is_(None)) | (ShortLink.expires_at > datetime.now()),
+        )
+        .order_by(ShortLink.id.desc())
+    ).scalars().first()
+    if row is not None:
+        code = row.code
+    else:
+        data = share_service.create_share(db, user, TARGET_COMMUNITY, community_id)
+        code = data["code"]
+    # 用请求 Host 构造绝对短链地址（nginx 反代后 Host 为站点域名）
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host") or "guild.weaxi.cn"
+    scheme = request.headers.get("x-forwarded-proto", "https")
+    url = f"{scheme}://{host}/s/{code}"
+    try:
+        import io
+
+        import qrcode
+
+        img = qrcode.make(url)
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        return Response(content=buf.getvalue(), media_type="image/png",
+                        headers={"Cache-Control": "no-store"})
+    except Exception:
+        from app.core.response import BizError
+
+        raise BizError(message="二维码生成失败")
 
 
 @router.get("/shares")

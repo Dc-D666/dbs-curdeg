@@ -34,6 +34,22 @@ class SensitiveWordRequest(BaseModel):
     category: str = Field(default="其他", max_length=32)
 
 
+class AnnouncementRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=80)
+    content: str = Field(default="", max_length=500)
+
+
+@router.post("/announcement")
+def admin_broadcast_announcement(
+    payload: AnnouncementRequest,
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """发布更新公告：向全部正常用户发送系统通知。"""
+    n = admin_service.broadcast_announcement(db, admin, payload.title, payload.content)
+    return ok(data={"recipients": n}, message="公告已发布")
+
+
 @router.get("/stats")
 def admin_stats(
     _: User = Depends(require_admin),

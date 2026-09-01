@@ -151,50 +151,35 @@
           </section>
 
           <aside class="ws-right">
-            <!-- 管理中心 / 运营中心入口（频道主/有权限管理员） -->
-            <div v-if="showMgmtEntries" class="ws-panel">
-              <div class="ws-rail-title">频道管理</div>
+            <!-- 查看和设置：频道设置总入口 + 分项（各跳转频道设置页对应 tab） -->
+            <div class="ws-panel">
+              <div class="ws-rail-title">查看和设置</div>
               <div class="ws-mgmt">
-                <router-link :to="`/c/${cid}/admin`" class="ws-mgmt-item">
-                  <SettingIcon class="ws-mgmt-icon" />管理中心
+                <router-link :to="`/c/${cid}/settings`" class="ws-mgmt-item ws-mgmt-root">
+                  <SettingIcon class="ws-mgmt-icon" />查看和设置
                 </router-link>
-                <router-link :to="`/c/${cid}/ops`" class="ws-mgmt-item">
+                <router-link :to="`/c/${cid}/settings?tab=basic`" class="ws-mgmt-item">
+                  <FlagIcon class="ws-mgmt-icon" />频道基本资料
+                </router-link>
+                <router-link :to="`/c/${cid}/settings?tab=me`" class="ws-mgmt-item">
+                  <UserCircleIcon class="ws-mgmt-icon" />我的资料
+                </router-link>
+                <router-link :to="`/c/${cid}/settings?tab=level`" class="ws-mgmt-item">
+                  <StarIcon class="ws-mgmt-icon" />我的等级
+                </router-link>
+                <router-link :to="`/c/${cid}/settings?tab=msgs`" class="ws-mgmt-item">
+                  <NotificationIcon class="ws-mgmt-icon" />频道消息
+                </router-link>
+                <router-link :to="`/c/${cid}/settings?tab=notify`" class="ws-mgmt-item">
+                  <ControlPlatformIcon class="ws-mgmt-icon" />消息接收类型
+                </router-link>
+                <router-link v-if="showMgmtEntries" :to="`/c/${cid}/admin`" class="ws-mgmt-item">
+                  <ChartIcon class="ws-mgmt-icon" />频道管理
+                </router-link>
+                <router-link v-if="showMgmtEntries" :to="`/c/${cid}/ops`" class="ws-mgmt-item">
                   <ChartIcon class="ws-mgmt-icon" />运营中心
                 </router-link>
               </div>
-            </div>
-
-            <div class="ws-panel">
-              <div class="ws-rail-title">话题</div>
-              <div class="topic-toolbar">
-                <t-radio-group v-model="topicSort" variant="default-filled" size="small">
-                  <t-radio-button value="hot">热度</t-radio-button>
-                  <t-radio-button value="latest">最新</t-radio-button>
-                </t-radio-group>
-                <t-button v-if="community.is_member" variant="outline" size="small" @click="openTopicDialog()">+ 新建</t-button>
-              </div>
-              <div v-if="topics.length" class="topic-list">
-                <div v-for="t in topics" :key="t.id" class="topic-item">
-                  <span class="topic-name">#{{ t.name }}</span>
-                  <span class="topic-count">{{ t.post_count }} 帖 · 热度 {{ t.heat_value }}</span>
-                  <div v-if="community.my_member_type === 0 || community.my_member_type === 1" class="topic-ops">
-                    <t-button variant="text" size="small" @click="openTopicDialog(t)">编辑</t-button>
-                    <t-button variant="text" size="small" theme="danger" @click="removeTopic(t)">删除</t-button>
-                  </div>
-                </div>
-              </div>
-              <p v-else class="ws-empty">暂无话题</p>
-            </div>
-
-            <div class="ws-panel">
-              <div class="ws-rail-title">今日热议</div>
-              <div v-if="hotPosts.length" class="hot-list">
-                <button v-for="p in hotPosts" :key="p.id" class="hot-item" @click="openHotPost(p.id)">
-                  <span class="hot-title">{{ p.title }}</span>
-                  <span class="hot-meta">{{ p.like_count }} 赞 · {{ p.comment_count }} 评</span>
-                </button>
-              </div>
-              <p v-else class="ws-empty">暂无热门</p>
             </div>
           </aside>
         </div>
@@ -242,7 +227,6 @@
         </div>
 
         <div class="ws-middle">
-          <QuickComposer v-if="community.is_member && activeBoardInfo" :cid="community.id" :bid="activeBoard ?? 0" @posted="onQuickPosted" />
           <div v-if="activeBoardInfo" class="ws-feed">
             <div class="feed-toolbar">
               <t-radio-group v-model="feedSort" variant="default-filled" size="small">
@@ -267,35 +251,42 @@
           </div>
         </div>
 
-        <div class="ws-bottom">
-          <section class="ws-panel">
-            <div class="ws-rail-title">话题</div>
-            <div class="topic-toolbar">
-              <t-radio-group v-model="topicSort" variant="default-filled" size="small">
-                <t-radio-button value="hot">热度</t-radio-button>
-                <t-radio-button value="latest">最新</t-radio-button>
-              </t-radio-group>
-              <t-button v-if="community.is_member" variant="outline" size="small" @click="openTopicDialog()">+ 新建</t-button>
-            </div>
-            <div v-if="topics.length" class="topic-list">
-              <div v-for="t in topics" :key="t.id" class="topic-item">
-                <span class="topic-name">#{{ t.name }}</span>
-                <span class="topic-count">{{ t.post_count }} 帖 · 热度 {{ t.heat_value }}</span>
-              </div>
-            </div>
-            <p v-else class="ws-empty">暂无话题</p>
-          </section>
+        <!-- 移动端发帖容器：同样固定屏幕最底端 -->
+        <div class="ws-composer-anchor mobile">
+          <QuickComposer v-if="community.is_member && activeBoardInfo" :cid="community.id" :bid="activeBoard ?? 0" @posted="onQuickPosted" />
+        </div>
 
-          <section class="ws-panel">
-            <div class="ws-rail-title">今日热议</div>
-            <div v-if="hotPosts.length" class="hot-list">
-              <button v-for="p in hotPosts" :key="p.id" class="hot-item" @click="openHotPost(p.id)">
-                <span class="hot-title">{{ p.title }}</span>
-                <span class="hot-meta">{{ p.like_count }} 赞 · {{ p.comment_count }} 评</span>
-              </button>
+        <!-- 移动端查看和设置：与桌面右侧一致（去掉话题/今日热议），集中入口 -->
+        <div class="ws-bottom">
+          <div class="ws-panel">
+            <div class="ws-rail-title">查看和设置</div>
+            <div class="ws-mgmt">
+              <router-link :to="`/c/${cid}/settings`" class="ws-mgmt-item ws-mgmt-root">
+                <SettingIcon class="ws-mgmt-icon" />查看和设置
+              </router-link>
+              <router-link :to="`/c/${cid}/settings?tab=basic`" class="ws-mgmt-item">
+                <FlagIcon class="ws-mgmt-icon" />频道基本资料
+              </router-link>
+              <router-link :to="`/c/${cid}/settings?tab=me`" class="ws-mgmt-item">
+                <UserCircleIcon class="ws-mgmt-icon" />我的资料
+              </router-link>
+              <router-link :to="`/c/${cid}/settings?tab=level`" class="ws-mgmt-item">
+                <StarIcon class="ws-mgmt-icon" />我的等级
+              </router-link>
+              <router-link :to="`/c/${cid}/settings?tab=msgs`" class="ws-mgmt-item">
+                <NotificationIcon class="ws-mgmt-icon" />频道消息
+              </router-link>
+              <router-link :to="`/c/${cid}/settings?tab=notify`" class="ws-mgmt-item">
+                <ControlPlatformIcon class="ws-mgmt-icon" />消息接收类型
+              </router-link>
+              <router-link v-if="showMgmtEntries" :to="`/c/${cid}/admin`" class="ws-mgmt-item">
+                <ChartIcon class="ws-mgmt-icon" />频道管理
+              </router-link>
+              <router-link v-if="showMgmtEntries" :to="`/c/${cid}/ops`" class="ws-mgmt-item">
+                <ChartIcon class="ws-mgmt-icon" />运营中心
+              </router-link>
             </div>
-            <p v-else class="ws-empty">暂无热门</p>
-          </section>
+          </div>
         </div>
       </template>
     </template>
@@ -330,7 +321,7 @@
 <script setup lang="ts">
 import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { BrowseIcon, ChartIcon, ChevronRightIcon, SettingIcon } from 'tdesign-icons-vue-next'
+import { BrowseIcon, ChartIcon, ChevronRightIcon, ControlPlatformIcon, FlagIcon, NotificationIcon, SettingIcon, StarIcon, UserCircleIcon } from 'tdesign-icons-vue-next'
 import { communityApi, type Community, type TopicItem } from '@/api/community'
 import { postApi, type PostItem } from '@/api/post'
 import FeedCard from '@/components/FeedCard.vue'
@@ -930,20 +921,31 @@ async function onLeave() {
 .ws-feed .feed-toolbar {
   margin-bottom: var(--sp-3);
 }
-/* 发帖容器：贴住中间栏底部（信息流在其上方滚动），符合"下方发帖"操作习惯 */
+/* 发帖容器：固定到屏幕最底端（不是内容区底部），始终悬浮在视口底部；
+   信息流区域底部预留等高手势空间，避免内容被遮挡 */
 .ws-composer-anchor {
-  position: sticky;
+  position: fixed;
+  left: 240px;
+  right: 300px;
   bottom: 0;
-  z-index: 5;
+  z-index: 50;
   background: var(--surface);
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-container);
-  box-shadow: var(--shadow-sm);
-  padding: var(--sp-2);
-  margin-bottom: var(--sp-3);
+  border-top: 1px solid var(--border);
+  box-shadow: var(--shadow-md);
+  padding: var(--sp-2) var(--sp-3);
+}
+/* 移动端发帖容器：占满全宽，同样固定屏幕最底端 */
+.ws-composer-anchor.mobile {
+  left: 0;
+  right: 0;
+  padding: var(--sp-2) var(--sp-3);
+  padding-bottom: calc(var(--sp-2) + env(safe-area-inset-bottom, 0px));
 }
 .ws-composer-anchor .quick-composer {
   margin-bottom: 0;
+}
+.ws-feed {
+  padding-bottom: 72px;
 }
 .feed-toolbar {
   display: flex;
@@ -1221,5 +1223,9 @@ async function onLeave() {
 .ws-bottom .ws-panel {
   border-top: 1px solid var(--border);
   padding: var(--sp-3) 0;
+}
+/* 移动端发帖容器固定底部，页面末尾（查看和设置）预留空间避免被遮挡 */
+.ws-bottom {
+  padding-bottom: 84px;
 }
 </style>

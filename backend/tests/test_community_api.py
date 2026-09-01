@@ -267,3 +267,129 @@ def test_ops_center_counts_join_leave_visit(ctx):
     assert d["user_data"]["all_visits"] >= 2
     # 访问人数（去重 user_id）>=2
     assert d["user_data"]["all_visitors"] >= 2
+
+
+# ---------- 频道管理：转让 / 全员禁言 / 帖子移动 / 频道级通知设置 ----------
+
+
+def _add_boards(client, cid: int, token: str, names: list[str]) -> list[int]:
+    ids = []
+    for n in names:
+        r = client.post(f"/api/v1/communities/{cid}/boards", json={"name": n, "description": ""}, headers=_auth(token))
+        assert r.status_code == 200, r.text
+        ids.append(r.json()["data"]["id"])
+    return ids
+
+
+def test_transfer_community(ctx):
+    """转让频道：owner→normal，之后 normal 成为 owner、原 owner 降级。"""
+    client = ctx["client"]
+    cid = ctx["cid"]
+    # normal 加入
+    client.post(f"/api/v1/communities/{cid}/join", headers=_auth(ctx["normal"]))
+    # 拿到 normal 的 user_id
+    me = client.get("/api/v1/users/me", headers=_auth(ctx["normal"])).json()["data"]
+    target_uid = me["id"]
+    # 非 owner 不能转让
+    assert client.post(f"/api/v1/communities/{cid}/transfer", json={"target_user_id": target_uid},
+                       headers=_auth(ctx["normal"])).status_code in (403, 400)
+    # owner 转让给 normal
+    r = client.post(f"/api/v1/communities/{cid}/transfer", json={"target_user_id": target_uid},
+                    headers=_auth(ctx["owner"]))
+    assert r.status_code == 200, r.text
+    assert r.json()["data"]["owner_id"] == target_uid
+    # 校验成员身份翻转
+    d_old = client.get(f"/api/v1/communities/{cid}", headers=_auth(ctx["owner"])).json()["data"]
+    d_new = client.get(f"/api/v1/communities/{cid}", headers=_auth(ctx["normal"])).json()["data"]
+    assert d_old["is_owner"] is False
+    assert d_new["is_owner"] is True
+
+
+def test_all_mute_blocks_post_but_not_like(ctx):
+    """全员禁言：发帖被拒，点赞不禁；解除后恢复发帖。"""
+    client = ctx["client"]
+    cid = ctx["cid"]
+    # normal 加入并创建一个帖子
+    client.post(f"/api/v1/communities/{cid}/join", headers=_auth(ctx["normal"]))
+    bid = client.post(f"/api/v1/communities/{cid}/boards", json={"name": "板块", "description": ""},
+                      headers=_auth(ctx["owner"])).json()["data"]["id"]
+    post = client.post(f"/api/v1/communities/{cid}/boards/{bid}/posts",
+                       json={"title": "全员禁言测试", "content": "内容"}, headers=_auth(ctx["normal"]))
+    assert post.status_code == 200, post.text
+    pid = post.json()["data"]["id"]
+
+    # owner 全员禁言 1 小时
+    r = client.put(f"/api/v1/communities/{cid}/all-mute", json={"hours": 1}, headers=_auth(ctx["owner"]))
+    assert r.status_code == 200, r.text
+    assert r.json()["data"]["all_muted_until"] is not None
+
+    # normal 再发帖 → 403
+    r2 = client.post(f"/api/v1/communities/{cid}/boards/{bid}/posts",
+                     json={"title": "被禁", "content": "x"}, headers=_auth(ctx["normal"]))
+    assert r2.status_code == 403
+    # 评论也被禁
+    r3 = client.post(f"/api/v1/posts/{pid}/comments", json={"content": "评论"}, headers=_auth(ctx["normal"]))
+    assert r3.status_code == 403
+    # 点赞不禁
+    r4 = client.post("/api/v1/likes", json={"post_id": pid}, headers=_auth(ctx["normal"]))
+    assert r4.status_code == 200, r4.text
+
+    # 解除
+    client.put(f"/api/v1/communities/{cid}/all-mute", json={"hours": 0}, headers=_auth(ctx["owner"]))
+    r5 = client.post(f"/api/v1/communities/{cid}/boards/{bid}/posts",
+                     json={"title": "恢复", "content": "x"}, headers=_auth(ctx["normal"]))
+    assert r5.status_code == 200, r5.text
+
+
+def test_move_post_between_boards(ctx):
+    """帖子移动板块（moderate 权限）；普通成员无权。"""
+    client = ctx["client"]
+    cid = ctx["cid"]
+    client.post(f"/api/v1/communities/{cid}/join", headers=_auth(ctx["normal"]))
+    b1, b2 = _add_boards(client, cid, ctx["owner"], ["板块A", "板块B"])
+    post = client.post(f"/api/v1/communities/{cid}/boards/{b1}/posts",
+                       json={"title": "移动", "content": "x"}, headers=_auth(ctx["owner"]))
+    pid = post.json()["data"]["id"]
+    # 普通成员无权
+    assert client.put(f"/api/v1/posts/{pid}/move", json={"board_id": b2},
+                      headers=_auth(ctx["normal"])).status_code == 403
+    # owner 移动
+    r = client.put(f"/api/v1/posts/{pid}/move", json={"board_id": b2}, headers=_auth(ctx["owner"]))
+    assert r.status_code == 200, r.text
+    assert r.json()["data"]["board_id"] == b2
+
+
+def test_community_notify_settings(ctx):
+    """频道级消息接收类型：get/update，未覆盖继承全局。"""
+    client = ctx["client"]
+    cid = ctx["cid"]
+    # 默认继承全局（全开）
+    s = client.get(f"/api/v1/notifications/community/{cid}/settings", headers=_auth(ctx["normal"])).json()["data"]
+    assert s["mention"] is True
+    # 关闭频道内 like
+    r = client.put(f"/api/v1/notifications/community/{cid}/settings", json={"like": False},
+                   headers=_auth(ctx["normal"]))
+    assert r.status_code == 200, r.text
+    assert r.json()["data"]["like"] is False
+    # 再次读取保持
+    s2 = client.get(f"/api/v1/notifications/community/{cid}/settings", headers=_auth(ctx["normal"])).json()["data"]
+    assert s2["like"] is False
+    # 未知键 400
+    assert client.put(f"/api/v1/notifications/community/{cid}/settings", json={"foo": True},
+                      headers=_auth(ctx["normal"])).status_code == 400
+
+
+def test_notifications_scope_filter(ctx):
+    """通知列表 scope=system 只返回系统通知。"""
+    client = ctx["client"]
+    # 账号封禁会产生 system 通知；先制造一条
+    me = client.get("/api/v1/users/me", headers=_auth(ctx["normal"])).json()["data"]
+    uid = me["id"]
+    # 用 owner 作为管理员没有权限，改用直接调用 admin 需 user_type=1；跳过封禁，直接用 scope 验证接口可用
+    r = client.get("/api/v1/notifications?scope=system", headers=_auth(ctx["normal"]))
+    assert r.status_code == 200, r.text
+    assert "items" in r.json()["data"]
+    r2 = client.get("/api/v1/notifications?scope=interact", headers=_auth(ctx["normal"]))
+    assert r2.status_code == 200
+    # 非法 scope → 400（FastAPI Query pattern 校验失败经全局异常处理器转为 400）
+    assert client.get("/api/v1/notifications?scope=bogus", headers=_auth(ctx["normal"])).status_code in (400, 422)

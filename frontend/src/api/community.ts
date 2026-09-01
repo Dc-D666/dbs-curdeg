@@ -25,6 +25,8 @@ export interface Community {
   visitor_interact_switch: boolean
   owner_id: number
   status: number
+  /** 全员禁言截止时间（频道主/管理员设置；发帖与评论被禁，点赞不禁） */
+  all_muted_until: string | null
   created_at: string
   is_member: boolean
   my_member_type: number | null
@@ -92,6 +94,7 @@ export interface JoinRequestItem {
   created_at: string
   username: string
   user_nickname: string
+  user_avatar: string
 }
 
 export interface TopicItem {
@@ -113,6 +116,18 @@ export interface MyChannels {
   joined: Community[]
 }
 
+export interface MyMemberInfo {
+  member_id: number
+  level: number
+  member_type: number
+  nickname: string
+  role_id: number | null
+  role_name: string
+  role_color: string
+  is_owner: boolean
+  join_time: string | null
+}
+
 export const communityApi = {
   list(page = 1, pageSize = 20, sort: 'latest' | 'hot' = 'latest') {
     return request<Page<Community>>({ url: '/communities', params: { page, page_size: pageSize, sort } })
@@ -128,6 +143,21 @@ export const communityApi = {
   },
   update(id: number, data: Partial<Community>) {
     return request<Community>({ url: `/communities/${id}`, method: 'PUT', data })
+  },
+  /** 我的频道成员信息（我的资料/我的等级） */
+  myMember(id: number) {
+    return request<MyMemberInfo>({ url: `/communities/${id}/my-member` })
+  },
+  /** 更新我的频道内昵称 */
+  updateMyMember(id: number, nickname: string) {
+    return request<null>({ url: `/communities/${id}/my-member`, method: 'PUT', data: { nickname } })
+  },
+  /** 频道分享二维码 PNG（需登录；返回 blob） */
+  qr(id: number) {
+    const token = tokenStore.access
+    return fetch(`/api/v1/communities/${id}/qr`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
   },
   updateStatus(id: number, status: number) {
     return request<Community>({ url: `/communities/${id}/status`, method: 'PUT', data: { status } })
@@ -155,8 +185,26 @@ export const communityApi = {
   boards(cid: number) {
     return request<Board[]>({ url: `/communities/${cid}/boards` })
   },
-  createBoard(cid: number, data: { name: string; description?: string; sort?: number }) {
+  createBoard(cid: number, data: { name: string; description?: string; sort?: number; allow_post_role_ids?: number[]; allow_anonymous?: boolean }) {
     return request<Board>({ url: `/communities/${cid}/boards`, method: 'POST', data })
+  },
+  updateBoard(cid: number, boardId: number, data: Partial<Board>) {
+    return request<Board>({ url: `/communities/${cid}/boards/${boardId}`, method: 'PUT', data })
+  },
+  deleteBoard(cid: number, boardId: number) {
+    return request<null>({ url: `/communities/${cid}/boards/${boardId}`, method: 'DELETE' })
+  },
+  /** 转让频道（仅频道主）：把频道主身份交给目标成员 */
+  transfer(cid: number, targetUserId: number) {
+    return request<Community>({ url: `/communities/${cid}/transfer`, method: 'POST', data: { target_user_id: targetUserId } })
+  },
+  /** 全员禁言：hours=0 解除；1-720 小时（发帖/评论禁，点赞不禁） */
+  allMute(cid: number, hours: number) {
+    return request<Community>({ url: `/communities/${cid}/all-mute`, method: 'PUT', data: { hours } })
+  },
+  /** 黑名单列表（需 member_manage 权限） */
+  blacklist(cid: number, page = 1, pageSize = 50, keyword?: string) {
+    return request<Page<Member>>({ url: `/communities/${cid}/blacklist`, params: { page, page_size: pageSize, keyword: keyword || undefined } })
   },
   members(cid: number, page = 1, pageSize = 50, keyword?: string) {
     return request<Page<Member>>({ url: `/communities/${cid}/members`, params: { page, page_size: pageSize, keyword: keyword || undefined } })
