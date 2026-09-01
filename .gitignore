@@ -39,3 +39,7 @@ _pretty_*.json
 android/.kotlin/
 .reasonix/
 _pgtest*.txt
+
+# ===== 答辩/文档成品备份（不入库，仅在 docs/ 本地归档） =====
+docs/defense/
+答辩*.md
