@@ -63,7 +63,7 @@
               <div class="ws-discover">
                 <div class="ws-discover-search">
                   <t-input v-model.trim="discoverQ" size="small" placeholder="搜索帖子…" clearable @enter="doDiscoverSearch" />
-                  <t-button size="small" variant="outline" :disabled="!discoverQ" @click="doDiscoverSearch">搜索</t-button>
+                  <t-button size="small" theme="primary" :disabled="!discoverQ" @click="doDiscoverSearch">搜索</t-button>
                 </div>
                 <!-- 搜索结果 -->
                 <div v-if="discoverSearching" class="ws-discover-results">

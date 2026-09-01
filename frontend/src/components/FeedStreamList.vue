@@ -115,20 +115,21 @@ function retryLoad() {
 </script>
 
 <style scoped>
+/* 真正的双列瀑布流：CSS 多列布局，卡片按列纵向堆叠、自动补位，
+   短卡片下方空白由本列后续卡片自然填充，不做行高对齐 */
 .feed-list {
-  display: grid;
-  grid-template-columns: 1fr;
-  /* 卡片按内容自适应高度 + 自动补位：双列时短卡片的空隙由后续卡片回填，
-     形成真正的瀑布流，而非强制每行等高 */
-  align-items: start;
-  grid-auto-flow: dense;
-  gap: var(--sp-3);
+  column-count: 1;
+  column-gap: var(--sp-3);
 }
-/* 桌面：双列帖子流 */
+/* 桌面：双列瀑布流 */
 @media (min-width: 1024px) {
   .feed-list {
-    grid-template-columns: repeat(2, 1fr);
+    column-count: 2;
   }
+}
+.feed-list > * {
+  break-inside: avoid;
+  margin-bottom: var(--sp-3);
 }
 .load-more {
   margin-top: var(--sp-3);
