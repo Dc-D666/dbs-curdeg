@@ -54,8 +54,11 @@ def feed(
     user: User | None = Depends(get_current_user_optional),
     db: Session = Depends(get_db),
 ):
-    """频道帖子流（latest 最新 / hot 热度分倒序，阶段 5；可选按版块过滤；游客可见）。"""
-    community = _get_community(db, community_id)
+    """频道帖子流（latest 最新 / hot 热度分倒序，阶段 5；可选按版块过滤；游客可见）。
+
+    平台管理员可查看被封频道的流（巡视/评估解封）；普通用户与游客不可。
+    """
+    community = _get_community(db, community_id, allow_banned=user is not None and user.user_type == 1)
     uid = user.id if user else None
     return ok(data=post_service.feed(db, community, sort, cursor, page_size, uid, board_id))
 
@@ -101,8 +104,11 @@ def get_post(
     user: User | None = Depends(get_current_user_optional),
     db: Session = Depends(get_db),
 ):
-    """帖子详情（含作者/频道/版块信息 + 互动状态）。"""
-    return ok(data=post_service.get_post(db, post_id, user.id if user else None))
+    """帖子详情（含作者/频道/版块信息 + 互动状态；平台管理员可看被封频道的帖子）。"""
+    return ok(data=post_service.get_post(
+        db, post_id, user.id if user else None,
+        allow_banned_community=user is not None and user.user_type == 1,
+    ))
 
 
 @router.put("/posts/{post_id}")
@@ -200,9 +206,9 @@ def update_feed_strategy(
 # ---------- 辅助 ----------
 
 
-def _get_community(db: Session, community_id: int) -> Community:
+def _get_community(db: Session, community_id: int, allow_banned: bool = False) -> Community:
     community = db.get(Community, community_id)
-    if community is None or community.status != 0:
+    if community is None or (community.status != 0 and not allow_banned):
         raise NotFoundError("频道不存在")
     return community
 

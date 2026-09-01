@@ -55,9 +55,30 @@
             <!-- 频道主不能退出（须解散），不能让按钮无声消失（#53） -->
             <span v-else class="owner-exit-hint">频道主不可退出，如需关闭频道请使用下方「解散频道」</span>
           </template>
-          <t-button v-else theme="primary" :loading="joining" @click="onJoin">
+          <!-- 平台管理员：封禁/解封入口（被封频道 Admin 仍可进入巡视） -->
+          <t-button
+            v-if="community.is_platform_admin && community.status !== 2"
+            variant="outline"
+            theme="danger"
+            :loading="statusSaving"
+            @click="onPlatformBan(true)"
+          >封禁频道</t-button>
+          <t-button
+            v-if="community.is_platform_admin && community.status === 2"
+            variant="outline"
+            :loading="statusSaving"
+            @click="onPlatformBan(false)"
+          >解除封禁</t-button>
+          <t-tag v-if="community.status === 2" theme="danger" variant="light">已封禁</t-tag>
+          <t-button
+            v-if="!community.is_member && !community.is_platform_admin && community.status !== 2"
+            theme="primary"
+            :loading="joining"
+            @click="onJoin"
+          >
             {{ joining ? '处理中…' : '加入频道' }}
           </t-button>
+          <!-- 平台管理员巡视视角：不提供加入（定位是不隶属任何频道） -->
         </div>
       </section>
 
@@ -252,7 +273,30 @@
               </div>
               <div class="wb-actions">
                 <t-button v-if="community.is_member && community.my_member_type !== 0" variant="outline" size="small" @click="onLeave">退出</t-button>
-                <t-button v-else-if="!community.is_member" theme="primary" size="small" :loading="joining" @click="onJoin">加入</t-button>
+                <!-- 平台管理员：封禁/解封（宽屏头部） -->
+                <t-button
+                  v-if="community.is_platform_admin && community.status !== 2"
+                  variant="outline"
+                  size="small"
+                  theme="danger"
+                  :loading="statusSaving"
+                  @click="onPlatformBan(true)"
+                >封禁</t-button>
+                <t-button
+                  v-if="community.is_platform_admin && community.status === 2"
+                  variant="outline"
+                  size="small"
+                  :loading="statusSaving"
+                  @click="onPlatformBan(false)"
+                >解封</t-button>
+                <t-tag v-if="community.status === 2" theme="danger" variant="light" size="small">已封禁</t-tag>
+                <t-button
+                  v-else-if="!community.is_member && !community.is_platform_admin"
+                  theme="primary"
+                  size="small"
+                  :loading="joining"
+                  @click="onJoin"
+                >加入</t-button>
               </div>
             </div>
 
@@ -849,6 +893,27 @@ async function onEnsureAi() {
     setOwnerMsg(e instanceof Error ? e.message : 'AI 助手创建失败', true)
   } finally {
     aiEnsuring.value = false
+  }
+}
+
+// ---------- 平台管理员：封禁/解封频道（系统级操作，仅 user_type=1） ----------
+const statusSaving = ref(false)
+async function onPlatformBan(ban: boolean) {
+  const action = ban ? '封禁频道' : '解除封禁'
+  const tip = ban
+    ? '封禁后全体用户无法访问该频道（内容保留），仅平台管理员可解封。确定继续？'
+    : '解封后频道立即恢复对外可见。确定继续？'
+  if (!(await confirmDialog(action, tip))) return
+  if (statusSaving.value) return
+  statusSaving.value = true
+  try {
+    await communityApi.updateStatus(cid.value, ban ? 2 : 0)
+    if (community.value) community.value.status = ban ? 2 : 0
+    toast(ban ? '频道已封禁' : '频道已解封', 'success')
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '操作失败', 'error')
+  } finally {
+    statusSaving.value = false
   }
 }
 </script>

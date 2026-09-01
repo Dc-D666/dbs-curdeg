@@ -76,7 +76,8 @@ def create_community(db: Session, user: User, payload: CreateCommunityRequest) -
 
 
 def list_communities(
-    db: Session, page: int, page_size: int, current_user_id: int | None, sort: str = "latest"
+    db: Session, page: int, page_size: int, current_user_id: int | None, sort: str = "latest",
+    is_platform_admin: bool = False,
 ) -> dict:
     """频道列表（含我加入的标记）。sort=latest 按创建倒序；sort=hot 按热度（成员数+帖子数）倒序。"""
     base = select(Community).where(Community.status == 0)
@@ -86,18 +87,18 @@ def list_communities(
         )
     else:
         stmt = base.order_by(Community.id.desc())
-    total = db.execute(select(Community.id).where(Community.status == 0)).scalars().count() if False else len(
-        db.execute(select(Community.id).where(Community.status == 0)).scalars().all()
-    )
+    total = len(db.execute(select(Community.id).where(Community.status == 0)).scalars().all())
     items = db.execute(stmt.offset((page - 1) * page_size).limit(page_size)).scalars().all()
-    # 批量查我的成员身份
+    # 批量查我的成员身份（被拉黑的行不算"已加入"，与 my_communities 口径一致）
     member_map: dict[int, int] = {}
     if current_user_id:
         mids = [c.id for c in items]
         if mids:
             rows = db.execute(
                 select(Member.community_id, Member.member_type).where(
-                    Member.user_id == current_user_id, Member.community_id.in_(mids)
+                    Member.user_id == current_user_id,
+                    Member.community_id.in_(mids),
+                    Member.is_blocked.is_(False),
                 )
             ).all()
             member_map = {r[0]: r[1] for r in rows}
@@ -106,6 +107,7 @@ def list_communities(
         co = CommunityOut.model_validate(c)
         co.is_member = c.id in member_map
         co.my_member_type = member_map.get(c.id)
+        co.is_platform_admin = is_platform_admin
         out.append(co)
     return {"items": out, "total": total, "page": page, "page_size": page_size}
 
@@ -135,16 +137,22 @@ def my_communities(db: Session, user: User) -> dict:
     return result
 
 
-def get_community(db: Session, community_id: int, current_user_id: int | None) -> CommunityOut:
+def get_community(
+    db: Session, community_id: int, current_user_id: int | None, is_platform_admin: bool = False
+) -> CommunityOut:
     community = db.get(Community, community_id)
-    if community is None or community.status != 0:
+    # 平台管理员可查看被封禁频道（巡视 + 解封入口）；普通用户/游客只见活跃频道
+    if community is None or (community.status != 0 and not is_platform_admin):
         raise NotFoundError("频道不存在")
-    return community_out(db, community, current_user_id)
+    return community_out(db, community, current_user_id, is_platform_admin)
 
 
-def community_out(db: Session, community: Community, current_user_id: int | None) -> CommunityOut:
+def community_out(
+    db: Session, community: Community, current_user_id: int | None, is_platform_admin: bool = False
+) -> CommunityOut:
     """组装详情（含版块与我的成员身份）。"""
     out = CommunityOut.model_validate(community)
+    out.is_platform_admin = is_platform_admin
     boards = db.execute(
         select(Board).where(Board.community_id == community.id, Board.status == 0).order_by(Board.sort, Board.id)
     ).scalars().all()
@@ -189,17 +197,23 @@ def dissolve_community(db: Session, community: Community, user: User) -> None:
 def update_community_status(
     db: Session, community: Community, user: User, status: int
 ) -> CommunityOut:
-    """频道状态调整：owner 可 正常/关闭；违规封禁(2)仅系统管理员。"""
+    """频道状态调整：owner 可 正常/关闭；违规封禁(2)与解封(2→0)为系统管理员专属。"""
     if status == 2:
         if user.user_type != 1:  # 系统管理员
             raise PermissionError_("违规封禁需要系统管理员权限")
         community.status = 2
+    elif community.status == 2 and status == 0:
+        # 解封：被系统管理员封禁(2)的频道，只有系统管理员能恢复；
+        # owner 此时无权（避免被封频道主自行解除封禁）
+        if user.user_type != 1:
+            raise PermissionError_("解除违规封禁需要系统管理员权限")
+        community.status = 0
     else:
         _ensure_owner(db, community, user)
         community.status = status
     db.commit()
     db.refresh(community)
-    return community_out(db, community, current_user_id=user.id)
+    return community_out(db, community, current_user_id=user.id, is_platform_admin=user.user_type == 1)
 
 
 def _ensure_owner(db: Session, community: Community, user: User) -> None:

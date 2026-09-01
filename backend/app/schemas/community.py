@@ -156,6 +156,9 @@ class CommunityOut(BaseModel):
     # 视图增强字段
     is_member: bool = False
     my_member_type: int | None = None
+    # 平台管理员标记（user_type=1）：前端据此展示平台级操作（封禁/解封频道），
+    # 而非成员视角操作（加入/退出）
+    is_platform_admin: bool = False
     boards: list[BoardOut] = []
 
     model_config = {"from_attributes": True}

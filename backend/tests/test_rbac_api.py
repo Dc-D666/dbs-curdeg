@@ -352,9 +352,11 @@ def test_ops_logged(ctx):
 # ---------- 系统管理员与禁言到期（服务层） ----------
 
 
-def test_system_admin_full_perms(db_session):
-    """系统管理员（user_type=1）即使非频道成员也拥有全部权限点。"""
+def test_system_admin_no_channel_perms(db_session):
+    """系统管理员（user_type=1）不再自动获得频道级权限点（09-01 定位重设：
+    平台巡视者——只有封频道/封用户等系统级能力，频道级操作须频道自身授权）。"""
     from app.core.permissions import require_perms
+    from app.core.response import PermissionError_
 
     u = User(username="sysadmin1", email="sysadmin1@test.com", password_hash="x", user_type=1)
     owner = User(username="sysowner1", email="sysowner1@test.com", password_hash="x")
@@ -367,8 +369,14 @@ def test_system_admin_full_perms(db_session):
     m = Member(community_id=c.id, user_id=owner.id, member_type=0, nickname="o")
     db_session.add(m)
     db_session.commit()
-    assert get_member_perms(db_session, c.id, u) == set(ALL_PERMS)
-    assert require_perms(db_session, c.id, u, "top", "super") is None  # 非成员也放行
+    # 非成员：无任何频道级权限点
+    assert get_member_perms(db_session, c.id, u) == set()
+    # require_perms 拒绝（删帖/置顶等频道级操作）
+    try:
+        require_perms(db_session, c.id, u, "top")
+        raise AssertionError("系统管理员不应拥有频道级权限")
+    except PermissionError_:
+        pass
 
 
 def test_shutup_expire_auto_unlock(db_session):

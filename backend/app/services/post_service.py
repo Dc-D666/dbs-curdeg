@@ -197,10 +197,18 @@ def set_essence(db: Session, community: Community, post: Post, user: User, is_es
     return post_out(db, post, current_user_id=user.id)
 
 
-def get_post(db: Session, post_id: int, current_user_id: int | None) -> PostOut:
-    """帖子详情（含互动状态）；浏览量原子 +1（仅详情页计数，feed 不触发）。"""
+def get_post(
+    db: Session, post_id: int, current_user_id: int | None, allow_banned_community: bool = False
+) -> PostOut:
+    """帖子详情（含互动状态）；浏览量原子 +1（仅详情页计数，feed 不触发）。
+
+    allow_banned_community：平台管理员可读被封频道下的帖子（巡视）。
+    """
     post = db.get(Post, post_id)
     if post is None or post.status != POST_STATUS_NORMAL:
+        raise NotFoundError("帖子不存在")
+    community = db.get(Community, post.community_id)
+    if community is not None and community.status == 2 and not allow_banned_community:
         raise NotFoundError("帖子不存在")
     db.execute(update(Post).where(Post.id == post.id).values(view_count=Post.view_count + 1))
     db.commit()

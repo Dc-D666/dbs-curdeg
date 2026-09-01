@@ -1,12 +1,13 @@
 """权限内核（阶段 4）：成员 → 身份组(roles.perms) → 权限点。
 
 解析规则（按优先级）：
-  1. 系统管理员（user.user_type == 1）与频道主（member_type == OWNER）恒拥有全部权限点；
+  1. 频道主（member_type == OWNER）恒拥有全部权限点；
   2. 成员有 role_id 且身份组存在 → 以 roles.perms 为准（自定义身份组可裁剪/扩展权限）；
   3. 成员无身份组（role_id 为空）→ 按 member_type 兜底默认组权限（兼容历史数据/测试）。
 
-越级防护（get_member_weight）：管理动作只能作用于排序（sort）严格靠后的成员；
-频道主 sort=0 恒不可被他人管理。
+系统管理员（user_type == 1）定位是**平台级**巡视者：只保留跨频道的系统级能力
+（封禁/解封频道、封禁/解封用户、运营看板等，各接口自行判 user_type），
+**不再自动获得任何频道级权限点**（删帖/删评论/置顶/禁言/踢人等须由频道自身授权）。
 """
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -75,9 +76,11 @@ def get_member(db: Session, community_id: int, user_id: int) -> Member | None:
 
 
 def get_member_perms(db: Session, community_id: int, user: User) -> set[str]:
-    """解析用户在某频道的权限点集合。"""
-    if user.user_type == 1:  # 系统管理员
-        return set(ALL_PERMS)
+    """解析用户在某频道的权限点集合。
+
+    系统管理员不在此放行：频道级权限须由频道自身（频道主/身份组）授予，
+    平台管理员只有各系统级接口单独判 user_type 的能力。
+    """
     member = get_member(db, community_id, user.id)
     if member is None or member.is_blocked:
         return set()
@@ -110,12 +113,14 @@ def can_manage(db: Session, operator: Member, target: Member) -> bool:
 
 
 def require_perms(db: Session, community_id: int, user: User, *perms: str) -> Member | None:
-    """校验用户对指定频道拥有全部权限点；不满足抛 1002，返回成员记录（系统管理员可能非成员，返回 None）。"""
+    """校验用户对指定频道拥有全部权限点；不满足抛 1002，返回成员记录。
+
+    系统管理员不再放行（09-01 定位重设）：频道级操作（删帖/置顶/禁言…）
+    必须是频道成员且被授权；平台级能力（封频道/封用户）走各自接口的 user_type 判断。
+    """
     community = db.get(Community, community_id)
     if community is None or community.status != 0:
         raise NotFoundError("频道不存在")
-    if user.user_type == 1:  # 系统管理员：全量权限，不要求是频道成员
-        return None
     member = get_member(db, community_id, user.id)
     if member is None or member.is_blocked:
         raise PermissionError_("只有频道成员可以执行此操作")

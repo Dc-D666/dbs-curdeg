@@ -29,7 +29,7 @@
       @load-error="onWorkspaceLoadError"
     />
 
-    <!-- 无默认频道：加载中 / 加载失败（可重试）/ 确实没加入（引导去发现页） -->
+    <!-- 无默认频道：加载中 / 加载失败（可重试）/ 平台管理员视角 / 普通用户引导 -->
     <div v-else class="state">
       <template v-if="picking">
         <p class="state-text">加载中…</p>
@@ -37,6 +37,18 @@
       <template v-else-if="loadError">
         <p class="state-text">{{ loadError }}</p>
         <t-button variant="outline" @click="retryPick">重试</t-button>
+      </template>
+      <!-- 平台管理员（user_type=1）不隶属任何频道：平台巡视视角，而非「去加入频道」误导引导 -->
+      <template v-else-if="isPlatformAdmin">
+        <p class="state-text">平台管理员模式：不隶属任何频道，可巡视全部频道与平台数据</p>
+        <div class="admin-actions">
+          <t-button theme="primary" @click="router.push('/dashboard')">
+            <template #icon><DashboardIcon /></template> 运营看板
+          </t-button>
+          <t-button variant="outline" @click="router.push('/discover')">
+            <template #icon><BrowseIcon /></template> 浏览全部频道
+          </t-button>
+        </div>
       </template>
       <template v-else>
         <p class="state-text">加入一个频道，开始使用频道工作台</p>
@@ -47,8 +59,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onActivated, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { BrowseIcon, DashboardIcon } from 'tdesign-icons-vue-next'
 import ChannelWorkspace from '@/components/ChannelWorkspace.vue'
 import { communityApi } from '@/api/community'
 import { useAuthStore } from '@/stores/auth'
@@ -140,6 +153,29 @@ onMounted(() => {
   pickDefault()
   window.addEventListener('resize', onResize)
 })
+
+// 平台管理员（user_type=1）：不隶属任何频道，首页展示平台视角而非「加入频道」引导
+const isPlatformAdmin = computed(() => auth.user?.user_type === 1)
+
+// keep-alive 缓存本页（#37）：切账号后 onMounted 不再执行，会把上个账号的
+// 工作台/空态原样恢复（Admin 被缓存成「没加入频道」的元凶）。
+// onActivated 对比上次初始化时的用户 id，变化则整体重置重新选频道。
+let lastPickUid: number | null | undefined
+function bindPickUid() {
+  lastPickUid = auth.user?.id ?? null
+}
+onActivated(() => {
+  const uid = auth.user?.id ?? null
+  if (lastPickUid !== undefined && lastPickUid !== uid) {
+    currentCid.value = null
+    picking.value = false
+    loadError.value = ''
+    bindPickUid()
+    pickDefault()
+  }
+})
+// 首次挂载记录基准（在 pickDefault 之后，避免 onActivated 首次触发即重置）
+onMounted(bindPickUid)
 onBeforeUnmount(() => {
   window.removeEventListener('resize', onResize)
 })

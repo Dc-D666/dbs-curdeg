@@ -33,7 +33,9 @@ def list_communities(
 ):
     """频道列表（公开，含我加入标记）。sort=hot 按热度倒序。"""
     uid = user.id if user else None
-    return ok(data=community_service.list_communities(db, page, page_size, uid, sort))
+    return ok(data=community_service.list_communities(
+        db, page, page_size, uid, sort, is_platform_admin=user is not None and user.user_type == 1,
+    ))
 
 
 @router.get("/mine")
@@ -51,12 +53,14 @@ def get_community(
     user: User | None = Depends(get_current_user_optional),
     db: Session = Depends(get_db),
 ):
-    """频道详情（含版块列表 + 我的成员身份）。"""
+    """频道详情（含版块列表 + 我的成员身份；平台管理员可查看被封频道）。"""
     community = db.get(Community, community_id)
     if community is None:
         raise NotFoundError("频道不存在")
     uid = user.id if user else None
-    return ok(data=community_service.get_community(db, community_id, uid))
+    return ok(data=community_service.get_community(
+        db, community_id, uid, is_platform_admin=user is not None and user.user_type == 1,
+    ))
 
 
 @router.put("/{community_id}")

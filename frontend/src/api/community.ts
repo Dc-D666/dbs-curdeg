@@ -28,6 +28,8 @@ export interface Community {
   created_at: string
   is_member: boolean
   my_member_type: number | null
+  /** 平台管理员（user_type=1）标记：前端据此展示封禁/解封等平台级操作 */
+  is_platform_admin?: boolean
   boards: Board[]
 }
 
