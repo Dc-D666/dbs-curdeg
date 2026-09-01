@@ -3,8 +3,17 @@
     <header class="home-header">
       <h1 class="brand">SDUdiscord</h1>
       <nav v-if="auth.user" class="nav">
-        <router-link to="/me" class="nav-link">
-          {{ auth.user.nickname || auth.user.username }}
+        <!-- 通知中心入口：右上角，未读角标实时显示 -->
+        <router-link to="/notifications" class="nav-icon-btn" title="通知中心" aria-label="通知中心">
+          <NotificationIcon class="nav-icon-svg" />
+          <span v-if="notif.unread > 0" class="nav-badge">{{ notif.unread > 99 ? '99+' : notif.unread }}</span>
+        </router-link>
+        <!-- 个人中心入口：右上角头像 -->
+        <router-link to="/me" class="nav-user" :title="auth.user.nickname || auth.user.username">
+          <t-avatar :image="auth.user.avatar_url || undefined" size="28px">
+            <template #icon>{{ initial }}</template>
+          </t-avatar>
+          <span class="nav-user-name">{{ auth.user.nickname || auth.user.username }}</span>
         </router-link>
         <t-button variant="text" size="small" @click="onLogout">退出</t-button>
       </nav>
@@ -54,10 +63,12 @@
 <script setup lang="ts">
 import { computed, onActivated, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { NotificationIcon } from 'tdesign-icons-vue-next'
 import ChannelWorkspace from '@/components/ChannelWorkspace.vue'
 import PlatformConsole from '@/views/PlatformConsole.vue'
 import { communityApi } from '@/api/community'
 import { useAuthStore } from '@/stores/auth'
+import { useNotificationStore } from '@/stores/notification'
 import { tokenStore } from '@/api/http'
 import { formatBeijing } from '@/utils/time'
 import { errMessage } from '@/utils/error'
@@ -66,7 +77,11 @@ import { errMessage } from '@/utils/error'
 defineOptions({ name: 'HomeView' })
 
 const auth = useAuthStore()
+const notif = useNotificationStore()
 const router = useRouter()
+
+// 个人中心头像首字母
+const initial = computed(() => (auth.user?.nickname || auth.user?.username || 'U').slice(0, 1).toUpperCase())
 
 // 首页更新时间：构建时由 Vite define 注入（__BUILD_TIME__），北京时间、精确到分
 // （formatBeijing 固定输出 YYYY-MM-DD HH:mm:ss，截掉秒即可）。
@@ -234,6 +249,59 @@ function onLogout() {
 .nav-link {
   color: var(--text-1);
   font-size: var(--fs-body);
+}
+/* 首页右上角集成入口：通知（带角标） + 个人中心（头像） */
+.nav-icon-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-control);
+  color: var(--text-2);
+}
+.nav-icon-btn:hover {
+  background: var(--surface);
+  color: var(--brand);
+}
+.nav-icon-svg {
+  width: 20px;
+  height: 20px;
+}
+.nav-badge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+.nav-user {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 2px 6px;
+  border-radius: var(--radius-control);
+  color: var(--text-1);
+}
+.nav-user:hover {
+  background: var(--surface);
+}
+.nav-user-name {
+  font-size: var(--fs-body);
+  max-width: 96px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .state {
   padding: var(--sp-10, 48px) 0;

@@ -156,6 +156,10 @@ class CommunityOut(BaseModel):
     # 视图增强字段
     is_member: bool = False
     my_member_type: int | None = None
+    # 频道主专属权限标记（前端据此展示频道级管理入口）
+    is_owner: bool = False
+    # 当前用户在频道内拥有的权限点集合（运营中心/管理入口按权限显示，super=频道主专属全量）
+    my_perms: list[str] = []
     # 平台管理员标记（user_type=1）：前端据此展示平台级操作（封禁/解封频道），
     # 而非成员视角操作（加入/退出）
     is_platform_admin: bool = False

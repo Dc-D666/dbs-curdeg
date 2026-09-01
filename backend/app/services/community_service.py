@@ -10,6 +10,7 @@ from app.core.permissions import (
     PERMS_OWNER,
     PERMS_SUPER_ADMIN,
     PERM_MEMBER_MANAGE,
+    get_member_perms,
     require_perms,
 )
 from app.core.response import ConflictError, NotFoundError, ParamError, PermissionError_
@@ -32,6 +33,9 @@ from app.schemas.community import (
 )
 from app.services.notify_service import notify
 from app.services.op_log_service import log_op
+from app.services.ops_service import log_event
+
+
 def _gen_number() -> str:
     """频道号：6 位字母数字，撞车重试。"""
     for _ in range(5):
@@ -138,19 +142,21 @@ def my_communities(db: Session, user: User) -> dict:
 
 
 def get_community(
-    db: Session, community_id: int, current_user_id: int | None, is_platform_admin: bool = False
+    db: Session, community_id: int, current_user_id: int | None, is_platform_admin: bool = False,
+    user: User | None = None,
 ) -> CommunityOut:
     community = db.get(Community, community_id)
     # 平台管理员可查看被封禁频道（巡视 + 解封入口）；普通用户/游客只见活跃频道
     if community is None or (community.status != 0 and not is_platform_admin):
         raise NotFoundError("频道不存在")
-    return community_out(db, community, current_user_id, is_platform_admin)
+    return community_out(db, community, current_user_id, is_platform_admin, user)
 
 
 def community_out(
-    db: Session, community: Community, current_user_id: int | None, is_platform_admin: bool = False
+    db: Session, community: Community, current_user_id: int | None, is_platform_admin: bool = False,
+    user: User | None = None,
 ) -> CommunityOut:
-    """组装详情（含版块与我的成员身份）。"""
+    """组装详情（含版块与我的成员身份 / 权限点）。"""
     out = CommunityOut.model_validate(community)
     out.is_platform_admin = is_platform_admin
     boards = db.execute(
@@ -173,6 +179,13 @@ def community_out(
         if member and not member.is_blocked:
             out.is_member = True
             out.my_member_type = member.member_type
+            out.is_owner = member.member_type == MEMBER_OWNER
+    # 权限点：供前端按权限显示「管理中心/运营中心」等频道级管理入口
+    if current_user_id:
+        if user is None:
+            user = db.get(User, current_user_id)
+        if user is not None:
+            out.my_perms = sorted(get_member_perms(db, community.id, user))
     return out
 
 
@@ -334,6 +347,8 @@ def _add_member(db: Session, community: Community, user: User, join_channel: int
         .where(Community.id == community.id)
         .values(member_count=Community.member_count + 1)
     )
+    # 运营中心：记录加入事件（供新增成员数统计）
+    log_event(db, community.id, user.id, "join")
     db.commit()
     return {"status": "joined", "message": "已加入频道"}
 
@@ -354,6 +369,8 @@ def leave_community(db: Session, community: Community, user: User) -> None:
         .where(Community.id == community.id)
         .values(member_count=func.greatest(0, Community.member_count - 1))
     )
+    # 运营中心：记录退出事件（供退出成员数统计）
+    log_event(db, community.id, user.id, "leave")
     db.commit()
 
 

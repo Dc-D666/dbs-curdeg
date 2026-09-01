@@ -3,12 +3,13 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, get_current_user_optional
-from app.core.response import NotFoundError, ok
+from app.core.response import NotFoundError, PermissionError_, ok
 from app.db import get_db
 from app.models.community import Community
 from app.models.user import User
 from app.schemas.community import CreateCommunityRequest, UpdateCommunityRequest, UpdateCommunityStatusRequest
 from app.services import community_service
+from app.services.ops_service import can_view_ops, log_event, ops_center
 
 router = APIRouter(prefix="/communities", tags=["communities"])
 
@@ -59,8 +60,39 @@ def get_community(
         raise NotFoundError("频道不存在")
     uid = user.id if user else None
     return ok(data=community_service.get_community(
-        db, community_id, uid, is_platform_admin=user is not None and user.user_type == 1,
+        db, community_id, uid, is_platform_admin=user is not None and user.user_type == 1, user=user,
     ))
+
+
+@router.post("/{community_id}/visit")
+def community_visit(
+    community_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """访问打点：进入频道工作台/详情时调用，记录 visit 事件（供访问人数/次数统计）。"""
+    community = db.get(Community, community_id)
+    if community is None:
+        raise NotFoundError("频道不存在")
+    log_event(db, community.id, user.id, "visit")
+    db.commit()
+    return ok(message="ok")
+
+
+@router.get("/{community_id}/ops-center")
+def community_ops_center(
+    community_id: int,
+    board_id: int | None = Query(None, ge=1),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """频道运营中心（频道主/有成员数据权限的管理员）：昨日/用户/内容/排名数据。"""
+    community = db.get(Community, community_id)
+    if community is None:
+        raise NotFoundError("频道不存在")
+    if not can_view_ops(db, community, user):
+        raise PermissionError_("需要频道主或成员管理权限")
+    return ok(data=ops_center(db, community, board_id))
 
 
 @router.put("/{community_id}")

@@ -213,3 +213,57 @@ def test_update_community_only_owner(ctx):
         headers=_auth(ctx["normal"]),
     )
     assert res2.status_code == 403
+
+
+# ---------- 运营中心（频道主专属） ----------
+
+
+def test_community_detail_exposes_perms_and_owner(ctx):
+    """详情返回 my_perms/is_owner，供前端按权限显示管理/运营入口。"""
+    client = ctx["client"]
+    # 频道主：is_owner=True，my_perms 含全部权限点（super）
+    data = client.get(f"/api/v1/communities/{ctx['cid']}", headers=_auth(ctx["owner"])).json()["data"]
+    assert data["is_owner"] is True
+    assert "super" in data["my_perms"]
+    assert "member_manage" in data["my_perms"]
+    # 普通成员加入后：非 owner，只有发帖/评论权限
+    client.post(f"/api/v1/communities/{ctx['cid']}/join", headers=_auth(ctx["normal"]))
+    data2 = client.get(f"/api/v1/communities/{ctx['cid']}", headers=_auth(ctx["normal"])).json()["data"]
+    assert data2["is_owner"] is False
+    assert "member_manage" not in data2["my_perms"]
+    assert "post.create" in data2["my_perms"]
+
+
+def test_ops_center_owner_only_and_data(ctx):
+    """运营中心：频道主可见数据，普通成员 403，游客 401。"""
+    client = ctx["client"]
+    # 游客 401
+    assert client.get(f"/api/v1/communities/{ctx['cid']}/ops-center").status_code == 401
+    # 普通成员 403
+    assert client.get(f"/api/v1/communities/{ctx['cid']}/ops-center", headers=_auth(ctx["normal"])).status_code == 403
+    # 频道主 200 且结构完整
+    res = client.get(f"/api/v1/communities/{ctx['cid']}/ops-center", headers=_auth(ctx["owner"]))
+    assert res.status_code == 200, res.text
+    d = res.json()["data"]
+    assert "yesterday" in d and "today" in d and "user_data" in d
+    assert "content_analysis" in d and "post_rank" in d
+    assert d["user_data"]["total_members"] >= 1
+    assert d["content_analysis"]["boards"], "应有默认版块的分析数据"
+
+
+def test_ops_center_counts_join_leave_visit(ctx):
+    """加入/访问事件被记录，运营中心能统计到（新增成员/访问次数）。"""
+    client = ctx["client"]
+    cid = ctx["cid"]
+    # normal 加入 → 产生 join 事件
+    client.post(f"/api/v1/communities/{cid}/join", headers=_auth(ctx["normal"]))
+    # 访问打点 ×2
+    client.post(f"/api/v1/communities/{cid}/visit", headers=_auth(ctx["normal"]))
+    client.post(f"/api/v1/communities/{cid}/visit", headers=_auth(ctx["owner"]))
+    d = client.get(f"/api/v1/communities/{cid}/ops-center", headers=_auth(ctx["owner"])).json()["data"]
+    # join 事件：今日新增成员 >=1（normal）
+    assert d["today"]["new_members"] >= 1
+    # 访问次数 >=2（一次 normal + 一次 owner）
+    assert d["user_data"]["all_visits"] >= 2
+    # 访问人数（去重 user_id）>=2
+    assert d["user_data"]["all_visitors"] >= 2

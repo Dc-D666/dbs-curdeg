@@ -28,6 +28,10 @@ export interface Community {
   created_at: string
   is_member: boolean
   my_member_type: number | null
+  /** 是否频道主（member_type==0）：前端据此显示运营中心/管理入口 */
+  is_owner: boolean
+  /** 当前用户在频道内的权限点集合（运营中心按成员数据权限显示，super=频道主专属） */
+  my_perms: string[]
   /** 平台管理员（user_type=1）标记：前端据此展示封禁/解封等平台级操作 */
   is_platform_admin?: boolean
   boards: Board[]
@@ -137,6 +141,17 @@ export const communityApi = {
   leave(id: number) {
     return request<null>({ url: `/communities/${id}/leave`, method: 'POST' })
   },
+  /** 访问打点：进入频道工作台/详情时调用，供运营中心访问统计 */
+  visit(id: number) {
+    return request<null>({ url: `/communities/${id}/visit`, method: 'POST' })
+  },
+  /** 频道运营中心（频道主/有成员数据权限）：昨日/用户/内容/排名数据 */
+  opsCenter(id: number, boardId?: number) {
+    return request<OpsCenterData>({
+      url: `/communities/${id}/ops-center`,
+      params: boardId ? { board_id: boardId } : undefined,
+    })
+  },
   boards(cid: number) {
     return request<Board[]>({ url: `/communities/${cid}/boards` })
   },
@@ -180,6 +195,58 @@ export const communityApi = {
 }
 
 // ---------- Feed 热度策略（阶段 5，文档⑮） ----------
+
+export interface OpsCenterData {
+  date: string
+  note: string
+  yesterday: {
+    new_members: number
+    left_members: number
+    visits: number
+    visitors: number
+    posts: number
+    views: number
+    post_authors: number
+    new_likes: number
+    new_comments: number
+  }
+  today: {
+    new_members: number
+    visits: number
+    posts: number
+  }
+  user_data: {
+    total_members: number
+    all_visits: number
+    all_visitors: number
+    active_members_today: number
+    active_rate: number
+    member_rank: Array<{ user_id: number; nickname: string; level: number; member_type: number; posts: number; comments: number }>
+  }
+  content_analysis: {
+    boards: Array<{
+      board_id: number
+      board_name: string
+      yesterday_posts: number
+      views: number
+      yesterday_views: number
+      yesterday_new_likes: number
+      yesterday_new_comments: number
+      deleted_posts: number
+    }>
+  }
+  post_rank: Array<{
+    id: number
+    title: string
+    board_id: number
+    view_count: number
+    like_count: number
+    comment_count: number
+    favorite_count: number
+    heat: number
+    created_at: string
+  }>
+}
 
 export interface FeedStrategy {
   sort_rule: number // 0最新 1热度 2精华优先
