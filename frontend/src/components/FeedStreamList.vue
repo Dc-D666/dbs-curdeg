@@ -118,6 +118,8 @@ function retryLoad() {
 .feed-list {
   display: grid;
   grid-template-columns: 1fr;
+  /* 卡片按内容自适应高度：双列时不同卡片不再被拉伸成等高 */
+  align-items: start;
   gap: var(--sp-3);
 }
 /* 桌面：双列帖子流 */
