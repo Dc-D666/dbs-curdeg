@@ -72,11 +72,11 @@
             <!-- 7/30 天折线图（tdesign sparkline） -->
             <template v-if="userPeriod !== 'yesterday' && userSeries">
               <h3 class="sub-title">新增成员趋势</h3>
-              <div class="chart-box"><t-sparkline :data="userSeries.new_members" type="line" :height="120" /></div>
+              <div class="chart-box"><Sparkline :data="userSeries.new_members" :height="120" /></div>
               <h3 class="sub-title">访问趋势</h3>
-              <div class="chart-box"><t-sparkline :data="userSeries.visits" type="line" :height="120" /></div>
+              <div class="chart-box"><Sparkline :data="userSeries.visits" :height="120" /></div>
               <h3 class="sub-title">活跃成员趋势</h3>
-              <div class="chart-box"><t-sparkline :data="userSeries.active_members" type="line" :height="120" /></div>
+              <div class="chart-box"><Sparkline :data="userSeries.active_members" :height="120" /></div>
             </template>
 
             <h3 class="sub-title">成员排名（活跃度：发帖 + 评论）</h3>
@@ -114,11 +114,11 @@
             <!-- 7/30 天折线图 -->
             <template v-if="contentPeriod !== 'yesterday' && contentSeries">
               <h3 class="sub-title">发帖趋势</h3>
-              <div class="chart-box"><t-sparkline :data="contentSeries.posts" type="line" :height="120" /></div>
+              <div class="chart-box"><Sparkline :data="contentSeries.posts" :height="120" /></div>
               <h3 class="sub-title">浏览量趋势</h3>
-              <div class="chart-box"><t-sparkline :data="contentSeries.views" type="line" :height="120" /></div>
+              <div class="chart-box"><Sparkline :data="contentSeries.views" :height="120" /></div>
               <h3 class="sub-title">点赞/评论趋势</h3>
-              <div class="chart-box"><t-sparkline :data="contentSeries.likes" type="line" :height="120" /><t-sparkline :data="contentSeries.comments" type="line" :height="120" /></div>
+              <div class="chart-box"><Sparkline :data="contentSeries.likes" :height="120" /><Sparkline :data="contentSeries.comments" :height="120" /></div>
             </template>
 
             <h3 class="sub-title">帖子排名（周期内活跃度 Top10）</h3>
@@ -159,6 +159,7 @@ import { ArrowLeftIcon } from 'tdesign-icons-vue-next'
 import { communityApi, type OpsCenterData } from '@/api/community'
 import { ApiError } from '@/api/http'
 import ErrorState from '@/components/ErrorState.vue'
+import Sparkline from '@/components/Sparkline.vue'
 import { loadErrorMessage } from '@/utils/error'
 
 defineOptions({ name: 'OpsCenterView' })
