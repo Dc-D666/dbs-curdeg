@@ -79,9 +79,11 @@
             <p v-if="r.detail" class="report-detail">{{ r.detail }}</p>
             <p class="report-meta">举报人：{{ r.reporter_nickname }} · {{ formatTime(r.created_at) }}</p>
             <div class="report-ops">
-              <t-button v-if="r.status === 0" variant="outline" size="small" @click="handleReport(r, 'processing')">受理</t-button>
-              <t-button variant="outline" size="small" @click="handleReport(r, 'done')">办结</t-button>
-              <t-button variant="outline" size="small" theme="danger" @click="handleReport(r, 'rejected')">驳回</t-button>
+              <template v-if="r.status === 0 || r.status === 1">
+                <t-button variant="outline" size="small" @click="handleReport(r, 'done')">举报成立</t-button>
+                <t-button variant="outline" size="small" theme="danger" @click="handleReport(r, 'rejected')">举报驳回</t-button>
+              </template>
+              <span v-else class="report-done-hint">已处理</span>
             </div>
           </div>
           <div v-if="reportsLoading && reports.length === 0" class="state"><t-skeleton :row="3" animation="gradient" /></div>
@@ -389,16 +391,16 @@ async function loadAiConfigs() {
   }
 }
 
-/** 举报处理：办结/驳回会改变举报状态且影响申请人反馈，先二次确认（#56）。 */
-async function handleReport(r: ReportItem, action: 'processing' | 'done' | 'rejected') {
+/** 举报处理：成立(办结)/驳回 会改变举报状态且影响举报人反馈，先二次确认（#56）。 */
+async function handleReport(r: ReportItem, action: 'done' | 'rejected') {
   if (action === 'done') {
-    if (!(await confirmDialog('办结举报', `确定办结该举报（${reportTypeName(r.target_type)} #${r.target_id}）？办结后不可再受理。`))) return
+    if (!(await confirmDialog('举报成立', `确定该举报成立并办结（${reportTypeName(r.target_type)} #${r.target_id}）？办结后不再变更。`))) return
   } else if (action === 'rejected') {
-    if (!(await confirmDialog('驳回举报', `确定驳回该举报（${reportTypeName(r.target_type)} #${r.target_id}）？驳回后将不再跟进。`))) return
+    if (!(await confirmDialog('举报驳回', `确定驳回该举报（${reportTypeName(r.target_type)} #${r.target_id}）？驳回后将不再跟进。`))) return
   }
   try {
     await adminApi.handleReport(r.id, action)
-    toast('已处理')
+    toast(action === 'done' ? '举报已成立' : '举报已驳回')
     await loadReports(1)
   } catch (e) {
     toast(e instanceof Error ? e.message : '操作失败', 'error')
@@ -696,7 +698,12 @@ onMounted(async () => {
 .report-ops {
   margin-top: var(--sp-2);
   display: flex;
+  align-items: center;
   gap: var(--sp-2);
+}
+.report-done-hint {
+  font-size: var(--fs-caption);
+  color: var(--text-3);
 }
 .word-form {
   display: flex;
