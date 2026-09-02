@@ -5,6 +5,7 @@
         <ArrowLeftIcon class="back-icon" /> 返回主页
       </router-link>
       <h1 class="page-title">运营中心</h1>
+      <t-button variant="outline" size="small" :loading="refreshing" @click="refresh">刷新</t-button>
     </header>
 
     <div v-if="loading" class="state"><t-skeleton :row="5" animation="gradient" /></div>
@@ -152,7 +153,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ArrowLeftIcon } from 'tdesign-icons-vue-next'
 import { communityApi, type OpsCenterData } from '@/api/community'
@@ -167,6 +168,7 @@ const cid = computed(() => Number(route.params.id))
 
 const data = ref<OpsCenterData | null>(null)
 const loading = ref(true)
+const refreshing = ref(false)
 const loadError = ref('')
 const noPermission = ref(false)
 const communityName = ref('')
@@ -182,18 +184,23 @@ const userSeries = computed(() => (userPeriod.value !== 'yesterday' ? (data.valu
 const contentPeriodData = computed(() => data.value?.content[contentPeriod.value] ?? { posts: 0, views: 0, likes: 0, comments: 0, post_rank: [] })
 const contentSeries = computed(() => (contentPeriod.value !== 'yesterday' ? (data.value?.content[contentPeriod.value] as { series?: OpsCenterData['content']['d7']['series'] })?.series : undefined))
 
+async function fetchOps() {
+  const [ops, community] = await Promise.all([
+    communityApi.opsCenter(cid.value),
+    communityApi.get(cid.value).catch(() => null),
+  ])
+  data.value = ops
+  communityName.value = community?.name || ''
+}
+
+/** 首次加载：骨架屏 + 错误态。 */
 async function init() {
   loading.value = true
   loadError.value = ''
   noPermission.value = false
   data.value = null
   try {
-    const [ops, community] = await Promise.all([
-      communityApi.opsCenter(cid.value),
-      communityApi.get(cid.value).catch(() => null),
-    ])
-    data.value = ops
-    communityName.value = community?.name || ''
+    await fetchOps()
   } catch (e) {
     const r = loadErrorMessage(e, '运营中心', '需要频道主或成员管理权限')
     loadError.value = r.text
@@ -203,7 +210,36 @@ async function init() {
   }
 }
 
-onMounted(init)
+/** 手动刷新：静默更新，不清空已渲染数据，失败仅提示。 */
+async function refresh() {
+  if (refreshing.value) return
+  refreshing.value = true
+  try {
+    await fetchOps()
+  } catch (e) {
+    // 静默失败：保留旧数据，不打断查看
+    loadErrorMessage(e, '运营中心')
+  } finally {
+    refreshing.value = false
+  }
+}
+
+// 实时刷新：页面停留时每 30s 静默拉一次「今日/昨日」等数据；
+// 切回标签页时立即刷新一次，让运营中心接近实时。
+let timer: ReturnType<typeof setInterval> | null = null
+function onVisibility() {
+  if (document.visibilityState === 'visible') refresh()
+}
+
+onMounted(() => {
+  init()
+  timer = setInterval(refresh, 30000)
+  document.addEventListener('visibilitychange', onVisibility)
+})
+onBeforeUnmount(() => {
+  if (timer) clearInterval(timer)
+  document.removeEventListener('visibilitychange', onVisibility)
+})
 </script>
 
 <style scoped>
