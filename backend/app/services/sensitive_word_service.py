@@ -7,7 +7,7 @@
 import logging
 import time
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.response import NotFoundError, ParamError
