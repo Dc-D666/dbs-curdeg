@@ -56,6 +56,7 @@
                 <t-tag v-else variant="light" theme="danger">已封禁</t-tag>
               </span>
               <span class="col-op">
+                <t-button variant="outline" size="small" @click="viewChannel(c)">查看</t-button>
                 <t-button v-if="c.status !== 2" variant="outline" size="small" theme="danger" :loading="c._busy" @click="onBanChannel(c, true)">封禁</t-button>
                 <t-button v-else variant="outline" size="small" :loading="c._busy" @click="onBanChannel(c, false)">解封</t-button>
               </span>
@@ -362,7 +363,7 @@ onMounted(async () => {
 }
 .tbl-row {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) 70px 70px minmax(0, 1fr) 90px 90px;
+  grid-template-columns: minmax(0, 2fr) 70px 70px minmax(0, 1fr) 90px 200px;
   align-items: center;
   gap: var(--sp-2);
   padding: var(--sp-2) 0;

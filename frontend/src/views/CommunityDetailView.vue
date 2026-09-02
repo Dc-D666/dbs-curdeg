@@ -57,6 +57,11 @@
           </template>
           <!-- 平台管理员：封禁/解封入口（被封频道 Admin 仍可进入巡视） -->
           <t-button
+            v-if="community.is_platform_admin"
+            variant="outline"
+            @click="router.push(`/c/${cid}/ops`)"
+          >运营中心</t-button>
+          <t-button
             v-if="community.is_platform_admin && community.status !== 2"
             variant="outline"
             theme="danger"
@@ -272,7 +277,13 @@
               </div>
               <div class="wb-actions">
                 <t-button v-if="community.is_member && community.my_member_type !== 0" variant="outline" size="small" @click="onLeave">退出</t-button>
-                <!-- 平台管理员：封禁/解封（宽屏头部） -->
+                <!-- 平台管理员：运营中心 + 封禁/解封（宽屏头部） -->
+                <t-button
+                  v-if="community.is_platform_admin"
+                  variant="outline"
+                  size="small"
+                  @click="router.push(`/c/${cid}/ops`)"
+                >运营中心</t-button>
                 <t-button
                   v-if="community.is_platform_admin && community.status !== 2"
                   variant="outline"
